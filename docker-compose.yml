@@ -1,0 +1,65 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: job_platform
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./database:/docker-entrypoint-initdb.d
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+
+  backend:
+    build: 
+      context: ./backend
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://postgres:password@postgres:5432/job_platform
+      - REDIS_URL=redis://redis:6379/0
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+    depends_on:
+      - postgres
+      - redis
+    volumes:
+      - ./backend:/app
+
+  celery_worker:
+    build: 
+      context: ./backend
+    command: celery -A workers.celeryconfig worker --loglevel=info
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://postgres:password@postgres:5432/job_platform
+      - REDIS_URL=redis://redis:6379/0
+      - PYTHONPATH=/app:/app/workers
+    depends_on:
+      - redis
+      - postgres
+    volumes:
+      - ./backend:/app
+      - ./workers:/app/workers
+
+  celery_beat:
+    build: 
+      context: ./backend
+    command: celery -A workers.celeryconfig beat --loglevel=info
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+      - PYTHONPATH=/app:/app/workers
+    depends_on:
+      - redis
+    volumes:
+      - ./backend:/app
+      - ./workers:/app/workers
+
+volumes:
+  postgres_data:
