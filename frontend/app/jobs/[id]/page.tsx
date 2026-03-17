@@ -269,7 +269,7 @@ export default function JobDetailPage() {
   return (
     <div className="flex min-h-screen bg-transparent">
       <Navbar />
-      <main className="ml-64 flex-1 px-8 py-8 max-w-6xl">
+      <main className="md:ml-64 flex-1 px-4 md:px-8 pt-20 md:pt-8 pb-8 max-w-6xl">
         <button
           onClick={() => router.push("/jobs")}
           className="flex items-center gap-2 text-slate-400 hover:text-white mb-6 transition-colors text-sm"
@@ -806,7 +806,7 @@ export default function JobDetailPage() {
                           </div>
 
                           {/* Hiring Signals Grid */}
-                          <div className="grid grid-cols-2 gap-3">
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                             {hiringSignals.map((sig, i) => (
                               <div key={i} className="p-3 rounded-xl" style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)" }}>
                                 <div className="flex items-center gap-2 mb-1">

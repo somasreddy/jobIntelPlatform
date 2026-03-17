@@ -115,7 +115,7 @@ export default function TrackerPage() {
   return (
     <div className="flex min-h-screen bg-transparent">
       <Navbar />
-      <main className="ml-64 flex-1 px-8 py-8 flex flex-col h-screen overflow-hidden">
+      <main className="md:ml-64 flex-1 px-4 md:px-8 pt-20 md:pt-8 pb-4 flex flex-col" style={{ height: "100dvh", overflow: "hidden" }}>
         <div className="mb-6 shrink-0 flex items-start justify-between">
           <div>
             <h1 className="text-2xl font-bold text-white">Application Tracker</h1>

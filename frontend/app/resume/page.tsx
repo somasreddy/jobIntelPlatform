@@ -100,7 +100,7 @@ export default function ResumePage() {
     return (
       <div className="flex min-h-screen bg-transparent">
         <Navbar />
-        <main className="ml-64 flex-1 px-8 py-8 flex items-center justify-center">
+        <main className="md:ml-64 flex-1 px-4 md:px-8 pt-20 md:pt-8 pb-8 flex items-center justify-center">
           <div className="text-center max-w-sm">
             <div className="w-16 h-16 rounded-full bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center mx-auto mb-4">
               <UserCircle2 className="w-8 h-8 text-indigo-400" />
@@ -121,7 +121,7 @@ export default function ResumePage() {
   return (
     <div className="flex min-h-screen bg-transparent">
       <Navbar />
-      <main className="ml-64 flex-1 px-8 py-8 max-w-6xl">
+      <main className="md:ml-64 flex-1 px-4 md:px-8 pt-20 md:pt-8 pb-8 max-w-6xl">
         <div className="mb-8">
           <div className="flex items-center gap-2 text-indigo-400 text-sm font-medium mb-2">
             <FileOutput className="w-4 h-4" /> Base Resume Manager
@@ -144,7 +144,7 @@ export default function ResumePage() {
               <h2 className="text-base font-semibold text-white mb-4 flex items-center gap-2">
                 <FileText className="w-4 h-4 text-indigo-400" /> Extracted Profile Data
               </h2>
-              <div className="grid grid-cols-2 gap-x-6 gap-y-4 text-sm mb-6">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-4 text-sm mb-6">
                 <div><p className="text-slate-500 mb-1">Name</p><p className="font-medium text-white">{profile?.name || "—"}</p></div>
                 <div><p className="text-slate-500 mb-1">Current Role</p><p className="font-medium text-white">{profile?.currentRole || "—"}</p></div>
                 <div><p className="text-slate-500 mb-1">Experience</p><p className="font-medium text-white">{profile?.experienceYears ? `${profile.experienceYears} Years` : "—"}</p></div>

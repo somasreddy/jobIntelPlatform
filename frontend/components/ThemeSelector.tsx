@@ -40,8 +40,8 @@ export default function ThemeSelector({ open, onClose }: ThemeSelectorProps) {
   return (
     <div
       ref={panelRef}
-      className="absolute bottom-0 left-full ml-3 z-50 animate-slide-left"
-      style={{ width: 320 }}
+      className="absolute bottom-full mb-2 left-0 md:bottom-0 md:left-full md:ml-3 md:mb-0 z-50 animate-slide-left"
+      style={{ width: 300 }}
     >
       <div
         className="rounded-2xl border shadow-2xl shadow-black/60 overflow-hidden"

@@ -17,6 +17,8 @@ import {
   Linkedin,
   Brain,
   Palette,
+  Menu,
+  X,
 } from "lucide-react";
 
 const navItems = [
@@ -34,6 +36,7 @@ export default function Navbar() {
   const path = usePathname();
   const [userName, setUserName] = useState<string>("");
   const [themeOpen, setThemeOpen] = useState(false);
+  const [mobileOpen, setMobileOpen] = useState(false);
   const { theme } = useTheme();
 
   useEffect(() => {
@@ -41,19 +44,24 @@ export default function Navbar() {
     if (p?.name) setUserName(p.name);
   }, []);
 
+  // Close mobile nav on route change
+  useEffect(() => {
+    setMobileOpen(false);
+  }, [path]);
+
   const initials = userName
     ? userName.trim().split(/\s+/).map((w) => w[0]).slice(0, 2).join("").toUpperCase()
     : "";
 
   const currentTheme = THEMES.find((t) => t.id === theme);
 
-  return (
-    <aside className="fixed left-0 top-0 h-screen w-64 flex flex-col z-50">
+  const sidebarContent = (
+    <>
       {/* Logo */}
       <div className="px-6 py-5" style={{ borderBottom: "1px solid var(--border)" }}>
         <div className="flex items-center gap-3">
           <div
-            className="w-9 h-9 rounded-xl flex items-center justify-center shadow-lg"
+            className="w-9 h-9 rounded-xl flex items-center justify-center shadow-lg shrink-0"
             style={{
               background: "linear-gradient(135deg, var(--accent-deep), var(--accent), var(--accent-secondary))",
               boxShadow: "0 4px 14px -3px var(--glow-accent)",
@@ -61,10 +69,17 @@ export default function Navbar() {
           >
             <Zap className="w-5 h-5 text-white" />
           </div>
-          <div>
+          <div className="min-w-0">
             <p className="text-sm font-bold text-white leading-tight">JobIntel AI</p>
             <p className="text-[10px] text-slate-400 font-medium">Career Optimizer</p>
           </div>
+          {/* Close button - mobile only */}
+          <button
+            onClick={() => setMobileOpen(false)}
+            className="md:hidden ml-auto text-slate-400 hover:text-white p-1"
+          >
+            <X className="w-5 h-5" />
+          </button>
         </div>
       </div>
 
@@ -88,13 +103,13 @@ export default function Navbar() {
               }}
             >
               <Icon
-                className="w-5 h-5"
+                className="w-5 h-5 shrink-0"
                 style={active ? { color: "var(--accent-bright)" } : {}}
               />
               {label}
               {active && (
                 <div
-                  className="ml-auto w-1.5 h-1.5 rounded-full"
+                  className="ml-auto w-1.5 h-1.5 rounded-full shrink-0"
                   style={{ background: "var(--accent-bright)" }}
                 />
               )}
@@ -124,7 +139,6 @@ export default function Navbar() {
             <span className="flex-1 text-left text-xs font-medium">
               {currentTheme?.emoji} {currentTheme?.name || "Theme"}
             </span>
-            {/* Live preview dots */}
             <div className="flex gap-1">
               {(currentTheme?.colors ?? []).map((c, i) => (
                 <span
@@ -135,7 +149,6 @@ export default function Navbar() {
               ))}
             </div>
           </button>
-
           <ThemeSelector open={themeOpen} onClose={() => setThemeOpen(false)} />
         </div>
 
@@ -174,6 +187,55 @@ export default function Navbar() {
           </div>
         )}
       </div>
-    </aside>
+    </>
+  );
+
+  return (
+    <>
+      {/* Mobile top header bar */}
+      <header
+        className="md:hidden fixed top-0 left-0 right-0 h-14 flex items-center justify-between px-4 z-50"
+        style={{ background: "var(--bg-card)", borderBottom: "1px solid var(--border)" }}
+      >
+        <div className="flex items-center gap-2.5">
+          <div
+            className="w-7 h-7 rounded-lg flex items-center justify-center"
+            style={{
+              background: "linear-gradient(135deg, var(--accent-deep), var(--accent), var(--accent-secondary))",
+              boxShadow: "0 2px 8px -2px var(--glow-accent)",
+            }}
+          >
+            <Zap className="w-4 h-4 text-white" />
+          </div>
+          <span className="text-sm font-bold text-white">JobIntel AI</span>
+        </div>
+        <button
+          onClick={() => setMobileOpen(true)}
+          className="p-2 rounded-lg text-slate-400 hover:text-white transition-colors"
+          style={{ background: "var(--bg-elevated)" }}
+          aria-label="Open menu"
+        >
+          <Menu className="w-5 h-5" />
+        </button>
+      </header>
+
+      {/* Mobile overlay backdrop */}
+      {mobileOpen && (
+        <div
+          className="md:hidden fixed inset-0 z-40 bg-black/60 backdrop-blur-sm"
+          onClick={() => setMobileOpen(false)}
+        />
+      )}
+
+      {/* Sidebar — always visible on desktop, slide-in on mobile */}
+      <aside
+        className={`fixed left-0 top-0 h-screen w-72 md:w-64 flex flex-col z-50 transition-transform duration-300 ${
+          mobileOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"
+        }`}
+        style={{ background: "var(--bg-card)" }}
+      >
+        {sidebarContent}
+      </aside>
+    </>
   );
 }

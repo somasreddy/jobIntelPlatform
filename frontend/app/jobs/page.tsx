@@ -144,7 +144,7 @@ export default function JobsPage() {
     return (
       <div className="flex min-h-screen bg-transparent">
         <Navbar />
-        <main className="ml-64 flex-1 px-8 py-8 flex items-center justify-center">
+        <main className="md:ml-64 flex-1 px-4 md:px-8 pt-20 md:pt-8 pb-8 flex items-center justify-center">
           <div className="text-center max-w-sm">
             <div className="w-16 h-16 rounded-full bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center mx-auto mb-4">
               <UserCircle2 className="w-8 h-8 text-indigo-400" />
@@ -165,9 +165,9 @@ export default function JobsPage() {
   return (
     <div className="flex min-h-screen bg-transparent">
       <Navbar />
-      <main className="ml-64 flex-1 px-8 py-8">
+      <main className="md:ml-64 flex-1 px-4 md:px-8 pt-20 md:pt-8 pb-8">
         {/* Header */}
-        <div className="flex items-start justify-between mb-6">
+        <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 mb-6">
           <div>
             <p className="text-xs text-slate-500 mb-1">Showing results for</p>
             <h1 className="text-2xl font-bold text-white">
@@ -209,7 +209,7 @@ export default function JobsPage() {
         )}
 
         {/* Stats row */}
-        <div className="grid grid-cols-4 gap-4 mb-6">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4 mb-6">
           {[
             { label: "Total Matches", value: jobs.length, icon: Briefcase, color: "text-indigo-400" },
             { label: "Career Uplift", value: upliftCount, icon: TrendingUp, color: "text-rose-400" },

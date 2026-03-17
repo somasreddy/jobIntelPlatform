@@ -273,7 +273,7 @@ export default function ProfilePage() {
   return (
     <div className="flex min-h-screen bg-transparent">
       <Navbar />
-      <main className="ml-64 flex-1 px-8 py-8 max-w-5xl">
+      <main className="md:ml-64 flex-1 px-4 md:px-8 pt-20 md:pt-8 pb-8 max-w-5xl">
         {/* Hero header */}
         <div className="mb-8">
           <div className="flex items-center gap-2 text-cyan-400 text-sm font-medium mb-2">
@@ -360,7 +360,7 @@ export default function ProfilePage() {
                         {level}
                       </span>
                     </div>
-                    <div className="grid grid-cols-2 gap-x-3 gap-y-1">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-3 gap-y-1">
                       {cs.breakdown.map(({ label, score, max, color }) => (
                         <div key={label}>
                           <div className="flex justify-between text-[10px] mb-0.5">
