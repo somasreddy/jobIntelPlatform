@@ -79,7 +79,13 @@ export default function IntelligencePage() {
                       </div>
                     </div>
                     {gap.learningResource && (
-                      <button className="btn-secondary py-1.5 px-3 text-xs flex items-center gap-1.5 whitespace-nowrap">
+                      <button 
+                        onClick={() => {
+                          const url = gap.learningResource?.startsWith('http') ? gap.learningResource : `https://${gap.learningResource}`;
+                          window.open(url, '_blank');
+                        }}
+                        className="btn-secondary py-1.5 px-3 text-xs flex items-center gap-1.5 whitespace-nowrap"
+                      >
                         <BookOpen className="w-3.5 h-3.5" /> Start Learning
                       </button>
                     )}
@@ -122,8 +128,14 @@ export default function IntelligencePage() {
                         <span key={s} className="tag bg-[#0f172a] border-slate-700 text-slate-300">{s}</span>
                       ))}
                     </div>
-                    {i === 0 && (
-                      <button className="text-xs text-indigo-300 hover:text-indigo-200 flex items-center gap-1 font-medium transition-colors">
+                    {phase.resources && phase.resources.length > 0 && (
+                      <button 
+                        onClick={() => {
+                          const url = phase.resources[0].startsWith('http') ? phase.resources[0] : `https://${phase.resources[0]}`;
+                          window.open(url, '_blank');
+                        }}
+                        className="text-xs text-indigo-300 hover:text-indigo-200 flex items-center gap-1 font-medium transition-colors"
+                      >
                         View Resources <ArrowRight className="w-3 h-3" />
                       </button>
                     )}
