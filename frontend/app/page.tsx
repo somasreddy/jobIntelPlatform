@@ -1,43 +1,169 @@
 "use client";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Navbar from "@/components/Navbar";
+import { saveProfile, loadProfile } from "@/lib/profile";
 import {
   User, Briefcase, DollarSign, MapPin, Clock,
   Plus, X, Upload, ChevronRight, Sparkles, CheckCircle
 } from "lucide-react";
 
-const ALL_SKILLS = [
-  "Selenium", "Playwright", "Cypress", "Appium", "REST Assured",
-  "Postman", "JMeter", "K6", "TestNG", "JUnit", "Pytest", "Cucumber BDD",
-  "Robot Framework", "Java", "Python", "JavaScript", "TypeScript", "SQL",
-  "Jenkins", "GitHub Actions", "Docker", "Kubernetes", "AWS", "Azure DevOps",
-  "Maven", "Gradle", "JIRA", "Git", "GraphQL Testing", "Performance Testing",
-];
+const SKILL_CATEGORIES: Record<string, string[]> = {
+  "Frontend": [
+    "React", "Next.js", "Vue.js", "Angular", "Svelte", "TypeScript", "JavaScript",
+    "HTML/CSS", "Tailwind CSS", "Redux", "Zustand", "Webpack", "Vite", "Storybook",
+    "Accessibility (a11y)", "Web Performance", "PWA", "Three.js", "D3.js",
+  ],
+  "Backend": [
+    "Node.js", "Python", "Java", "Go", "Rust", "C++", "C#", ".NET", "Spring Boot",
+    "FastAPI", "Django", "Flask", "Express", "NestJS", "Ruby on Rails", "PHP", "Laravel",
+    "Elixir", "Phoenix", "Scala", "Akka",
+  ],
+  "Mobile": [
+    "React Native", "Flutter", "Swift", "Kotlin", "Android", "iOS",
+    "Expo", "Jetpack Compose", "SwiftUI", "Xamarin", "Capacitor",
+  ],
+  "Data & AI/ML": [
+    "Machine Learning", "Deep Learning", "PyTorch", "TensorFlow", "Keras",
+    "Scikit-learn", "Pandas", "NumPy", "Spark", "Kafka", "Flink", "Airflow",
+    "dbt", "NLP", "LLMs", "RAG", "LangChain", "Hugging Face", "MLflow",
+    "Data Pipelines", "Feature Engineering", "A/B Testing", "Statistics",
+  ],
+  "Cloud & DevOps": [
+    "AWS", "Azure", "GCP", "Docker", "Kubernetes", "Terraform", "Pulumi",
+    "GitHub Actions", "GitLab CI", "Jenkins", "ArgoCD", "Helm", "Istio",
+    "CI/CD", "Linux", "Ansible", "Prometheus", "Grafana", "OpenTelemetry",
+    "Service Mesh", "Site Reliability Engineering",
+  ],
+  "Databases": [
+    "PostgreSQL", "MySQL", "SQLite", "MongoDB", "Redis", "Elasticsearch",
+    "DynamoDB", "Cassandra", "Neo4j", "InfluxDB", "Snowflake", "BigQuery",
+    "SQL", "GraphQL", "Vector Databases", "Prisma", "Sequelize",
+  ],
+  "Testing & QA": [
+    "Selenium", "Playwright", "Cypress", "Jest", "Vitest", "Pytest", "JUnit",
+    "TestNG", "Mocha", "Chai", "Postman", "JMeter", "K6", "Gatling",
+    "Appium", "REST Assured", "Contract Testing", "Pact", "BDD/Cucumber",
+    "Load Testing", "Chaos Engineering",
+  ],
+  "Architecture & Design": [
+    "System Design", "Microservices", "Event-Driven Architecture", "CQRS",
+    "Domain-Driven Design", "REST APIs", "gRPC", "GraphQL APIs", "OpenAPI",
+    "Message Queues", "RabbitMQ", "NATS", "WebSockets", "OAuth 2.0", "JWT",
+  ],
+  "Tools & Practices": [
+    "Git", "GitHub", "GitLab", "JIRA", "Confluence", "Figma", "Notion",
+    "Agile/Scrum", "Kanban", "Code Review", "Technical Writing",
+    "Pair Programming", "Trunk-Based Development", "Feature Flags",
+  ],
+};
+
+// Return skill categories ordered by relevance to the entered role
+function getOrderedCategories(role: string): [string, string[]][] {
+  const r = role.toLowerCase();
+  const all = Object.entries(SKILL_CATEGORIES);
+  const priorities: Record<string, number> = {};
+
+  if (/front.?end|ui engineer|react dev|vue|angular|web dev/i.test(r)) {
+    Object.assign(priorities, { "Frontend": 10, "Architecture & Design": 8, "Testing & QA": 7, "Backend": 6, "Tools & Practices": 5 });
+  } else if (/back.?end|api|server|micro.?service|node|java|spring|django|fastapi|flask/i.test(r)) {
+    Object.assign(priorities, { "Backend": 10, "Databases": 9, "Architecture & Design": 8, "Cloud & DevOps": 7, "Testing & QA": 5 });
+  } else if (/full.?stack/i.test(r)) {
+    Object.assign(priorities, { "Frontend": 10, "Backend": 10, "Databases": 8, "Architecture & Design": 7, "Cloud & DevOps": 6, "Testing & QA": 5 });
+  } else if (/mobile|ios|android|flutter|react native/i.test(r)) {
+    Object.assign(priorities, { "Mobile": 10, "Backend": 7, "Architecture & Design": 6, "Testing & QA": 5, "Cloud & DevOps": 4 });
+  } else if (/data engineer|data pipeline|analytics engineer|etl/i.test(r)) {
+    Object.assign(priorities, { "Data & AI/ML": 10, "Databases": 10, "Cloud & DevOps": 8, "Backend": 6, "Tools & Practices": 5 });
+  } else if (/machine learning|ml engineer|data scientist|ai engineer|nlp|deep learning|research/i.test(r)) {
+    Object.assign(priorities, { "Data & AI/ML": 10, "Databases": 7, "Cloud & DevOps": 7, "Backend": 5, "Architecture & Design": 5 });
+  } else if (/devops|sre|platform|infra|cloud engineer|reliability|kubernetes|terraform/i.test(r)) {
+    Object.assign(priorities, { "Cloud & DevOps": 10, "Architecture & Design": 8, "Databases": 6, "Backend": 5, "Tools & Practices": 5 });
+  } else if (/qa|quality|test|sdet|automation.*test|test.*automation/i.test(r)) {
+    Object.assign(priorities, { "Testing & QA": 10, "Architecture & Design": 7, "Backend": 7, "Cloud & DevOps": 6, "Tools & Practices": 5 });
+  } else if (/security|cyber|pentest|appsec/i.test(r)) {
+    Object.assign(priorities, { "Cloud & DevOps": 10, "Architecture & Design": 9, "Backend": 8, "Databases": 6, "Tools & Practices": 5 });
+  } else if (/architect|principal|staff|tech lead/i.test(r)) {
+    Object.assign(priorities, { "Architecture & Design": 10, "Backend": 8, "Cloud & DevOps": 8, "Databases": 7, "Frontend": 5, "Tools & Practices": 6 });
+  }
+
+  return all.sort(([a], [b]) => (priorities[b] ?? 0) - (priorities[a] ?? 0));
+}
+const ALL_SKILLS = Object.values(SKILL_CATEGORIES).flat();
+
+function calcCompleteness(form: {
+  name: string; currentRole: string; currentSalary: string;
+  experienceYears: string; currentLocation: string;
+  skills: string[]; workMode: string; preferredLocations: string[];
+  resumeFile: File | null; resumeText: string;
+}): number {
+  let pts = 0;
+  if (form.name.trim())                         pts += 12;
+  if (form.currentRole.trim())                  pts += 12;
+  if (Number(form.experienceYears) > 0)         pts += 8;
+  if (Number(form.currentSalary) > 0)           pts += 5;
+  if (form.currentLocation.trim())              pts += 8;
+  if (form.skills.length >= 3)                  pts += 12;
+  if (form.skills.length >= 8)                  pts += 8;
+  if (form.workMode !== "Any")                  pts += 5;
+  if (form.preferredLocations.length > 0)       pts += 8;
+  if (form.resumeFile || form.resumeText.trim()) pts += 12; // mandatory — worth 12 pts
+  if (form.resumeText.trim().length > 200)      pts += 10; // rich resume text
+  return Math.min(pts, 100);
+}
+
+const DEFAULT_FORM = {
+  name: "",
+  currentRole: "",
+  currentSalary: "",
+  currency: "USD",
+  experienceYears: "",
+  workMode: "Any",
+  currentLocation: "",
+  preferredLocations: [] as string[],
+  preferredLocation: "", // temp input buffer — not saved to profile
+  skills: [] as string[],
+  frameworks: [] as string[],
+  languages: [] as string[],
+  cicdTools: [] as string[],
+  certifications: [] as string[],
+  resumeText: "",  // saved to profile — extracted from file or pasted
+  resumeFile: null as File | null, // transient — not saved to profile
+};
 
 export default function ProfilePage() {
   const router = useRouter();
-  const [form, setForm] = useState({
-    name: "",
-    currentRole: "Senior QA Engineer",
-    currentSalary: "",
-    currency: "USD",
-    experienceYears: "",
-    currentLocation: "",
-    preferredLocations: [] as string[],
-    preferredLocation: "",
-    skills: [] as string[],
-    workMode: "Any",
-    resumeFile: null as File | null,
-  });
+  const [form, setForm] = useState(DEFAULT_FORM);
   const [dragging, setDragging] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [skillSearch, setSkillSearch] = useState("");
 
-  const addSkill = (skill: string) => {
-    if (!form.skills.includes(skill)) {
-      setForm((p) => ({ ...p, skills: [...p.skills, skill] }));
+  // Load persisted profile on mount (useEffect, not useState)
+  useEffect(() => {
+    const saved = loadProfile();
+    if (saved) {
+      setForm((p) => ({
+        ...p,
+        name: saved.name ?? "",
+        currentRole: saved.currentRole ?? "",
+        currentSalary: saved.currentSalary ? String(saved.currentSalary) : "",
+        currency: saved.currency ?? "USD",
+        experienceYears: saved.experienceYears ? String(saved.experienceYears) : "",
+        workMode: saved.workMode ?? "Any",
+        currentLocation: saved.currentLocation ?? "",
+        preferredLocations: saved.preferredLocations ?? [],
+        skills: saved.skills ?? [],
+        frameworks: saved.frameworks ?? [],
+        languages: saved.languages ?? [],
+        cicdTools: saved.cicdTools ?? [],
+        certifications: saved.certifications ?? [],
+        resumeText: saved.resumeText ?? "",
+      }));
     }
+  }, []);
+
+  const addSkill = (skill: string) => {
+    if (!form.skills.includes(skill))
+      setForm((p) => ({ ...p, skills: [...p.skills, skill] }));
   };
   const removeSkill = (skill: string) =>
     setForm((p) => ({ ...p, skills: p.skills.filter((s) => s !== skill) }));
@@ -53,17 +179,53 @@ export default function ProfilePage() {
     }
   };
 
+  const extractAndSetFile = (f: File) => {
+    setForm((p) => ({ ...p, resumeFile: f }));
+    // Extract text for .txt files; for PDF/DOCX store a marker until server parses it
+    if (f.type === "text/plain" || f.name.endsWith(".txt")) {
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        const text = ev.target?.result as string;
+        if (text) setForm((p) => ({ ...p, resumeText: text.slice(0, 8000) }));
+      };
+      reader.readAsText(f);
+    } else {
+      // For PDF/DOCX mark it as uploaded; text extraction happens server-side
+      setForm((p) => ({ ...p, resumeText: p.resumeText || `[Resume file: ${f.name}]` }));
+    }
+  };
+
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
     setDragging(false);
     const f = e.dataTransfer.files[0];
-    if (f) setForm((p) => ({ ...p, resumeFile: f }));
+    if (f) extractAndSetFile(f);
   };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    // Save profile to sessionStorage for use across pages
-    sessionStorage.setItem("candidateProfile", JSON.stringify(form));
+    // Validate resume is provided
+    if (!form.resumeFile && !form.resumeText.trim()) {
+      document.getElementById("resume-section")?.scrollIntoView({ behavior: "smooth" });
+      return;
+    }
+    // Save only typed profile fields — strip transient UI state
+    saveProfile({
+      name: form.name,
+      currentRole: form.currentRole,
+      currentSalary: Number(form.currentSalary) || 0,
+      currency: form.currency,
+      experienceYears: Number(form.experienceYears) || 0,
+      workMode: form.workMode,
+      currentLocation: form.currentLocation,
+      preferredLocations: form.preferredLocations,
+      skills: form.skills,
+      frameworks: form.frameworks,
+      languages: form.languages,
+      cicdTools: form.cicdTools,
+      certifications: form.certifications,
+      resumeText: form.resumeText,
+    });
     setSubmitted(true);
     setTimeout(() => router.push("/jobs"), 1200);
   };
@@ -75,7 +237,7 @@ export default function ProfilePage() {
   );
 
   return (
-    <div className="flex min-h-screen bg-[#0f172a]">
+    <div className="flex min-h-screen bg-transparent">
       <Navbar />
       <main className="ml-64 flex-1 px-8 py-8 max-w-5xl">
         {/* Hero header */}
@@ -104,6 +266,28 @@ export default function ProfilePage() {
             <p className="text-slate-400">Finding your best job matches…</p>
           </div>
         ) : (
+          <>
+            {/* Profile completeness bar */}
+            {(() => {
+              const pct = calcCompleteness(form);
+              const color = pct >= 80 ? "bg-emerald-500" : pct >= 50 ? "bg-indigo-500" : "bg-amber-500";
+              const label = pct >= 80 ? "Great profile!" : pct >= 50 ? "Keep going" : "Just started";
+              return (
+                <div className="card py-3 px-4 mb-2 flex items-center gap-4">
+                  <div className="flex-1">
+                    <div className="flex items-center justify-between mb-1.5">
+                      <span className="text-xs font-medium text-slate-400">Profile Completeness</span>
+                      <span className={`text-xs font-bold ${pct >= 80 ? "text-emerald-400" : pct >= 50 ? "text-indigo-400" : "text-amber-400"}`}>
+                        {pct}% — {label}
+                      </span>
+                    </div>
+                    <div className="h-1.5 bg-[#0f172a] rounded-full overflow-hidden">
+                      <div className={`h-full rounded-full transition-all duration-500 ${color}`} style={{ width: `${pct}%` }} />
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
           <form onSubmit={handleSubmit} className="space-y-6">
             {/* Section 1: Personal Info */}
             <div className="card">
@@ -115,7 +299,7 @@ export default function ProfilePage() {
                   <label className="block text-xs font-medium text-slate-400 mb-1.5">Full Name</label>
                   <input
                     className="input"
-                    placeholder="Somas V"
+                    placeholder="Enter your full name"
                     value={form.name}
                     onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))}
                   />
@@ -124,7 +308,7 @@ export default function ProfilePage() {
                   <label className="block text-xs font-medium text-slate-400 mb-1.5">Current Role</label>
                   <input
                     className="input"
-                    placeholder="Senior QA Engineer"
+                    placeholder="e.g. Software Engineer, Product Manager"
                     value={form.currentRole}
                     onChange={(e) => setForm((p) => ({ ...p, currentRole: e.target.value }))}
                     required
@@ -145,7 +329,7 @@ export default function ProfilePage() {
                   </label>
                   <div className="flex gap-2">
                     <select
-                      className="input w-20 flex-shrink-0"
+                      className="input w-20! shrink-0"
                       value={form.currency}
                       onChange={(e) => setForm((p) => ({ ...p, currency: e.target.value }))}
                     >
@@ -158,7 +342,7 @@ export default function ProfilePage() {
                     <input
                       className="input flex-1 min-w-0"
                       type="number"
-                      placeholder="95000"
+                      placeholder="e.g. 80000"
                       value={form.currentSalary}
                       onChange={(e) => setForm((p) => ({ ...p, currentSalary: e.target.value }))}
                     />
@@ -171,7 +355,7 @@ export default function ProfilePage() {
                   <input
                     className="input"
                     type="number"
-                    placeholder="8"
+                    placeholder="e.g. 5"
                     value={form.experienceYears}
                     onChange={(e) => setForm((p) => ({ ...p, experienceYears: e.target.value }))}
                     required
@@ -203,7 +387,7 @@ export default function ProfilePage() {
                   <label className="block text-xs font-medium text-slate-400 mb-1.5">Current Location</label>
                   <input
                     className="input"
-                    placeholder="Hyderabad, India"
+                    placeholder="e.g. New York, USA"
                     value={form.currentLocation}
                     onChange={(e) => setForm((p) => ({ ...p, currentLocation: e.target.value }))}
                   />
@@ -213,7 +397,7 @@ export default function ProfilePage() {
                   <div className="flex gap-2 mb-2">
                     <input
                       className="input"
-                      placeholder="e.g. Remote, Bangalore, London"
+                      placeholder="e.g. Remote, New York, London"
                       value={form.preferredLocation}
                       onChange={(e) => setForm((p) => ({ ...p, preferredLocation: e.target.value }))}
                       onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addLocation(); } }}
@@ -238,19 +422,25 @@ export default function ProfilePage() {
 
             {/* Section 4: Skills & Technologies */}
             <div className="card">
-              <h2 className="text-base font-semibold text-white mb-4 flex items-center gap-2">
-                <Sparkles className="w-4 h-4 text-indigo-400" /> Known Technologies & Skills
-              </h2>
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-base font-semibold text-white flex items-center gap-2">
+                  <Sparkles className="w-4 h-4 text-indigo-400" /> Known Technologies & Skills
+                </h2>
+                {form.currentRole && (
+                  <span className="text-[10px] text-indigo-400 bg-indigo-500/10 border border-indigo-500/20 px-2 py-0.5 rounded font-medium">
+                    Tailored for: {form.currentRole}
+                  </span>
+                )}
+              </div>
               <input
                 className="input mb-3"
-                placeholder="Search technologies (e.g. Selenium, Playwright, Docker)…"
+                placeholder="Search any technology (e.g. React, Kafka, Terraform, Cypress)…"
                 value={skillSearch}
                 onChange={(e) => setSkillSearch(e.target.value)}
               />
-              {/* Suggestions */}
               {skillSearch && filteredSkills.length > 0 && (
                 <div className="flex flex-wrap gap-2 mb-3">
-                  {filteredSkills.slice(0, 10).map((s) => (
+                  {filteredSkills.slice(0, 12).map((s) => (
                     <button
                       key={s} type="button"
                       onClick={() => { addSkill(s); setSkillSearch(""); }}
@@ -261,18 +451,27 @@ export default function ProfilePage() {
                   ))}
                 </div>
               )}
-              {/* Quick add all */}
               {!skillSearch && (
-                <div className="flex flex-wrap gap-2 mb-3">
-                  {ALL_SKILLS.filter((s) => !form.skills.includes(s)).slice(0, 16).map((s) => (
-                    <button key={s} type="button" onClick={() => addSkill(s)}
-                      className="tag cursor-pointer hover:bg-indigo-500/20 transition-colors text-[11px]">
-                      + {s}
-                    </button>
-                  ))}
+                <div className="space-y-3 mb-3">
+                  {getOrderedCategories(form.currentRole).map(([category, skills]) => {
+                    const available = skills.filter((s) => !form.skills.includes(s));
+                    if (available.length === 0) return null;
+                    return (
+                      <div key={category}>
+                        <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1.5">{category}</p>
+                        <div className="flex flex-wrap gap-1.5">
+                          {available.map((s) => (
+                            <button key={s} type="button" onClick={() => addSkill(s)}
+                              className="tag cursor-pointer hover:bg-indigo-500/20 transition-colors text-[11px]">
+                              + {s}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               )}
-              {/* Selected skills */}
               {form.skills.length > 0 && (
                 <div>
                   <p className="text-xs text-slate-400 mb-2">Selected ({form.skills.length}):</p>
@@ -290,16 +489,22 @@ export default function ProfilePage() {
               )}
             </div>
 
-            {/* Section 5: Resume Upload */}
-            <div className="card">
-              <h2 className="text-base font-semibold text-white mb-4 flex items-center gap-2">
-                <Upload className="w-4 h-4 text-indigo-400" /> Upload Your Current Resume
+            {/* Section 5: Resume Upload — REQUIRED */}
+            <div id="resume-section" className={`card ${!form.resumeFile && !form.resumeText.trim() ? "border-rose-500/30" : "border-emerald-500/20"}`}>
+              <h2 className="text-base font-semibold text-white mb-1 flex items-center gap-2">
+                <Upload className="w-4 h-4 text-indigo-400" />
+                Resume / CV
+                <span className="text-rose-400 text-xs font-bold ml-1">* Required</span>
+                {(form.resumeFile || form.resumeText.trim()) && <CheckCircle className="w-4 h-4 text-emerald-400 ml-auto" />}
               </h2>
+              <p className="text-xs text-slate-500 mb-4">
+                Your resume is used to enrich ATS output, cover letters, skill gap analysis, and LinkedIn suggestions.
+              </p>
+
+              {/* File Drop Zone */}
               <div
-                className={`border-2 border-dashed rounded-xl p-8 text-center transition-all ${
-                  dragging
-                    ? "border-indigo-400 bg-indigo-500/10"
-                    : "border-slate-600 hover:border-slate-500"
+                className={`border-2 border-dashed rounded-xl p-6 text-center transition-all mb-4 ${
+                  dragging ? "border-indigo-400 bg-indigo-500/10" : form.resumeFile ? "border-emerald-500/40 bg-emerald-500/5" : "border-slate-600 hover:border-indigo-500/50"
                 }`}
                 onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
                 onDragLeave={() => setDragging(false)}
@@ -308,36 +513,64 @@ export default function ProfilePage() {
                 {form.resumeFile ? (
                   <div className="flex items-center justify-center gap-3 text-emerald-400">
                     <CheckCircle className="w-5 h-5" />
-                    <span className="font-medium">{form.resumeFile.name}</span>
-                    <button type="button" onClick={() => setForm((p) => ({ ...p, resumeFile: null }))} className="text-slate-400 hover:text-rose-400 transition-colors">
+                    <span className="font-medium text-sm">{form.resumeFile.name}</span>
+                    <button type="button" onClick={() => setForm((p) => ({ ...p, resumeFile: null }))} className="text-slate-400 hover:text-rose-400 transition-colors ml-2">
                       <X className="w-4 h-4" />
                     </button>
                   </div>
                 ) : (
                   <>
-                    <Upload className="w-8 h-8 text-slate-500 mx-auto mb-2" />
+                    <Upload className="w-7 h-7 text-slate-500 mx-auto mb-2" />
                     <p className="text-slate-400 text-sm mb-1">Drag & drop your resume here</p>
-                    <p className="text-slate-500 text-xs mb-3">PDF or DOCX up to 5MB</p>
+                    <p className="text-slate-500 text-xs mb-3">PDF, DOCX, or TXT — up to 5MB</p>
                     <label className="btn-secondary text-sm cursor-pointer">
                       Browse File
-                      <input type="file" accept=".pdf,.docx,.doc" className="hidden"
-                        onChange={(e) => e.target.files?.[0] && setForm((p) => ({ ...p, resumeFile: e.target.files![0] }))} />
+                      <input type="file" accept=".pdf,.docx,.doc,.txt" className="hidden"
+                        onChange={(e) => { if (e.target.files?.[0]) extractAndSetFile(e.target.files[0]); }} />
                     </label>
                   </>
                 )}
               </div>
-              <p className="text-xs text-slate-500 mt-2">
-                * Resume upload is optional. We&apos;ll use your profile data to generate ATS resumes even without it.
-              </p>
+
+              {/* Paste Text Alternative */}
+              <div>
+                <div className="flex items-center gap-2 mb-2">
+                  <div className="flex-1 h-px bg-slate-700" />
+                  <span className="text-xs text-slate-500 font-medium px-2">or paste resume text</span>
+                  <div className="flex-1 h-px bg-slate-700" />
+                </div>
+                <textarea
+                  className="input resize-none text-xs leading-relaxed font-mono"
+                  rows={6}
+                  placeholder="Paste your full resume here — name, experience, skills, achievements, education... The more detail, the better your AI-generated resume will be."
+                  value={form.resumeText.startsWith("[Resume file:") ? "" : form.resumeText}
+                  onChange={(e) => setForm((p) => ({ ...p, resumeText: e.target.value }))}
+                />
+                {form.resumeText && !form.resumeText.startsWith("[Resume file:") && (
+                  <p className="text-xs text-emerald-400 mt-1 flex items-center gap-1">
+                    <CheckCircle className="w-3 h-3" /> {form.resumeText.length} characters saved — AI will use this for all generations
+                  </p>
+                )}
+              </div>
             </div>
 
             {/* Submit */}
-            <button type="submit" className="btn-primary w-full py-3.5 text-base flex items-center justify-center gap-2">
+            {!form.resumeFile && !form.resumeText.trim() && (
+              <p className="text-xs text-rose-400 text-center flex items-center justify-center gap-1.5">
+                <Upload className="w-3.5 h-3.5" /> Please upload or paste your resume to continue
+              </p>
+            )}
+            <button
+              type="submit"
+              disabled={!form.resumeFile && !form.resumeText.trim()}
+              className="btn-primary w-full py-3.5 text-base flex items-center justify-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"
+            >
               <Sparkles className="w-5 h-5" />
               Find My Best Job Matches
               <ChevronRight className="w-5 h-5" />
             </button>
           </form>
+          </>
         )}
       </main>
     </div>

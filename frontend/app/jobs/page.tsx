@@ -1,36 +1,48 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
+import { useRouter } from "next/navigation";
 import Navbar from "@/components/Navbar";
 import JobCard from "@/components/JobCard";
-import { mockJobs, demoProfile } from "@/lib/mockData";
+import { mockJobs } from "@/lib/mockData";
+import { loadProfile } from "@/lib/profile";
 import { Job, CandidateProfile } from "@/lib/types";
 import {
   Search, Filter, MapPin, Sliders, TrendingUp,
-  CheckCircle2, RefreshCw, Briefcase
+  CheckCircle2, RefreshCw, Briefcase, UserCircle2
 } from "lucide-react";
 
 const WORK_MODES = ["All", "Remote", "Hybrid", "On-site"];
 const TECH_FILTERS = ["All", "Playwright", "Selenium", "Python", "Java", "TypeScript", "Cypress", "K6", "AWS"];
+const AUTO_REFRESH_MS = 10 * 60 * 1000; // 10 minutes
 
 export default function JobsPage() {
-  const [profile, setProfile] = useState<CandidateProfile>(demoProfile);
+  const router = useRouter();
+  const [profile, setProfile] = useState<CandidateProfile | null>(null);
+  const [profileChecked, setProfileChecked] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [workMode, setWorkMode] = useState("All");
   const [techFilter, setTechFilter] = useState("All");
   const [levelFilter, setLevelFilter] = useState<"All" | "SameLevel" | "CareerUplift">("All");
-  const [jobs, setJobs] = useState<Job[]>(mockJobs);
+  const [jobs, setJobs] = useState<Job[]>([]);
   const [loading, setLoading] = useState(false);
   const [lastRefresh, setLastRefresh] = useState(new Date());
+  const profileRef = useRef<CandidateProfile | null>(null);
 
-  const loadJobs = async () => {
+  const loadJobs = async (currentProfile: CandidateProfile) => {
     setLoading(true);
     try {
       const apiUrl = process.env.NEXT_PUBLIC_API_URL;
       if (apiUrl) {
-        const res = await fetch(`${apiUrl}/api/jobs/?limit=100`);
+        const searchParam = currentProfile.currentRole ? `&search=${encodeURIComponent(currentProfile.currentRole)}` : "";
+        const res = await fetch(`${apiUrl}/api/jobs/?limit=100${searchParam}`);
         if (res.ok) {
           const data: Job[] = await res.json();
-          if (data.length > 0) { setJobs(data); setLastRefresh(new Date()); setLoading(false); return; }
+          if (data.length > 0) {
+            setJobs(data);
+            setLastRefresh(new Date());
+            setLoading(false);
+            return;
+          }
         }
       }
     } catch { /* fall through to mock */ }
@@ -40,15 +52,28 @@ export default function JobsPage() {
   };
 
   useEffect(() => {
-    const saved = sessionStorage.getItem("candidateProfile");
-    if (saved) {
-      try { setProfile(JSON.parse(saved)); } catch { /* use default */ }
-    }
-    loadJobs();
+    const p = loadProfile();
+    setProfile(p);
+    profileRef.current = p;
+    setProfileChecked(true);
+
+    if (!p) return;
+
+    // Default work mode filter from saved profile preference
+    if (p.workMode && p.workMode !== "Any") setWorkMode(p.workMode);
+
+    loadJobs(p);
+
+    // Auto-refresh every 10 minutes
+    const interval = setInterval(() => {
+      if (profileRef.current) loadJobs(profileRef.current);
+    }, AUTO_REFRESH_MS);
+
+    return () => clearInterval(interval);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const refresh = () => loadJobs();
+  const refresh = () => { if (profile) loadJobs(profile); };
 
   const filtered = jobs.filter((j) => {
     const q = searchQuery.toLowerCase();
@@ -61,21 +86,38 @@ export default function JobsPage() {
     const matchesMode = workMode === "All" || j.workMode === workMode;
     const matchesTech = techFilter === "All" || j.technologies.includes(techFilter);
     const matchesLevel =
-      levelFilter === "All"
-        ? true
-        : levelFilter === "CareerUplift"
-        ? j.levelUp
-        : !j.levelUp;
+      levelFilter === "All" ? true : levelFilter === "CareerUplift" ? j.levelUp : !j.levelUp;
     return matchesQ && matchesMode && matchesTech && matchesLevel;
   });
 
   const upliftCount = jobs.filter((j) => j.levelUp).length;
   const sameLevelCount = jobs.filter((j) => !j.levelUp).length;
   const verifiedCount = jobs.filter((j) => j.verificationStatus === "VERIFIED").length;
-  const avgScore = Math.round(jobs.filter((j) => j.matchScore).reduce((s, j) => s + (j.matchScore ?? 0), 0) / jobs.filter((j) => j.matchScore).length);
+
+  if (profileChecked && !profile) {
+    return (
+      <div className="flex min-h-screen bg-transparent">
+        <Navbar />
+        <main className="ml-64 flex-1 px-8 py-8 flex items-center justify-center">
+          <div className="text-center max-w-sm">
+            <div className="w-16 h-16 rounded-full bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center mx-auto mb-4">
+              <UserCircle2 className="w-8 h-8 text-indigo-400" />
+            </div>
+            <h2 className="text-white font-semibold text-xl mb-2">No profile found</h2>
+            <p className="text-slate-400 text-sm mb-6">
+              Complete your career profile first — we&apos;ll match you with verified jobs tailored to your skills and experience.
+            </p>
+            <button onClick={() => router.push("/")} className="btn-primary text-sm px-6 py-2.5">
+              Set Up Profile
+            </button>
+          </div>
+        </main>
+      </div>
+    );
+  }
 
   return (
-    <div className="flex min-h-screen bg-[#0f172a]">
+    <div className="flex min-h-screen bg-transparent">
       <Navbar />
       <main className="ml-64 flex-1 px-8 py-8">
         {/* Header */}
@@ -83,10 +125,13 @@ export default function JobsPage() {
           <div>
             <p className="text-xs text-slate-500 mb-1">Showing results for</p>
             <h1 className="text-2xl font-bold text-white">
-              {profile.currentRole} → <span className="gradient-text">Career Uplift Jobs</span>
+              {profile?.currentRole || "Your Profile"} → <span className="gradient-text">Career Uplift Jobs</span>
             </h1>
             <p className="text-slate-400 text-sm mt-1">
-              {profile.experienceYears || 8} yrs experience · {profile.currentLocation || "Hyderabad"} · looking for &gt; <span className="text-emerald-400 font-medium">{profile.currency || "USD"} {profile.currentSalary ? Number(profile.currentSalary).toLocaleString() : "95,000"}</span>
+              {profile?.experienceYears || 0} yrs experience · {profile?.currentLocation || "Location not set"} · looking for &gt;{" "}
+              <span className="text-emerald-400 font-medium">
+                {profile?.currency || "USD"} {profile?.currentSalary ? Number(profile.currentSalary).toLocaleString() : "0"}
+              </span>
             </p>
           </div>
           <button
@@ -108,7 +153,7 @@ export default function JobsPage() {
             { label: "Verified Jobs", value: verifiedCount, icon: CheckCircle2, color: "text-emerald-400" },
           ].map(({ label, value, icon: Icon, color }) => (
             <div key={label} className="card py-3 px-4">
-              <div className={`flex items-center gap-2 text-xs text-slate-400 mb-1`}>
+              <div className="flex items-center gap-2 text-xs text-slate-400 mb-1">
                 <Icon className={`w-4 h-4 ${color}`} /> {label}
               </div>
               <p className={`text-2xl font-bold ${color}`}>{value}</p>
@@ -119,7 +164,6 @@ export default function JobsPage() {
         {/* Filters */}
         <div className="card mb-6 py-4">
           <div className="flex flex-wrap gap-3 items-center">
-            {/* Search */}
             <div className="flex-1 min-w-56 relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
               <input
@@ -130,16 +174,13 @@ export default function JobsPage() {
               />
             </div>
 
-            {/* Level filter */}
             <div className="flex gap-1 bg-[#0f172a] rounded-lg p-1">
               {(["All", "CareerUplift", "SameLevel"] as const).map((f) => (
                 <button
                   key={f}
                   onClick={() => setLevelFilter(f)}
                   className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
-                    levelFilter === f
-                      ? "bg-indigo-600 text-white"
-                      : "text-slate-400 hover:text-white"
+                    levelFilter === f ? "bg-indigo-600 text-white" : "text-slate-400 hover:text-white"
                   }`}
                 >
                   {f === "All" ? "All Jobs" : f === "CareerUplift" ? "🚀 Career Uplift" : "↗ Same Level+"}
@@ -147,26 +188,16 @@ export default function JobsPage() {
               ))}
             </div>
 
-            {/* Work mode */}
             <div className="flex items-center gap-1 text-slate-400 text-xs">
               <MapPin className="w-3.5 h-3.5" />
-              <select
-                className="input py-1.5 text-xs w-28"
-                value={workMode}
-                onChange={(e) => setWorkMode(e.target.value)}
-              >
+              <select className="input py-1.5 text-xs w-28" value={workMode} onChange={(e) => setWorkMode(e.target.value)}>
                 {WORK_MODES.map((m) => <option key={m}>{m}</option>)}
               </select>
             </div>
 
-            {/* Tech filter */}
             <div className="flex items-center gap-1 text-slate-400 text-xs">
               <Sliders className="w-3.5 h-3.5" />
-              <select
-                className="input py-1.5 text-xs w-36"
-                value={techFilter}
-                onChange={(e) => setTechFilter(e.target.value)}
-              >
+              <select className="input py-1.5 text-xs w-36" value={techFilter} onChange={(e) => setTechFilter(e.target.value)}>
                 {TECH_FILTERS.map((t) => <option key={t}>{t}</option>)}
               </select>
             </div>
@@ -198,7 +229,6 @@ export default function JobsPage() {
           </div>
         )}
 
-        {/* Refresh info */}
         <p className="text-xs text-slate-600 text-center mt-6" suppressHydrationWarning>
           Last refreshed: {lastRefresh.toLocaleTimeString()} · Auto-refreshes every 10 minutes
         </p>

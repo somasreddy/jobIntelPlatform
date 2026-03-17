@@ -1,7 +1,9 @@
 "use client";
+import { useState, useEffect } from "react";
 import { Job } from "@/lib/types";
-import { MapPin, Building2, Clock, ArrowUpRight, CheckCircle2, ExternalLink, TrendingUp } from "lucide-react";
+import { MapPin, Building2, Clock, ArrowUpRight, CheckCircle2, ExternalLink, TrendingUp, Bookmark, BookmarkCheck } from "lucide-react";
 import Link from "next/link";
+import { getSavedJobIds, toggleSavedJob } from "@/lib/profile";
 
 function formatSalary(min: number, max: number, currency: string) {
   const fmt = (n: number) => {
@@ -47,6 +49,18 @@ interface JobCardProps {
 
 export default function JobCard({ job, onSelect }: JobCardProps) {
   const matchScore = job.matchScore ?? 0;
+  const [saved, setSaved] = useState(false);
+
+  useEffect(() => {
+    setSaved(getSavedJobIds().includes(job.id));
+  }, [job.id]);
+
+  const handleSave = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    e.preventDefault();
+    const isNowSaved = toggleSavedJob(job.id);
+    setSaved(isNowSaved);
+  };
 
   return (
     <div
@@ -126,6 +140,13 @@ export default function JobCard({ job, onSelect }: JobCardProps) {
         >
           Apply <ExternalLink className="w-3.5 h-3.5" />
         </a>
+        <button
+          onClick={handleSave}
+          title={saved ? "Remove from saved" : "Save job"}
+          className={`btn-secondary px-2.5 flex items-center justify-center transition-colors ${saved ? "text-indigo-400 border-indigo-500/50" : "text-slate-400"}`}
+        >
+          {saved ? <BookmarkCheck className="w-4 h-4" /> : <Bookmark className="w-4 h-4" />}
+        </button>
       </div>
     </div>
   );

@@ -2,19 +2,33 @@
 import { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Navbar from "@/components/Navbar";
-import { mockJobs, demoProfile } from "@/lib/mockData";
+import { mockJobs } from "@/lib/mockData";
+import { loadProfile } from "@/lib/profile";
 import { Job, CandidateProfile } from "@/lib/types";
 import {
   ArrowLeft, Building2, MapPin, Clock, DollarSign,
   FileText, Mail, MessageSquare, Download, CheckCircle,
-  TrendingUp, Sparkles, ExternalLink, ShieldCheck
+  TrendingUp, Sparkles, ExternalLink, ShieldCheck, Copy
 } from "lucide-react";
+
+function formatSalary(min: number, max: number, currency: string): string {
+  if (currency === "INR") return `₹${(min / 100000).toFixed(1)}L – ₹${(max / 100000).toFixed(1)}L`;
+  if (currency === "GBP") return `£${Math.round(min / 1000)}k – £${Math.round(max / 1000)}k`;
+  return `$${Math.round(min / 1000)}k – $${Math.round(max / 1000)}k`;
+}
+
+const emptyProfile: CandidateProfile = {
+  name: "", currentRole: "", currentSalary: 0, currency: "USD",
+  experienceYears: 0, workMode: "Any", currentLocation: "",
+  preferredLocations: [], skills: [], frameworks: [],
+  languages: [], cicdTools: [], certifications: [],
+};
 
 export default function JobDetailPage() {
   const params = useParams();
   const router = useRouter();
   const [job, setJob] = useState<Job | null>(null);
-  const [profile, setProfile] = useState<CandidateProfile>(demoProfile);
+  const [profile, setProfile] = useState<CandidateProfile>(emptyProfile);
   const [activeTab, setActiveTab] = useState<"resume" | "cover" | "recruiter">("resume");
   const [generating, setGenerating] = useState(false);
   const [generated, setGenerated] = useState(false);
@@ -28,8 +42,15 @@ export default function JobDetailPage() {
     recruiter_name?: string;
     recruiter_linkedin?: string;
   }>({});
+  const [copyFeedback, setCopyFeedback] = useState<"cover" | "recruiter" | null>(null);
 
   useEffect(() => {
+    // Reset generation state whenever the job changes
+    setGenerated(false);
+    setGenerating(false);
+    setGeneratedData({});
+    setActiveTab("resume");
+
     const loadJob = async () => {
       const apiUrl = process.env.NEXT_PUBLIC_API_URL;
       if (apiUrl) {
@@ -41,9 +62,10 @@ export default function JobDetailPage() {
       const j = mockJobs.find((x) => x.id === params.id);
       if (j) setJob(j);
     };
+
     loadJob();
-    const p = sessionStorage.getItem("candidateProfile");
-    if (p) { try { setProfile(JSON.parse(p)); } catch {} }
+    const saved = loadProfile();
+    if (saved) setProfile(saved);
   }, [params.id]);
 
   const handleGenerate = async () => {
@@ -53,10 +75,11 @@ export default function JobDetailPage() {
     if (apiUrl) {
       try {
         const jobPayload = { title: job.title, organization: job.organization, description: job.description, technologies: job.technologies };
+        const profilePayload = { ...profile, resume_text: profile.resumeText || "" };
         const [resumeRes, coverRes, recruiterRes] = await Promise.all([
-          fetch(`${apiUrl}/api/resume/generate-ats`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ profile, job: jobPayload }) }),
-          fetch(`${apiUrl}/api/resume/generate-cover-letter`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ profile, job: jobPayload }) }),
-          fetch(`${apiUrl}/api/recruiter/outreach-message`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ profile, job: { ...jobPayload, recruiter_name: job.recruiterName, recruiter_linkedin: job.recruiterLinkedIn } }) }),
+          fetch(`${apiUrl}/api/resume/generate-ats`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ profile: profilePayload, job: jobPayload }) }),
+          fetch(`${apiUrl}/api/resume/generate-cover-letter`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ profile: profilePayload, job: jobPayload }) }),
+          fetch(`${apiUrl}/api/recruiter/outreach-message`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ profile: profilePayload, job: { ...jobPayload, recruiter_name: job.recruiterName, recruiter_linkedin: job.recruiterLinkedIn } }) }),
         ]);
         type ResumeResp = { bullets?: string[]; pdf_base64?: string; docx_base64?: string; ats_score?: number };
         type CoverResp = { content?: string };
@@ -66,7 +89,16 @@ export default function JobDetailPage() {
           coverRes.ok ? coverRes.json() : {},
           recruiterRes.ok ? recruiterRes.json() : {},
         ]);
-        setGeneratedData({ bullets: resumeData.bullets, pdf_base64: resumeData.pdf_base64, docx_base64: resumeData.docx_base64, ats_score: resumeData.ats_score, cover_letter: coverData.content, recruiter_message: recruiterData.message, recruiter_name: recruiterData.recruiter_name, recruiter_linkedin: recruiterData.recruiter_linkedin });
+        setGeneratedData({
+          bullets: resumeData.bullets,
+          pdf_base64: resumeData.pdf_base64,
+          docx_base64: resumeData.docx_base64,
+          ats_score: resumeData.ats_score,
+          cover_letter: coverData.content,
+          recruiter_message: recruiterData.message,
+          recruiter_name: recruiterData.recruiter_name,
+          recruiter_linkedin: recruiterData.recruiter_linkedin,
+        });
         setGenerating(false); setGenerated(true); return;
       } catch { /* fall through to mock */ }
     }
@@ -76,23 +108,25 @@ export default function JobDetailPage() {
   const handleDownload = (type: "pdf" | "docx") => {
     const b64 = type === "pdf" ? generatedData.pdf_base64 : generatedData.docx_base64;
     if (!b64) return;
-    const bytes = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
+    const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
     const blob = new Blob([bytes], { type: type === "pdf" ? "application/pdf" : "application/vnd.openxmlformats-officedocument.wordprocessingml.document" });
     const a = Object.assign(document.createElement("a"), { href: URL.createObjectURL(blob), download: `ats_resume.${type}` });
     a.click(); URL.revokeObjectURL(a.href);
   };
 
-  const handleApply = () => {
-    if (job) window.open(job.applicationLink, "_blank");
+  const handleCopy = (text: string, key: "cover" | "recruiter") => {
+    navigator.clipboard.writeText(text).then(() => {
+      setCopyFeedback(key);
+      setTimeout(() => setCopyFeedback(null), 2000);
+    });
   };
 
-  if (!job) return <div className="min-h-screen bg-[#0f172a]" />;
+  if (!job) return <div className="min-h-screen bg-transparent" />;
 
   return (
-    <div className="flex min-h-screen bg-[#0f172a]">
+    <div className="flex min-h-screen bg-transparent">
       <Navbar />
       <main className="ml-64 flex-1 px-8 py-8 max-w-6xl">
-        {/* Back button */}
         <button
           onClick={() => router.push("/jobs")}
           className="flex items-center gap-2 text-slate-400 hover:text-white mb-6 transition-colors text-sm"
@@ -116,11 +150,9 @@ export default function JobDetailPage() {
                   </span>
                 )}
               </div>
-              
-              <h1 className="text-xl font-bold text-white mb-2 leading-tight">
-                {job.title}
-              </h1>
-              
+
+              <h1 className="text-xl font-bold text-white mb-2 leading-tight">{job.title}</h1>
+
               <div className="space-y-2 text-sm text-slate-400 mb-6">
                 <div className="flex items-center gap-2">
                   <Building2 className="w-4 h-4 text-slate-500" />
@@ -132,7 +164,7 @@ export default function JobDetailPage() {
                 <div className="flex items-center gap-2">
                   <DollarSign className="w-4 h-4 text-emerald-500" />
                   <span className="text-emerald-400 font-medium">
-                    {job.currency} {(job.salaryMin / 1000).toFixed(0)}k - {(job.salaryMax / 1000).toFixed(0)}k
+                    {formatSalary(job.salaryMin, job.salaryMax, job.currency)}
                   </span>
                 </div>
                 <div className="flex items-center gap-2">
@@ -142,20 +174,22 @@ export default function JobDetailPage() {
 
               {job.matchScore && (
                 <div className="bg-[#0f172a] rounded-xl border border-[#334155] p-4 mb-6">
-                  <div className="flexitems-center justify-between mb-2">
+                  <div className="flex items-center justify-between mb-2">
                     <span className="text-sm font-medium text-slate-300">Your Match Score</span>
                     <span className="text-lg font-bold text-emerald-400">{job.matchScore}%</span>
                   </div>
                   <div className="progress-bar mb-3">
-                    <div className="progress-fill" style={{ width: `${job.matchScore}%`, background: job.matchScore > 80 ? '#10b981' : '#6366f1' }} />
+                    <div className="progress-fill" style={{ width: `${job.matchScore}%`, background: job.matchScore > 80 ? "#10b981" : "#6366f1" }} />
                   </div>
                   <p className="text-xs text-slate-500">
-                    High overlap with your {profile.skills.slice(0, 2).join(", ")} skills.
+                    {profile.skills.length > 0
+                      ? `High overlap with your ${profile.skills.slice(0, 2).join(", ")} skills.`
+                      : "Complete your profile for personalised match insights."}
                   </p>
                 </div>
               )}
 
-              <button onClick={handleApply} className="btn-primary w-full py-3 mb-2 flex items-center justify-center gap-2 text-sm">
+              <button onClick={() => window.open(job.applicationLink, "_blank")} className="btn-primary w-full py-3 mb-2 flex items-center justify-center gap-2 text-sm">
                 Apply on Company Portal <ExternalLink className="w-4 h-4" />
               </button>
               <p className="text-xs text-slate-500 text-center">
@@ -166,22 +200,20 @@ export default function JobDetailPage() {
             <div className="card">
               <h3 className="text-sm font-semibold text-white mb-3">Required Tech Stack</h3>
               <div className="flex flex-wrap gap-1.5">
-                {job.technologies.map(t => {
-                  const has = profile.skills.includes(t) || profile.frameworks.includes(t);
+                {job.technologies.map((t) => {
+                  const has = profile.skills.includes(t) || (profile.frameworks ?? []).includes(t);
                   return (
-                    <span key={t} className={`flex items-center gap-1 badge ${has ? 'badge-verified' : 'badge-tech opacity-60'}`}>
+                    <span key={t} className={`flex items-center gap-1 badge ${has ? "badge-verified" : "badge-tech opacity-60"}`}>
                       {has && <CheckCircle className="w-3 h-3" />} {t}
                     </span>
                   );
                 })}
               </div>
             </div>
-            
+
             <div className="card">
               <h3 className="text-sm font-semibold text-white mb-3">Job Description</h3>
-              <p className="text-sm text-slate-400 leading-relaxed">
-                {job.description}
-              </p>
+              <p className="text-sm text-slate-400 leading-relaxed">{job.description}</p>
               <a href={job.careerPageLink} target="_blank" rel="noreferrer" className="text-indigo-400 hover:text-indigo-300 text-xs mt-3 flex items-center gap-1">
                 View full description <ExternalLink className="w-3 h-3" />
               </a>
@@ -193,24 +225,22 @@ export default function JobDetailPage() {
             <div className="card h-full flex flex-col p-0 overflow-hidden">
               {/* Tabs */}
               <div className="flex border-b border-[#334155] bg-[#1e293b]">
-                <button
-                  onClick={() => setActiveTab("resume")}
-                  className={`flex-1 py-4 text-sm font-medium flex items-center justify-center gap-2 transition-colors border-b-2 ${activeTab === "resume" ? "border-indigo-500 text-indigo-400 bg-indigo-500/5" : "border-transparent text-slate-400 hover:text-slate-200"}`}
-                >
-                  <FileText className="w-4 h-4" /> ATS Resume
-                </button>
-                <button
-                  onClick={() => setActiveTab("cover")}
-                  className={`flex-1 py-4 text-sm font-medium flex items-center justify-center gap-2 transition-colors border-b-2 ${activeTab === "cover" ? "border-indigo-500 text-indigo-400 bg-indigo-500/5" : "border-transparent text-slate-400 hover:text-slate-200"}`}
-                >
-                  <Mail className="w-4 h-4" /> Cover Letter
-                </button>
-                <button
-                  onClick={() => setActiveTab("recruiter")}
-                  className={`flex-1 py-4 text-sm font-medium flex items-center justify-center gap-2 transition-colors border-b-2 ${activeTab === "recruiter" ? "border-indigo-500 text-indigo-400 bg-indigo-500/5" : "border-transparent text-slate-400 hover:text-slate-200"}`}
-                >
-                  <MessageSquare className="w-4 h-4" /> Recruiter Email
-                </button>
+                {(["resume", "cover", "recruiter"] as const).map((tab) => {
+                  const labels: Record<string, { icon: React.ReactNode; label: string }> = {
+                    resume: { icon: <FileText className="w-4 h-4" />, label: "ATS Resume" },
+                    cover: { icon: <Mail className="w-4 h-4" />, label: "Cover Letter" },
+                    recruiter: { icon: <MessageSquare className="w-4 h-4" />, label: "Recruiter Email" },
+                  };
+                  return (
+                    <button
+                      key={tab}
+                      onClick={() => setActiveTab(tab)}
+                      className={`flex-1 py-4 text-sm font-medium flex items-center justify-center gap-2 transition-colors border-b-2 ${activeTab === tab ? "border-indigo-500 text-indigo-400 bg-indigo-500/5" : "border-transparent text-slate-400 hover:text-slate-200"}`}
+                    >
+                      {labels[tab].icon} {labels[tab].label}
+                    </button>
+                  );
+                })}
               </div>
 
               {/* Content Area */}
@@ -222,7 +252,9 @@ export default function JobDetailPage() {
                     </div>
                     <h2 className="text-xl font-bold text-white mb-2">Generate Application Package</h2>
                     <p className="text-slate-400 max-w-md mb-8 text-sm leading-relaxed">
-                      Our AI will instantly rewrite your resume bullets, draft a personalized cover letter, and write a recruiter outreach email specifically tailored to the <span className="text-white font-medium">{job.title}</span> role at <span className="text-white font-medium">{job.organization}</span>.
+                      Our AI will instantly rewrite your resume bullets, draft a personalized cover letter, and write a recruiter outreach email specifically tailored to the{" "}
+                      <span className="text-white font-medium">{job.title}</span> role at{" "}
+                      <span className="text-white font-medium">{job.organization}</span>.
                     </p>
                     <button onClick={handleGenerate} className="btn-primary py-3 px-8 flex items-center gap-2 shadow-glow">
                       <Sparkles className="w-4 h-4" /> Generate Everything Now
@@ -231,16 +263,15 @@ export default function JobDetailPage() {
                 ) : generating ? (
                   <div className="flex-1 flex flex-col items-center justify-center py-20">
                     <div className="relative w-20 h-20 mb-6">
-                      <div className="absolute inset-0 border-4 border-[#334155] rounded-full"></div>
-                      <div className="absolute inset-0 border-4 border-t-indigo-500 border-r-cyan-400 border-b-transparent border-l-transparent rounded-full animate-spin"></div>
+                      <div className="absolute inset-0 border-4 border-[#334155] rounded-full" />
+                      <div className="absolute inset-0 border-4 border-t-indigo-500 border-r-cyan-400 border-b-transparent border-l-transparent rounded-full animate-spin" />
                       <div className="absolute inset-0 flex items-center justify-center"><Sparkles className="w-6 h-6 text-indigo-400 animate-pulse" /></div>
                     </div>
                     <p className="text-white font-medium mb-1">AI Engine Processing...</p>
-                    <p className="text-sm text-slate-400 animate-pulse">Matching your profile to {job.organization}'s JD...</p>
+                    <p className="text-sm text-slate-400 animate-pulse">Matching your profile to {job.organization}&apos;s JD...</p>
                   </div>
                 ) : (
                   <div className="flex-1 flex flex-col animate-fade-in">
-                    {/* Render generated content based on tab */}
                     {activeTab === "resume" && (
                       <div className="flex-1 flex flex-col">
                         <div className="flex justify-between items-center mb-4">
@@ -259,23 +290,96 @@ export default function JobDetailPage() {
                             </button>
                           </div>
                         </div>
-                        <div className="flex-1 bg-white rounded-lg p-6 overflow-y-auto border border-slate-700 font-serif text-slate-800 shadow-inner">
-                          <h1 className="text-2xl font-bold mb-1">{profile.name}</h1>
-                          <p className="text-sm mb-4 border-b border-slate-300 pb-2">{job.title} | {profile.currentLocation} | {profile.experienceYears}+ Yrs Experience</p>
-                          <h2 className="text-sm font-bold uppercase tracking-wider mb-2 text-slate-900">Professional Summary</h2>
-                          <p className="text-sm mb-4 leading-relaxed">Results-driven {profile.currentRole} with {profile.experienceYears}+ years designing scalable automation frameworks using {job.technologies.slice(0,3).join(", ")}, directly aligning with {job.organization}&apos;s engineering culture.</p>
-                          <h2 className="text-sm font-bold uppercase tracking-wider mb-2 text-slate-900">Core Technologies</h2>
-                          <p className="text-sm mb-4"><strong>Matching JD:</strong> {job.technologies.filter(t => profile.skills.includes(t) || (profile.frameworks || []).includes(t)).join(", ") || job.technologies.slice(0,4).join(", ")}</p>
-                          <h2 className="text-sm font-bold uppercase tracking-wider mb-2 text-slate-900 border-b border-slate-300 pb-1">AI-Enhanced Experience</h2>
-                          <p className="text-sm font-bold mb-1">{profile.currentRole} — Current</p>
-                          <ul className="list-disc pl-5 text-sm space-y-1.5">
-                            {(generatedData.bullets ?? [
-                              `Architected ${job.technologies[0] || "automation"} framework, reducing regression time by 40%.`,
-                              `Integrated tests into CI/CD, preventing 95%+ of critical defects from reaching production.`,
-                              `Led API testing initiative across 12 microservices, achieving 85% coverage.`,
-                            ]).map((b, i) => <li key={i}>{b}</li>)}
-                          </ul>
-                        </div>
+                        {(() => {
+                          const matchedSkills = job.technologies.filter(
+                            (t) => profile.skills.includes(t) || (profile.frameworks ?? []).includes(t)
+                          );
+                          const allProfileSkills = [
+                            ...profile.skills,
+                            ...(profile.frameworks ?? []),
+                            ...(profile.languages ?? []),
+                            ...(profile.cicdTools ?? []),
+                          ].filter(Boolean);
+                          const bullets = generatedData.bullets ?? [
+                            `Architected end-to-end ${job.technologies[0] || "automation"} framework from scratch, reducing regression cycle time by 40% and enabling daily releases.`,
+                            `Designed and implemented ${job.technologies[1] || "API"} test suites covering 200+ endpoints across microservices, achieving 92% API coverage.`,
+                            `Integrated automated test pipeline into CI/CD using ${(profile.cicdTools ?? [job.technologies[2] || "Jenkins"])[0]}, cutting production defect escape rate by 95%.`,
+                            `Mentored a team of 4 junior engineers on test automation best practices, BDD principles, and code review standards.`,
+                            `Led performance benchmarking initiative using ${job.technologies.find(t => ["JMeter","K6","Gatling"].includes(t)) || "load testing tools"}, identifying 3 critical bottlenecks before launch.`,
+                            `Collaborated with Product and DevOps to define quality gates, shift-left testing strategy, and release readiness criteria.`,
+                          ];
+                          return (
+                            <div className="flex-1 bg-white rounded-lg p-6 overflow-y-auto border border-slate-700 font-serif text-slate-800 shadow-inner text-sm">
+                              {/* Header */}
+                              <div className="text-center border-b-2 border-slate-800 pb-3 mb-4">
+                                <h1 className="text-xl font-bold tracking-wide uppercase">{profile.name || "Your Name"}</h1>
+                                <p className="text-xs text-slate-600 mt-0.5">
+                                  {profile.currentLocation || "Location"}{profile.currentLocation ? " · " : ""}{profile.currency} {profile.currentSalary ? Number(profile.currentSalary).toLocaleString() : ""}{" "}
+                                  {profile.experienceYears ? `· ${profile.experienceYears}+ years exp` : ""}
+                                </p>
+                              </div>
+
+                              {/* Summary */}
+                              <h2 className="text-xs font-bold uppercase tracking-widest text-slate-500 border-b border-slate-300 pb-0.5 mb-2">Professional Summary</h2>
+                              <p className="mb-4 leading-relaxed text-[13px]">
+                                Results-driven <strong>{profile.currentRole || "professional"}</strong> with {profile.experienceYears}+ years of experience delivering{" "}
+                                {matchedSkills.length > 0 ? matchedSkills.slice(0, 3).join(", ") : job.technologies.slice(0, 3).join(", ")} solutions at scale.
+                                {profile.resumeText && !profile.resumeText.startsWith("[Resume file:")
+                                  ? ` Demonstrated track record of ${profile.resumeText.toLowerCase().includes("lead") || profile.resumeText.toLowerCase().includes("senior") ? "technical leadership and " : ""}building high-quality, production-grade systems. `
+                                  : " Proven ability to architect robust systems, drive engineering excellence, and deliver measurable results. "}
+                                Excited to bring deep expertise in {job.technologies[0]} to {job.organization}&apos;s engineering team and drive {job.levelUp ? "next-level impact" : "continued excellence"}.
+                              </p>
+
+                              {/* Core Skills */}
+                              <h2 className="text-xs font-bold uppercase tracking-widest text-slate-500 border-b border-slate-300 pb-0.5 mb-2">Core Competencies</h2>
+                              <div className="grid grid-cols-2 gap-x-4 mb-4 text-[12px]">
+                                {(allProfileSkills.length > 0 ? allProfileSkills : job.technologies).slice(0, 10).map((s, i) => (
+                                  <div key={i} className="flex items-center gap-1 py-0.5">
+                                    <span className="w-1 h-1 rounded-full bg-slate-400 shrink-0" />
+                                    <span className={matchedSkills.includes(s) ? "font-semibold text-slate-900" : "text-slate-600"}>{s}</span>
+                                  </div>
+                                ))}
+                              </div>
+
+                              {/* JD Tech Match */}
+                              {matchedSkills.length > 0 && (
+                                <>
+                                  <h2 className="text-xs font-bold uppercase tracking-widest text-slate-500 border-b border-slate-300 pb-0.5 mb-2">JD Technology Match</h2>
+                                  <p className="text-[12px] mb-4 text-emerald-700 font-medium">
+                                    ✓ {matchedSkills.join("  ·  ")}
+                                  </p>
+                                </>
+                              )}
+
+                              {/* Experience */}
+                              <h2 className="text-xs font-bold uppercase tracking-widest text-slate-500 border-b border-slate-300 pb-0.5 mb-2">Professional Experience</h2>
+                              <div className="mb-4">
+                                <div className="flex justify-between items-baseline mb-0.5">
+                                  <p className="font-bold text-[13px]">{profile.currentRole || "Current Role"}</p>
+                                  <p className="text-[11px] text-slate-500">Current</p>
+                                </div>
+                                <p className="text-[11px] text-slate-500 mb-2 italic">{profile.currentLocation || ""}</p>
+                                <ul className="list-disc pl-4 space-y-1.5 text-[12px] leading-relaxed">
+                                  {bullets.map((b, i) => <li key={i}>{b}</li>)}
+                                </ul>
+                              </div>
+
+                              {/* Certifications */}
+                              {(profile.certifications ?? []).length > 0 && (
+                                <>
+                                  <h2 className="text-xs font-bold uppercase tracking-widest text-slate-500 border-b border-slate-300 pb-0.5 mb-2">Certifications</h2>
+                                  <ul className="list-disc pl-4 space-y-0.5 text-[12px] mb-4">
+                                    {profile.certifications.map((c, i) => <li key={i}>{c}</li>)}
+                                  </ul>
+                                </>
+                              )}
+
+                              <p className="text-[10px] text-slate-400 text-center mt-4 pt-3 border-t border-slate-200">
+                                Generated by JobIntel AI · Tailored for {job.organization} · {job.title}
+                              </p>
+                            </div>
+                          );
+                        })()}
                       </div>
                     )}
 
@@ -284,14 +388,21 @@ export default function JobDetailPage() {
                         <div className="flex justify-between items-center mb-4">
                           <h3 className="text-lg font-semibold text-white">Cover Letter</h3>
                           <button
-                            onClick={() => navigator.clipboard.writeText(generatedData.cover_letter ?? "")}
+                            onClick={() => handleCopy(
+                              generatedData.cover_letter ?? `Dear Hiring Manager,\n\nI am writing to express my strong interest in the ${job.title} position at ${job.organization}. With ${profile.experienceYears} years of experience in ${job.technologies.slice(0, 2).join(" and ")}, I am confident I can make an immediate impact.\n\nBest regards,\n${profile.name}`,
+                              "cover"
+                            )}
                             className="btn-secondary py-1.5 px-3 text-xs flex items-center gap-1.5"
                           >
-                            <Download className="w-3.5 h-3.5" /> Copy
+                            {copyFeedback === "cover" ? (
+                              <><CheckCircle className="w-3.5 h-3.5 text-emerald-400" /> Copied!</>
+                            ) : (
+                              <><Copy className="w-3.5 h-3.5" /> Copy</>
+                            )}
                           </button>
                         </div>
                         <div className="flex-1 bg-[#263348] rounded-lg p-6 overflow-y-auto border border-slate-600 text-sm text-slate-200 leading-relaxed font-sans shadow-inner whitespace-pre-wrap">
-                          {generatedData.cover_letter ?? `Dear Hiring Manager,\n\nI am writing to express my strong interest in the ${job.title} position at ${job.organization}. With ${profile.experienceYears} years of experience in QA automation using ${job.technologies.slice(0,2).join(" and ")}, I am confident I can make an immediate impact.\n\nBest regards,\n${profile.name}`}
+                          {generatedData.cover_letter ?? `Dear Hiring Manager,\n\nI am writing to express my strong interest in the ${job.title} position at ${job.organization}.\n\nWith ${profile.experienceYears}+ years of experience in ${job.technologies.slice(0, 3).join(", ")}, I have consistently delivered high-quality solutions in fast-paced engineering environments.${profile.resumeText && !profile.resumeText.startsWith("[Resume file:") ? "\n\nHighlights from my background include hands-on delivery of production systems, strong collaboration with cross-functional teams, and a proven ability to ramp up quickly on new technology stacks." : ""}\n\nI am particularly excited about the opportunity at ${job.organization} because of its technical depth and scale. The role aligns closely with my expertise in ${job.technologies[0]} and ${job.technologies[1] || "modern engineering practices"}.\n\nI would welcome the opportunity to discuss how my experience can contribute to ${job.organization}'s goals.\n\nBest regards,\n${profile.name || "Your Name"}`}
                         </div>
                       </div>
                     )}
@@ -307,18 +418,33 @@ export default function JobDetailPage() {
                             <ExternalLink className="w-3.5 h-3.5" /> Find {generatedData.recruiter_name ?? job.recruiterName ?? "Recruiter"}
                           </button>
                         </div>
-                        <div className="bg-[#1e293b] rounded-lg border border-slate-600 overflow-hidden shadow-inner">
+                        <div className="bg-[#1e293b] rounded-lg border border-slate-600 overflow-hidden shadow-inner mb-3">
                           <div className="px-4 py-2 border-b border-slate-600 bg-[#263348] text-xs text-slate-400 font-mono">
-                            Subject: QA Automation Expert for {job.title} role
+                            Subject: {profile.currentRole || "Professional"} interested in {job.title} role
                           </div>
                           <div className="p-4 text-sm text-slate-300 leading-relaxed whitespace-pre-wrap bg-[#0f172a]">
-                            {generatedData.recruiter_message ?? `Hi ${job.recruiterName?.split(" ")[0] ?? "Recruiter"},\n\nI saw that ${job.organization} is hiring for a ${job.title}. Given my ${profile.experienceYears}+ years with ${job.technologies.slice(0,3).join(", ")}, I believe I'd be a great fit. Would you be open to a quick 10-minute chat?\n\nThanks,\n${profile.name}`}
+                            {generatedData.recruiter_message ?? `Hi ${job.recruiterName?.split(" ")[0] ?? "there"},\n\nI saw that ${job.organization} is hiring for a ${job.title}. Given my ${profile.experienceYears}+ years with ${job.technologies.slice(0, 3).join(", ")}, I believe I'd be a great fit. Would you be open to a quick 10-minute chat?\n\nThanks,\n${profile.name}`}
                           </div>
+                        </div>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => handleCopy(
+                              generatedData.recruiter_message ?? `Hi ${job.recruiterName?.split(" ")[0] ?? "there"},\n\nI saw that ${job.organization} is hiring for a ${job.title}. Given my ${profile.experienceYears}+ years with ${job.technologies.slice(0, 3).join(", ")}, I believe I'd be a great fit.\n\nThanks,\n${profile.name}`,
+                              "recruiter"
+                            )}
+                            className="btn-secondary py-1.5 px-3 text-xs flex items-center gap-1.5"
+                          >
+                            {copyFeedback === "recruiter" ? (
+                              <><CheckCircle className="w-3.5 h-3.5 text-emerald-400" /> Copied!</>
+                            ) : (
+                              <><Copy className="w-3.5 h-3.5" /> Copy Message</>
+                            )}
+                          </button>
                         </div>
                         <div className="mt-4 p-3 rounded-lg bg-indigo-500/10 border border-indigo-500/20 text-xs text-indigo-300">
                           <p className="flex items-start gap-2">
                             <Sparkles className="w-4 h-4 mt-0.5 shrink-0" />
-                            <strong>Pro Tip:</strong> Send via LinkedIn InMail or email first.last@{job.organization.toLowerCase().replace(/\s/g, "")}.com.
+                            <span><strong>Pro Tip:</strong> Send via LinkedIn InMail or try first.last@{job.organization.toLowerCase().replace(/\s/g, "")}.com.</span>
                           </p>
                         </div>
                       </div>

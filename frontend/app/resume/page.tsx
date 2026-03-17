@@ -1,20 +1,21 @@
 "use client";
 import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import Navbar from "@/components/Navbar";
-import { demoProfile } from "@/lib/mockData";
+import { loadProfile } from "@/lib/profile";
+import { FileText, CheckCircle, Upload, ShieldAlert, Sparkles, FileOutput, UserCircle2 } from "lucide-react";
 import { CandidateProfile } from "@/lib/types";
-import { FileText, CheckCircle, Upload, ShieldAlert, Sparkles, FileOutput } from "lucide-react";
 
 export default function ResumePage() {
-  const [profile, setProfile] = useState<CandidateProfile>(demoProfile);
+  const router = useRouter();
+  const [profile, setProfile] = useState<CandidateProfile | null>(null);
+  const [profileChecked, setProfileChecked] = useState(false);
   const [dragging, setDragging] = useState(false);
   const [file, setFile] = useState<File | null>(null);
-  
+
   useEffect(() => {
-    const p = sessionStorage.getItem("candidateProfile");
-    if (p) {
-      try { setProfile(JSON.parse(p)); } catch {}
-    }
+    setProfile(loadProfile());
+    setProfileChecked(true);
   }, []);
 
   const handleDrop = (e: React.DragEvent) => {
@@ -23,10 +24,50 @@ export default function ResumePage() {
     if (e.dataTransfer.files[0]) setFile(e.dataTransfer.files[0]);
   };
 
-  const score = 68; // Mock ATS baseline score without a specific JD
+  // Dynamic ATS score from profile completeness
+  const score = (() => {
+    if (!profile) return 0;
+    let pts = 0;
+    if (profile.name?.trim())                    pts += 12;
+    if (profile.currentRole?.trim())             pts += 15;
+    if (Number(profile.experienceYears) > 0)     pts += 10;
+    if (Number(profile.currentSalary) > 0)       pts += 5;
+    if (profile.currentLocation?.trim())         pts += 8;
+    if (profile.skills?.length >= 3)             pts += 15;
+    if (profile.skills?.length >= 8)             pts += 10;
+    if (profile.frameworks?.length > 0)          pts += 8;
+    if (profile.cicdTools?.length > 0)           pts += 7;
+    if (profile.certifications?.length > 0)      pts += 5;
+    if (profile.resumeText?.trim())              pts += 5;
+    return Math.min(pts, 100);
+  })();
+  const scoreColor = score >= 80 ? "#10b981" : score >= 60 ? "#f59e0b" : "#f43f5e";
+  const scoreLabel = score >= 80 ? "Strong" : score >= 60 ? "Fair" : "Needs Work";
+
+  if (profileChecked && !profile) {
+    return (
+      <div className="flex min-h-screen bg-transparent">
+        <Navbar />
+        <main className="ml-64 flex-1 px-8 py-8 flex items-center justify-center">
+          <div className="text-center max-w-sm">
+            <div className="w-16 h-16 rounded-full bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center mx-auto mb-4">
+              <UserCircle2 className="w-8 h-8 text-indigo-400" />
+            </div>
+            <h2 className="text-white font-semibold text-xl mb-2">No profile found</h2>
+            <p className="text-slate-400 text-sm mb-6">
+              Set up your career profile first — your master resume data will appear here automatically.
+            </p>
+            <button onClick={() => router.push("/")} className="btn-primary text-sm px-6 py-2.5">
+              Set Up Profile
+            </button>
+          </div>
+        </main>
+      </div>
+    );
+  }
 
   return (
-    <div className="flex min-h-screen bg-[#0f172a]">
+    <div className="flex min-h-screen bg-transparent">
       <Navbar />
       <main className="ml-64 flex-1 px-8 py-8 max-w-6xl">
         <div className="mb-8">
@@ -37,7 +78,7 @@ export default function ResumePage() {
             Your <span className="gradient-text">Master Profile</span>
           </h1>
           <p className="text-slate-400 text-sm max-w-2xl">
-            This is your generic master profile. When you apply to a specific job inside the {" "}
+            This is your generic master profile. When you apply to a specific job inside the{" "}
             <strong className="text-white">Jobs Dashboard</strong>, our AI will generate a highly-targeted ATS resume based on this data.
           </p>
         </div>
@@ -49,23 +90,23 @@ export default function ResumePage() {
               <h2 className="text-base font-semibold text-white mb-4 flex items-center gap-2">
                 <FileText className="w-4 h-4 text-indigo-400" /> Extracted Profile Data
               </h2>
-              
+
               <div className="grid grid-cols-2 gap-x-6 gap-y-4 text-sm mb-6">
                 <div>
                   <p className="text-slate-500 mb-1">Name</p>
-                  <p className="font-medium text-white">{profile.name}</p>
+                  <p className="font-medium text-white">{profile?.name || "—"}</p>
                 </div>
                 <div>
                   <p className="text-slate-500 mb-1">Current Role</p>
-                  <p className="font-medium text-white">{profile.currentRole}</p>
+                  <p className="font-medium text-white">{profile?.currentRole || "—"}</p>
                 </div>
                 <div>
                   <p className="text-slate-500 mb-1">Experience</p>
-                  <p className="font-medium text-white">{profile.experienceYears} Years</p>
+                  <p className="font-medium text-white">{profile?.experienceYears ? `${profile.experienceYears} Years` : "—"}</p>
                 </div>
                 <div>
                   <p className="text-slate-500 mb-1">Location</p>
-                  <p className="font-medium text-white">{profile.currentLocation}</p>
+                  <p className="font-medium text-white">{profile?.currentLocation || "—"}</p>
                 </div>
               </div>
 
@@ -73,19 +114,25 @@ export default function ResumePage() {
                 <div>
                   <h3 className="text-sm font-medium text-slate-300 mb-2">Core Skills</h3>
                   <div className="flex flex-wrap gap-1.5">
-                    {profile.skills.map(s => <span key={s} className="tag bg-[#263348] border-[#334155] text-slate-200">{s}</span>)}
+                    {(profile?.skills ?? []).length > 0
+                      ? (profile?.skills ?? []).map(s => <span key={s} className="tag bg-[#263348] border-[#334155] text-slate-200">{s}</span>)
+                      : <span className="text-slate-500 text-sm">No skills added yet</span>}
                   </div>
                 </div>
                 <div>
                   <h3 className="text-sm font-medium text-slate-300 mb-2">Automation Frameworks</h3>
                   <div className="flex flex-wrap gap-1.5">
-                    {(profile.frameworks ?? []).map(s => <span key={s} className="tag bg-[#263348] border-[#334155] text-slate-200">{s}</span>)}
+                    {(profile?.frameworks ?? []).length > 0
+                      ? (profile?.frameworks ?? []).map(s => <span key={s} className="tag bg-[#263348] border-[#334155] text-slate-200">{s}</span>)
+                      : <span className="text-slate-500 text-sm">—</span>}
                   </div>
                 </div>
                 <div>
                   <h3 className="text-sm font-medium text-slate-300 mb-2">CI/CD & DevOps</h3>
                   <div className="flex flex-wrap gap-1.5">
-                    {(profile.cicdTools ?? []).map(s => <span key={s} className="tag bg-[#263348] border-[#334155] text-slate-200">{s}</span>)}
+                    {(profile?.cicdTools ?? []).length > 0
+                      ? (profile?.cicdTools ?? []).map(s => <span key={s} className="tag bg-[#263348] border-[#334155] text-slate-200">{s}</span>)
+                      : <span className="text-slate-500 text-sm">—</span>}
                   </div>
                 </div>
               </div>
@@ -113,19 +160,22 @@ export default function ResumePage() {
           <div className="space-y-6">
             <div className="card">
               <h2 className="text-sm font-semibold text-white mb-6 text-center">Baseline ATS Score</h2>
-              <div className="flex justify-center mb-6">
+              <div className="flex justify-center mb-3">
                 <div className="relative w-32 h-32 flex items-center justify-center">
                   <svg className="absolute w-full h-full -rotate-90">
                     <circle cx="64" cy="64" r="56" fill="none" stroke="#1e293b" strokeWidth="8" />
-                    <circle cx="64" cy="64" r="56" fill="none" stroke="#f59e0b" strokeWidth="8" strokeDasharray={56 * 2 * Math.PI} strokeDashoffset={(56 * 2 * Math.PI) * (1 - score / 100)} className="transition-all duration-1000 ease-out" />
+                    <circle cx="64" cy="64" r="56" fill="none" stroke={scoreColor} strokeWidth="8" strokeDasharray={56 * 2 * Math.PI} strokeDashoffset={(56 * 2 * Math.PI) * (1 - score / 100)} className="transition-all duration-1000 ease-out" />
                   </svg>
-                  <span className="text-3xl font-bold text-amber-500">{score}</span>
+                  <div className="text-center">
+                    <span className="text-3xl font-bold" style={{ color: scoreColor }}>{score}</span>
+                    <p className="text-[10px] font-semibold mt-0.5" style={{ color: scoreColor }}>{scoreLabel}</p>
+                  </div>
                 </div>
               </div>
               <div className="space-y-3">
                 <div className="flex items-start gap-2 text-xs">
-                  <ShieldAlert className="w-4 h-4 text-amber-500 shrink-0" />
-                  <p className="text-slate-300">Your base resume scores <strong className="text-white">{score}%</strong> against average QA roles.</p>
+                  <ShieldAlert className="w-4 h-4 shrink-0" style={{ color: scoreColor }} />
+                  <p className="text-slate-300">Your base resume scores <strong className="text-white">{score}%</strong> against average roles.</p>
                 </div>
                 <div className="flex items-start gap-2 text-xs">
                   <CheckCircle className="w-4 h-4 text-emerald-500 shrink-0" />
@@ -133,7 +183,7 @@ export default function ResumePage() {
                 </div>
               </div>
             </div>
-            
+
             <div className="card">
               <h2 className="text-sm font-semibold text-white mb-4">Update Source Document</h2>
               <div

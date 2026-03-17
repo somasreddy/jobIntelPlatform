@@ -1,6 +1,8 @@
 "use client";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useState, useEffect } from "react";
+import { loadProfile } from "@/lib/profile";
 import {
   LayoutDashboard,
   Briefcase,
@@ -9,19 +11,31 @@ import {
   CheckSquare,
   BarChart2,
   Zap,
+  Linkedin,
 } from "lucide-react";
 
 const navItems = [
-  { href: "/",              icon: LayoutDashboard, label: "Profile"       },
-  { href: "/jobs",          icon: Briefcase,       label: "Find Jobs"     },
-  { href: "/resume",        icon: FileText,        label: "Resume & ATS"  },
-  { href: "/applications",  icon: CheckSquare,     label: "Tracker"       },
-  { href: "/intelligence",  icon: TrendingUp,      label: "Intelligence"  },
-  { href: "/insights",      icon: BarChart2,       label: "Insights"      },
+  { href: "/",              icon: LayoutDashboard, label: "Profile"          },
+  { href: "/jobs",          icon: Briefcase,       label: "Find Jobs"        },
+  { href: "/resume",        icon: FileText,        label: "Resume & ATS"     },
+  { href: "/applications",  icon: CheckSquare,     label: "Tracker"          },
+  { href: "/intelligence",  icon: TrendingUp,      label: "Intelligence"     },
+  { href: "/insights",      icon: BarChart2,       label: "Insights"         },
+  { href: "/linkedin",      icon: Linkedin,        label: "LinkedIn Enhancer"},
 ];
 
 export default function Navbar() {
   const path = usePathname();
+  const [userName, setUserName] = useState<string>("");
+  useEffect(() => {
+    const p = loadProfile();
+    if (p?.name) setUserName(p.name);
+  }, []);
+
+  const initials = userName
+    ? userName.trim().split(/\s+/).map((w) => w[0]).slice(0, 2).join("").toUpperCase()
+    : "";
+
   return (
     <aside className="fixed left-0 top-0 h-screen w-64 flex flex-col bg-[#1e293b] border-r border-[#334155] z-50">
       {/* Logo */}
@@ -63,10 +77,22 @@ export default function Navbar() {
 
       {/* Footer */}
       <div className="px-4 pb-4 pt-2 border-t border-[#334155]">
-        <div className="rounded-xl bg-linear-to-br from-indigo-900/60 to-cyan-900/40 border border-indigo-500/20 p-3">
-          <p className="text-xs font-semibold text-indigo-300">AI-Powered Platform</p>
-          <p className="text-[11px] text-slate-400 mt-0.5">Job Discovery · ATS · Intelligence</p>
-        </div>
+        {userName ? (
+          <div className="flex items-center gap-3 rounded-xl bg-[#263348] border border-[#334155] p-3">
+            <div className="w-8 h-8 rounded-full bg-linear-to-br from-indigo-500 to-cyan-400 flex items-center justify-center shrink-0 text-white text-xs font-bold shadow-md">
+              {initials}
+            </div>
+            <div className="min-w-0">
+              <p className="text-xs font-semibold text-white truncate">{userName}</p>
+              <p className="text-[10px] text-slate-400">Career Profile Active</p>
+            </div>
+          </div>
+        ) : (
+          <div className="rounded-xl bg-linear-to-br from-indigo-900/60 to-cyan-900/40 border border-indigo-500/20 p-3">
+            <p className="text-xs font-semibold text-indigo-300">AI-Powered Platform</p>
+            <p className="text-[11px] text-slate-400 mt-0.5">Job Discovery · ATS · Intelligence</p>
+          </div>
+        )}
       </div>
     </aside>
   );

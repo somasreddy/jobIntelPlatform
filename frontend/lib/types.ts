@@ -6,6 +6,7 @@ export interface CandidateProfile {
   currentSalary: number;
   currency: string;
   experienceYears: number;
+  workMode: string;
   currentLocation: string;
   preferredLocations: string[];
   skills: string[];

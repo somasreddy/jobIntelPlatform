@@ -1,20 +1,53 @@
 "use client";
 import Navbar from "@/components/Navbar";
-import { BarChart3, TrendingUp, DollarSign, MapPin, Briefcase } from "lucide-react";
+import { BarChart3, TrendingUp, DollarSign, MapPin, Briefcase, UserCircle2 } from "lucide-react";
 import { useState, useEffect, useCallback } from "react";
+import { useRouter } from "next/navigation";
+import { loadProfile } from "@/lib/profile";
+import { CandidateProfile } from "@/lib/types";
 
 type SalaryResult = {
   min_salary: number; max_salary: number; currency: string;
   market_demand: string; yoy_growth_pct: number;
 };
 
+function inferMarketLocation(profile: CandidateProfile): string {
+  const loc = (profile.currentLocation || "").toLowerCase();
+  const preferred = (profile.preferredLocations ?? []).join(" ").toLowerCase();
+  const combined = `${loc} ${preferred}`;
+  if (combined.includes("india") || combined.includes("bangalore") || combined.includes("hyderabad") || combined.includes("mumbai") || combined.includes("chennai") || combined.includes("pune"))
+    return "India (Tier 1)";
+  if (combined.includes("uk") || combined.includes("united kingdom") || combined.includes("london"))
+    return "United Kingdom";
+  if (combined.includes("eu") || combined.includes("europe") || combined.includes("germany") || combined.includes("france"))
+    return "EU Remote";
+  if (combined.includes("remote") && !combined.includes("india"))
+    return "United States (Remote)";
+  return "United States (Remote)";
+}
+
 export default function InsightsPage() {
-  const [role, setRole] = useState("QA Automation Engineer");
-  const [exp, setExp] = useState(8);
+  const router = useRouter();
+  const [profile, setProfile] = useState<CandidateProfile | null>(null);
+  const [profileChecked, setProfileChecked] = useState(false);
+  const [role, setRole] = useState("");
+  const [exp, setExp] = useState(0);
   const [loc, setLoc] = useState("United States (Remote)");
   const [salaryData, setSalaryData] = useState<SalaryResult | null>(null);
 
+  useEffect(() => {
+    const prof = loadProfile();
+    setProfile(prof);
+    setProfileChecked(true);
+    if (prof) {
+      setRole(prof.currentRole || "");
+      setExp(typeof prof.experienceYears === "number" ? prof.experienceYears : parseInt(String(prof.experienceYears)) || 0);
+      setLoc(inferMarketLocation(prof));
+    }
+  }, []);
+
   const fetchSalary = useCallback(async () => {
+    if (!role) return;
     const apiUrl = process.env.NEXT_PUBLIC_API_URL;
     if (!apiUrl) return;
     try {
@@ -29,8 +62,30 @@ export default function InsightsPage() {
 
   useEffect(() => { fetchSalary(); }, [fetchSalary]);
 
+  if (profileChecked && !profile) {
+    return (
+      <div className="flex min-h-screen bg-transparent">
+        <Navbar />
+        <main className="ml-64 flex-1 px-8 py-8 flex items-center justify-center">
+          <div className="text-center max-w-sm">
+            <div className="w-16 h-16 rounded-full bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center mx-auto mb-4">
+              <UserCircle2 className="w-8 h-8 text-indigo-400" />
+            </div>
+            <h2 className="text-white font-semibold text-xl mb-2">No profile found</h2>
+            <p className="text-slate-400 text-sm mb-6">
+              Set up your career profile to get personalised salary benchmarks and market insights.
+            </p>
+            <button onClick={() => router.push("/")} className="btn-primary text-sm px-6 py-2.5">
+              Set Up Profile
+            </button>
+          </div>
+        </main>
+      </div>
+    );
+  }
+
   return (
-    <div className="flex min-h-screen bg-[#0f172a]">
+    <div className="flex min-h-screen bg-transparent">
       <Navbar />
       <main className="ml-64 flex-1 px-8 py-8 max-w-5xl">
         <div className="mb-8">
@@ -51,25 +106,29 @@ export default function InsightsPage() {
             <h2 className="text-base font-semibold text-white border-b border-[#334155] pb-3 mb-2">
               Calculation Parameters
             </h2>
-            
+
             <div>
               <label className="text-xs font-medium text-slate-400 mb-1.5 flex items-center gap-1">
                 <Briefcase className="w-3.5 h-3.5" /> Role Title
               </label>
-              <select className="input text-sm" value={role} onChange={e => setRole(e.target.value)}>
-                <option>QA Automation Engineer</option>
-                <option>Senior SDET</option>
-                <option>QA Lead</option>
-                <option>Director of Quality</option>
-              </select>
+              <input
+                className="input text-sm"
+                placeholder="e.g. Software Engineer"
+                value={role}
+                onChange={e => setRole(e.target.value)}
+              />
             </div>
-            
+
             <div>
               <label className="text-xs font-medium text-slate-400 mb-1.5 flex items-center gap-1">
                 <TrendingUp className="w-3.5 h-3.5" /> Years of Experience
               </label>
               <div className="flex items-center gap-3">
-                <input type="range" min="0" max="15" value={exp} onChange={e => setExp(parseInt(e.target.value))} className="flex-1 accent-indigo-500" />
+                <input
+                  type="range" min="0" max="20" value={exp}
+                  onChange={e => setExp(parseInt(e.target.value))}
+                  className="flex-1 accent-indigo-500"
+                />
                 <span className="w-8 text-right text-sm font-medium text-white">{exp}</span>
               </div>
             </div>
@@ -91,14 +150,16 @@ export default function InsightsPage() {
           <div className="lg:col-span-2 space-y-6">
             <div className="card bg-linear-to-br from-[#1e293b] to-[#172033] relative overflow-hidden">
               <div className="absolute -right-10 -top-10 w-40 h-40 bg-emerald-500/10 blur-3xl rounded-full" />
-              
+
               <h2 className="text-lg font-semibold text-white mb-6 flex items-center gap-2">
                 <DollarSign className="w-5 h-5 text-emerald-400" /> Estimated Salary Range
               </h2>
 
-              {(() => {
-                const isInr = salaryData ? salaryData.currency === "INR" : loc.includes("India");
-                const isGbp = salaryData ? salaryData.currency === "GBP" : loc.includes("UK");
+              {!role ? (
+                <p className="text-slate-500 text-sm text-center py-8">Enter a role to see salary estimates.</p>
+              ) : (() => {
+                const isInr = salaryData ? salaryData.currency === "INR" : (profile?.currency === "INR" || loc.includes("India"));
+                const isGbp = salaryData ? salaryData.currency === "GBP" : (profile?.currency === "GBP" || loc.includes("UK"));
                 const fmt = (n: number) =>
                   isInr ? `₹${(n / 100000).toFixed(1)}L` : isGbp ? `£${Math.round(n / 1000)}k` : `$${Math.round(n / 1000)}k`;
                 const minSal = salaryData ? salaryData.min_salary : (loc.includes("US") ? (120 + exp * 3) * 1000 : loc.includes("UK") ? (60 + exp * 4) * 1000 : (40 + exp * 2) * 1000);
@@ -145,10 +206,10 @@ export default function InsightsPage() {
               <div className="card">
                 <h3 className="text-sm font-semibold text-white mb-4">Top Paying Technologies</h3>
                 <div className="space-y-3">
-                  {['Playwright', 'Kubernetes', 'K6', 'Go'].map((t, i) => (
+                  {["Playwright", "Kubernetes", "K6", "Go"].map((t, i) => (
                     <div key={t} className="flex items-center justify-between text-sm">
                       <span className="text-slate-300">{t}</span>
-                      <span className="text-emerald-400 font-medium">+${15 - i*2}k</span>
+                      <span className="text-emerald-400 font-medium">+${15 - i * 2}k</span>
                     </div>
                   ))}
                 </div>

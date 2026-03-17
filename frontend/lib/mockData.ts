@@ -8,18 +8,19 @@ import {
 
 // ─── Demo Candidate Profile ────────────────────────────────────────────────────
 export const demoProfile: CandidateProfile = {
-  name: "Somas V",
-  currentRole: "Senior QA Engineer",
-  currentSalary: 95000,
+  name: "",
+  currentRole: "",
+  currentSalary: 0,
   currency: "USD",
-  experienceYears: 8,
-  currentLocation: "Hyderabad, India",
-  preferredLocations: ["Remote", "Hyderabad", "Bangalore", "London"],
-  skills: ["Selenium", "Playwright", "REST API Testing", "Postman", "JIRA"],
-  frameworks: ["TestNG", "JUnit", "Pytest", "Cucumber BDD", "Cypress"],
-  languages: ["Java", "Python", "JavaScript", "SQL"],
-  cicdTools: ["Jenkins", "GitHub Actions", "Docker", "Maven"],
-  certifications: ["ISTQB Foundation", "AWS Cloud Practitioner"],
+  experienceYears: 0,
+  workMode: "Any",
+  currentLocation: "",
+  preferredLocations: [],
+  skills: [],
+  frameworks: [],
+  languages: [],
+  cicdTools: [],
+  certifications: [],
 };
 
 // ─── Mock Jobs ─────────────────────────────────────────────────────────────────
@@ -199,6 +200,26 @@ export const mockJobs: Job[] = [
     levelUp: true,
     recruiterName: "Deepak Nair",
     recruiterLinkedIn: "https://linkedin.com/in/deepaknair",
+  },
+  {
+    id: "j009",
+    title: "QA Automation Engineer",
+    organization: "TechStart Solutions",
+    location: "Remote (India/Asia)",
+    workMode: "Remote",
+    salaryMin: 1200000,
+    salaryMax: 1800000,
+    currency: "INR",
+    experienceRequired: 3,
+    technologies: ["Selenium", "Pytest", "Jenkins", "Postman", "Git"],
+    description:
+      "Growing product startup looking for a QA Automation Engineer to own test quality across our web and mobile platforms. You'll build automation from scratch, integrate with CI/CD, and work directly with developers in a fast-paced agile environment. Ideal for someone who likes full ownership.",
+    careerPageLink: "https://techstartsolutions.com/careers",
+    applicationLink: "https://techstartsolutions.com/careers",
+    verificationStatus: "UNVERIFIED",
+    postedDate: "2026-03-16",
+    matchScore: 70,
+    levelUp: false,
   },
 ];
 

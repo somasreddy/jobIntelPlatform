@@ -48,7 +48,7 @@ export default function TrackerPage() {
   };
 
   return (
-    <div className="flex min-h-screen bg-[#0f172a]">
+    <div className="flex min-h-screen bg-transparent">
       <Navbar />
       <main className="ml-64 flex-1 px-8 py-8 flex flex-col h-screen overflow-hidden">
         <div className="mb-6 shrink-0">
