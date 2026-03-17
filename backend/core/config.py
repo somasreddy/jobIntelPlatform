@@ -5,7 +5,7 @@ from pydantic_settings import BaseSettings
 class Settings(BaseSettings):
     PROJECT_NAME: str = "AI Job Intelligence API"
     CORS_ORIGINS: Union[List[str], str] = ["http://localhost:3000", "http://localhost:3001"]
-    
+
     @field_validator("CORS_ORIGINS", mode="before")
     @classmethod
     def assemble_cors_origins(cls, v: Union[str, List[str]]) -> Union[List[str], str]:
@@ -18,29 +18,34 @@ class Settings(BaseSettings):
 
     # Database
     DATABASE_URL: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/job_platform"
-    
+
     # Redis / Celery
     REDIS_URL: str = "redis://localhost:6379/0"
-    
+
     # LLM API
     LLM_PROVIDER: str = "openai"  # "anthropic", "openai", "google", "groq", or "perplexity"
     ANTHROPIC_API_KEY: str = ""
     ANTHROPIC_MODEL: str = "claude-haiku-4-5-20251001"
-    
+
     OPENAI_API_KEY: str = ""
     OPENAI_MODEL: str = "gpt-4o-mini"
-    
+
     GOOGLE_API_KEY: str = ""
     GOOGLE_MODEL: str = "gemini-1.5-pro"
-    
+
     GROQ_API_KEY: str = ""
     GROQ_MODEL: str = "llama-3.3-70b-versatile"
-    
+
     PERPLEXITY_API_KEY: str = ""
     PERPLEXITY_MODEL: str = "sonar-reasoning"
-    
+
     CONSOLIDATED_MODE: bool = True
-    
+
+    # Job Discovery API Keys
+    ADZUNA_APP_ID: str = ""   # https://developer.adzuna.com/
+    ADZUNA_APP_KEY: str = ""
+    JSEARCH_API_KEY: str = "" # https://rapidapi.com/letscrape-6bRBa3QguO5/api/jsearch (aggregates LinkedIn/Indeed/Glassdoor/Naukri)
+
     class Config:
         env_file = ".env"
         case_sensitive = True

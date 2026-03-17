@@ -5,8 +5,10 @@ import Navbar from "@/components/Navbar";
 import { saveProfile, loadProfile } from "@/lib/profile";
 import {
   User, Briefcase, DollarSign, MapPin, Clock,
-  Plus, X, Upload, ChevronRight, Sparkles, CheckCircle
+  Plus, X, Upload, ChevronRight, Sparkles, CheckCircle,
+  TrendingUp, Award, Zap
 } from "lucide-react";
+import LocationAutocomplete from "@/components/LocationAutocomplete";
 
 const SKILL_CATEGORIES: Record<string, string[]> = {
   "Frontend": [
@@ -109,6 +111,38 @@ function calcCompleteness(form: {
   if (form.resumeFile || form.resumeText.trim()) pts += 12; // mandatory — worth 12 pts
   if (form.resumeText.trim().length > 200)      pts += 10; // rich resume text
   return Math.min(pts, 100);
+}
+
+function calcCareerScore(form: {
+  name: string; currentRole: string; currentSalary: string;
+  experienceYears: string; currentLocation: string;
+  skills: string[]; frameworks: string[]; languages: string[]; cicdTools: string[];
+  certifications: string[]; preferredLocations: string[];
+  resumeFile: File | null; resumeText: string;
+}): { total: number; breakdown: { label: string; score: number; max: number; color: string }[] } {
+  const skillsTotal = form.skills.length + form.frameworks.length + form.languages.length + form.cicdTools.length;
+  const skillsScore = Math.min(35, Math.round((skillsTotal / 20) * 35));
+  const expYears = Number(form.experienceYears);
+  const expScore = expYears >= 8 ? 20 : expYears >= 4 ? 16 : expYears >= 2 ? 12 : expYears >= 1 ? 8 : 0;
+  const profileScore =
+    (form.name.trim() ? 4 : 0) +
+    (form.currentRole.trim() ? 4 : 0) +
+    (form.currentLocation.trim() ? 4 : 0) +
+    (form.preferredLocations.length > 0 ? 3 : 0);
+  const resumeScore =
+    (form.resumeFile ? 8 : 0) +
+    (form.resumeText.trim().length > 500 ? 12 : form.resumeText.trim().length > 100 ? 8 : form.resumeText.trim() ? 4 : 0) +
+    (form.certifications.length > 0 ? 5 : 0);
+  const total = Math.min(100, skillsScore + expScore + profileScore + resumeScore);
+  return {
+    total,
+    breakdown: [
+      { label: "Skills & Tech", score: skillsScore, max: 35, color: "#6366f1" },
+      { label: "Experience", score: expScore, max: 20, color: "#06b6d4" },
+      { label: "Profile Info", score: profileScore, max: 15, color: "#a78bfa" },
+      { label: "Resume & Certs", score: resumeScore, max: 30, color: "#10b981" },
+    ],
+  };
 }
 
 const DEFAULT_FORM = {
@@ -288,6 +322,79 @@ export default function ProfilePage() {
                 </div>
               );
             })()}
+          {/* Career Score Widget */}
+          {(() => {
+            const cs = calcCareerScore(form);
+            const level = cs.total >= 80 ? "Expert" : cs.total >= 60 ? "Advanced" : cs.total >= 35 ? "Intermediate" : "Beginner";
+            const levelColor = cs.total >= 80 ? "text-emerald-400" : cs.total >= 60 ? "text-indigo-400" : cs.total >= 35 ? "text-amber-400" : "text-rose-400";
+            const ringColor = cs.total >= 80 ? "#10b981" : cs.total >= 60 ? "#6366f1" : cs.total >= 35 ? "#f59e0b" : "#f43f5e";
+            const circ = 2 * Math.PI * 28;
+            const fill = (cs.total / 100) * circ;
+            return (
+              <div className="card py-4 px-4 mb-2">
+                <div className="flex items-center gap-5">
+                  {/* Score Ring */}
+                  <div className="relative shrink-0">
+                    <svg width="72" height="72" className="-rotate-90">
+                      <circle cx="36" cy="36" r="28" fill="none" stroke="rgba(30,41,59,0.8)" strokeWidth="6" />
+                      <circle cx="36" cy="36" r="28" fill="none"
+                        stroke={ringColor} strokeWidth="6"
+                        strokeDasharray={circ}
+                        strokeDashoffset={circ - fill}
+                        strokeLinecap="round"
+                        style={{ transition: "stroke-dashoffset 1s ease-out" }}
+                      />
+                    </svg>
+                    <div className="absolute inset-0 flex flex-col items-center justify-center">
+                      <span className="text-sm font-bold" style={{ color: ringColor }}>{cs.total}</span>
+                      <span className="text-[9px] text-slate-500 leading-none">/ 100</span>
+                    </div>
+                  </div>
+
+                  {/* Score Details */}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-2">
+                      <Award className="w-4 h-4 text-indigo-400" />
+                      <span className="text-sm font-semibold text-white">Career Score</span>
+                      <span className={`text-xs font-bold px-2 py-0.5 rounded-full bg-slate-800 border border-slate-700 ${levelColor}`}>
+                        {level}
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-2 gap-x-3 gap-y-1">
+                      {cs.breakdown.map(({ label, score, max, color }) => (
+                        <div key={label}>
+                          <div className="flex justify-between text-[10px] mb-0.5">
+                            <span className="text-slate-500">{label}</span>
+                            <span style={{ color }}>{score}/{max}</span>
+                          </div>
+                          <div className="h-1 bg-slate-700/60 rounded-full overflow-hidden">
+                            <div className="h-full rounded-full transition-all duration-700"
+                              style={{ width: `${(score / max) * 100}%`, background: color }} />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Quick tips */}
+                  {cs.total < 80 && (
+                    <div className="hidden lg:flex flex-col gap-1 shrink-0 max-w-[140px]">
+                      <div className="flex items-center gap-1 text-[10px] text-indigo-400 font-semibold mb-1">
+                        <Zap className="w-3 h-3" /> Boost tips
+                      </div>
+                      {cs.breakdown.filter(b => b.score < b.max).slice(0, 2).map(b => (
+                        <div key={b.label} className="flex items-start gap-1 text-[10px] text-slate-400">
+                          <TrendingUp className="w-3 h-3 mt-0.5 shrink-0 text-violet-400" />
+                          <span>Add more {b.label.toLowerCase()}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          })()}
+
           <form onSubmit={handleSubmit} className="space-y-6">
             {/* Section 1: Personal Info */}
             <div className="card">
@@ -385,24 +492,27 @@ export default function ProfilePage() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-medium text-slate-400 mb-1.5">Current Location</label>
-                  <input
-                    className="input"
-                    placeholder="e.g. New York, USA"
+                  <LocationAutocomplete
                     value={form.currentLocation}
-                    onChange={(e) => setForm((p) => ({ ...p, currentLocation: e.target.value }))}
+                    onChange={(v) => setForm((p) => ({ ...p, currentLocation: v }))}
+                    placeholder="e.g. Bangalore, India"
                   />
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-slate-400 mb-1.5">Preferred Job Locations</label>
                   <div className="flex gap-2 mb-2">
-                    <input
-                      className="input"
-                      placeholder="e.g. Remote, New York, London"
+                    <LocationAutocomplete
                       value={form.preferredLocation}
-                      onChange={(e) => setForm((p) => ({ ...p, preferredLocation: e.target.value }))}
-                      onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addLocation(); } }}
+                      onChange={(v) => setForm((p) => ({ ...p, preferredLocation: v }))}
+                      onSelect={(v) => {
+                        if (v && !form.preferredLocations.includes(v)) {
+                          setForm((p) => ({ ...p, preferredLocations: [...p.preferredLocations, v], preferredLocation: "" }));
+                        }
+                      }}
+                      placeholder="Type city and select or press +"
+                      className="flex-1"
                     />
-                    <button type="button" onClick={addLocation} className="btn-secondary px-3">
+                    <button type="button" onClick={addLocation} className="btn-secondary px-3 shrink-0">
                       <Plus className="w-4 h-4" />
                     </button>
                   </div>

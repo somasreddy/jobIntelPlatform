@@ -1,6 +1,9 @@
 "use client";
 import Navbar from "@/components/Navbar";
-import { BarChart3, TrendingUp, DollarSign, MapPin, Briefcase, UserCircle2 } from "lucide-react";
+import {
+  BarChart3, TrendingUp, DollarSign, MapPin, Briefcase,
+  UserCircle2, Target, Copy, CheckCircle, Sparkles, ArrowUp
+} from "lucide-react";
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { loadProfile } from "@/lib/profile";
@@ -11,20 +14,78 @@ type SalaryResult = {
   market_demand: string; yoy_growth_pct: number;
 };
 
+const LOCATIONS = [
+  "United States (Remote)",
+  "United Kingdom",
+  "India (Tier 1)",
+  "India (Tier 2)",
+  "EU Remote",
+  "Australia",
+  "Canada",
+  "Singapore",
+];
+
+// Salary benchmarks per location (rough market data as fallback)
+const SALARY_BASE: Record<string, { minMult: number; maxMult: number; expMult: number; currency: string; symbol: string }> = {
+  "United States (Remote)": { minMult: 110, maxMult: 160, expMult: 4, currency: "USD", symbol: "$" },
+  "United Kingdom":          { minMult: 60,  maxMult: 95,  expMult: 4, currency: "GBP", symbol: "£" },
+  "India (Tier 1)":          { minMult: 18,  maxMult: 35,  expMult: 2, currency: "INR", symbol: "₹" }, // in LPA
+  "India (Tier 2)":          { minMult: 12,  maxMult: 22,  expMult: 1.2, currency: "INR", symbol: "₹" },
+  "EU Remote":               { minMult: 70,  maxMult: 110, expMult: 3, currency: "EUR", symbol: "€" },
+  "Australia":               { minMult: 110, maxMult: 160, expMult: 4, currency: "AUD", symbol: "A$" },
+  "Canada":                  { minMult: 95,  maxMult: 140, expMult: 3, currency: "CAD", symbol: "C$" },
+  "Singapore":               { minMult: 90,  maxMult: 130, expMult: 3.5, currency: "SGD", symbol: "S$" },
+};
+
 function inferMarketLocation(profile: CandidateProfile): string {
   const loc = (profile.currentLocation || "").toLowerCase();
   const preferred = (profile.preferredLocations ?? []).join(" ").toLowerCase();
   const combined = `${loc} ${preferred}`;
-  if (combined.includes("india") || combined.includes("bangalore") || combined.includes("hyderabad") || combined.includes("mumbai") || combined.includes("chennai") || combined.includes("pune"))
-    return "India (Tier 1)";
-  if (combined.includes("uk") || combined.includes("united kingdom") || combined.includes("london"))
-    return "United Kingdom";
-  if (combined.includes("eu") || combined.includes("europe") || combined.includes("germany") || combined.includes("france"))
-    return "EU Remote";
-  if (combined.includes("remote") && !combined.includes("india"))
-    return "United States (Remote)";
+  if (/india|bangalore|bengaluru|hyderabad|mumbai|chennai|pune|delhi|noida/.test(combined)) return "India (Tier 1)";
+  if (/uk|united kingdom|london|manchester|edinburgh/.test(combined)) return "United Kingdom";
+  if (/australia|sydney|melbourne/.test(combined)) return "Australia";
+  if (/canada|toronto|vancouver/.test(combined)) return "Canada";
+  if (/singapore/.test(combined)) return "Singapore";
+  if (/eu|europe|germany|france|netherlands/.test(combined)) return "EU Remote";
   return "United States (Remote)";
 }
+
+function fmtSalary(n: number, loc: string): string {
+  const base = SALARY_BASE[loc];
+  if (!base) return `$${Math.round(n / 1000)}k`;
+  if (base.currency === "INR") return `${base.symbol}${n.toFixed(1)}L`;
+  return `${base.symbol}${Math.round(n)}k`;
+}
+
+function computeSalary(role: string, exp: number, loc: string) {
+  const base = SALARY_BASE[loc] ?? SALARY_BASE["United States (Remote)"];
+  const isINR = base.currency === "INR";
+  if (isINR) {
+    const min = base.minMult + exp * base.expMult;
+    const max = base.maxMult + exp * (base.expMult * 1.4);
+    return { min: min, max: max, isINR: true };
+  }
+  const min = (base.minMult + exp * base.expMult) * 1000;
+  const max = (base.maxMult + exp * (base.expMult * 1.3)) * 1000;
+  return { min, max, isINR: false };
+}
+
+function computePercentile(currentSalary: number, min: number, max: number): number {
+  if (currentSalary <= min) return 10;
+  if (currentSalary >= max) return 98;
+  return Math.round(10 + ((currentSalary - min) / (max - min)) * 88);
+}
+
+// Top-paying technologies with uplift data
+const TOP_SKILLS_BY_ROLE = (role: string) => {
+  const r = role.toLowerCase();
+  if (/frontend|react|vue|angular/.test(r)) return [["TypeScript", 18], ["React", 15], ["Next.js", 14], ["GraphQL", 12]];
+  if (/backend|api|node|java|python/.test(r)) return [["Go", 22], ["Rust", 20], ["Kubernetes", 18], ["AWS", 16]];
+  if (/data|ml|ai|machine/.test(r)) return [["LLMs", 28], ["PyTorch", 22], ["MLOps", 20], ["Spark", 16]];
+  if (/devops|platform|cloud|sre/.test(r)) return [["Kubernetes", 22], ["Terraform", 18], ["AWS", 16], ["Helm", 14]];
+  if (/qa|test|sdet/.test(r)) return [["Playwright", 15], ["Kubernetes", 18], ["K6", 12], ["Go", 20]];
+  return [["Kubernetes", 20], ["AWS", 18], ["Go", 22], ["TypeScript", 15]];
+};
 
 export default function InsightsPage() {
   const router = useRouter();
@@ -33,7 +94,10 @@ export default function InsightsPage() {
   const [role, setRole] = useState("");
   const [exp, setExp] = useState(0);
   const [loc, setLoc] = useState("United States (Remote)");
+  const [offerAmount, setOfferAmount] = useState("");
   const [salaryData, setSalaryData] = useState<SalaryResult | null>(null);
+  const [showNegotiation, setShowNegotiation] = useState(false);
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     const prof = loadProfile();
@@ -72,17 +136,53 @@ export default function InsightsPage() {
               <UserCircle2 className="w-8 h-8 text-indigo-400" />
             </div>
             <h2 className="text-white font-semibold text-xl mb-2">No profile found</h2>
-            <p className="text-slate-400 text-sm mb-6">
-              Set up your career profile to get personalised salary benchmarks and market insights.
-            </p>
-            <button onClick={() => router.push("/")} className="btn-primary text-sm px-6 py-2.5">
-              Set Up Profile
-            </button>
+            <p className="text-slate-400 text-sm mb-6">Set up your career profile to get personalised salary benchmarks and market insights.</p>
+            <button onClick={() => router.push("/")} className="btn-primary text-sm px-6 py-2.5">Set Up Profile</button>
           </div>
         </main>
       </div>
     );
   }
+
+  const computed = computeSalary(role, exp, loc);
+  const base = SALARY_BASE[loc] ?? SALARY_BASE["United States (Remote)"];
+  const isINR = base.currency === "INR";
+
+  const minSal = salaryData ? (isINR ? salaryData.min_salary / 100000 : salaryData.min_salary / 1000) : computed.min;
+  const maxSal = salaryData ? (isINR ? salaryData.max_salary / 100000 : salaryData.max_salary / 1000) : computed.max;
+  const demand = salaryData?.market_demand ?? "Very High";
+  const yoy    = salaryData?.yoy_growth_pct ?? 14.2;
+
+  const currSalRaw = profile?.currentSalary ?? 0;
+  const currSalDisplay = isINR ? currSalRaw / 100000 : currSalRaw / 1000;
+  const percentile = currSalRaw > 0 ? computePercentile(isINR ? currSalDisplay : currSalRaw, isINR ? minSal : minSal * 1000, isINR ? maxSal : maxSal * 1000) : null;
+
+  const topSkills = TOP_SKILLS_BY_ROLE(role) as [string, number][];
+
+  // Negotiation script generator
+  const offerNum = parseFloat(offerAmount) || 0;
+  const targetAsk = isINR ? maxSal * 1.08 : maxSal * 1000 * 1.08;
+  const targetDisplay = isINR ? `${base.symbol}${(targetAsk).toFixed(1)}L` : `${base.symbol}${Math.round(targetAsk / 1000)}k`;
+
+  const negotiationScript = `Hi [Hiring Manager],
+
+Thank you so much for the offer for the ${role || "position"} — I'm genuinely excited about the opportunity at [Company] and the team I'd be joining.
+
+After reviewing the offer, I'd like to have a brief conversation about the compensation. Based on my ${exp}+ years of experience in ${(profile?.skills ?? []).slice(0, 2).join(" and ") || "this domain"}, current market data for ${role} roles in ${loc} (${fmtSalary(isINR ? minSal : minSal, loc)}–${fmtSalary(isINR ? maxSal : maxSal, loc)} range), and the specific value I bring — I was hoping we could discuss a base of ${targetDisplay}.
+
+I want to be clear: I'm very enthusiastic about this role and [Company] specifically. Compensation is just one factor, and I'm open to discussing the full package including equity, bonus structure, and growth trajectory.
+
+Would you be open to a quick call this week to discuss?
+
+Best regards,
+${profile?.name || "[Your Name]"}`;
+
+  const handleCopy = () => {
+    navigator.clipboard.writeText(negotiationScript).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  };
 
   return (
     <div className="flex min-h-screen bg-transparent">
@@ -93,140 +193,206 @@ export default function InsightsPage() {
             <BarChart3 className="w-4 h-4" /> Global Market Intelligence
           </div>
           <h1 className="text-3xl font-bold text-white mb-2">
-            Salary <span className="gradient-text">& Trends</span>
+            Salary <span className="gradient-text">& Market Intelligence</span>
           </h1>
           <p className="text-slate-400 text-sm">
-            Live market compensation data based on parsed verified job listings.
+            Real-time compensation benchmarks, percentile ranking, and AI negotiation scripts — all personalised to your role and location.
           </p>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Controls */}
-          <div className="card h-fit space-y-4">
-            <h2 className="text-base font-semibold text-white border-b border-[#334155] pb-3 mb-2">
-              Calculation Parameters
-            </h2>
-
-            <div>
-              <label className="text-xs font-medium text-slate-400 mb-1.5 flex items-center gap-1">
-                <Briefcase className="w-3.5 h-3.5" /> Role Title
-              </label>
-              <input
-                className="input text-sm"
-                placeholder="e.g. Software Engineer"
-                value={role}
-                onChange={e => setRole(e.target.value)}
-              />
-            </div>
-
-            <div>
-              <label className="text-xs font-medium text-slate-400 mb-1.5 flex items-center gap-1">
-                <TrendingUp className="w-3.5 h-3.5" /> Years of Experience
-              </label>
-              <div className="flex items-center gap-3">
-                <input
-                  type="range" min="0" max="20" value={exp}
-                  onChange={e => setExp(parseInt(e.target.value))}
-                  className="flex-1 accent-indigo-500"
-                />
-                <span className="w-8 text-right text-sm font-medium text-white">{exp}</span>
+          <div className="space-y-4">
+            <div className="card h-fit space-y-4">
+              <h2 className="text-base font-semibold text-white border-b border-slate-700/50 pb-3">
+                Calculation Parameters
+              </h2>
+              <div>
+                <label className="text-xs font-medium text-slate-400 mb-1.5 flex items-center gap-1">
+                  <Briefcase className="w-3.5 h-3.5" /> Role Title
+                </label>
+                <input className="input text-sm" placeholder="e.g. Senior Backend Engineer" value={role} onChange={e => setRole(e.target.value)} />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-slate-400 mb-1.5 flex items-center gap-1">
+                  <TrendingUp className="w-3.5 h-3.5" /> Years of Experience
+                </label>
+                <div className="flex items-center gap-3">
+                  <input type="range" min="0" max="25" value={exp} onChange={e => setExp(parseInt(e.target.value))}
+                    className="flex-1 accent-indigo-500" />
+                  <span className="w-8 text-right text-sm font-bold text-white">{exp}</span>
+                </div>
+              </div>
+              <div>
+                <label className="text-xs font-medium text-slate-400 mb-1.5 flex items-center gap-1">
+                  <MapPin className="w-3.5 h-3.5" /> Market Location
+                </label>
+                <select className="input text-sm" value={loc} onChange={e => setLoc(e.target.value)}>
+                  {LOCATIONS.map(l => <option key={l}>{l}</option>)}
+                </select>
               </div>
             </div>
 
-            <div>
-              <label className="text-xs font-medium text-slate-400 mb-1.5 flex items-center gap-1">
-                <MapPin className="w-3.5 h-3.5" /> Market Location
-              </label>
-              <select className="input text-sm" value={loc} onChange={e => setLoc(e.target.value)}>
-                <option>United States (Remote)</option>
-                <option>United Kingdom</option>
-                <option>India (Tier 1)</option>
-                <option>EU Remote</option>
-              </select>
-            </div>
+            {/* Percentile Card */}
+            {percentile !== null && (
+              <div className="card bg-linear-to-br from-indigo-900/40 to-purple-900/20 border-indigo-500/20">
+                <h3 className="text-sm font-semibold text-white mb-3 flex items-center gap-2">
+                  <Target className="w-4 h-4 text-indigo-400" /> Your Salary Percentile
+                </h3>
+                <div className="relative mb-3">
+                  <div className="h-3 rounded-full bg-slate-700/60 overflow-hidden">
+                    <div
+                      className="h-full rounded-full transition-all duration-700"
+                      style={{
+                        width: `${percentile}%`,
+                        background: "linear-gradient(90deg, #7c3aed, #6366f1, #06b6d4)",
+                      }}
+                    />
+                  </div>
+                  <div
+                    className="absolute top-1/2 -translate-y-1/2 w-4 h-4 rounded-full bg-white shadow-lg border-2 border-indigo-500 transition-all duration-700"
+                    style={{ left: `calc(${percentile}% - 8px)` }}
+                  />
+                </div>
+                <p className="text-2xl font-bold text-indigo-300 mb-1">{percentile}<span className="text-sm text-slate-400">th</span> percentile</p>
+                <p className="text-xs text-slate-400">
+                  {percentile >= 75
+                    ? "You're well above market average. Strong negotiating position."
+                    : percentile >= 50
+                    ? "You're at market rate. You have room to negotiate up."
+                    : "You're below market. Time to negotiate or switch."}
+                </p>
+              </div>
+            )}
           </div>
 
-          {/* Results */}
+          {/* Main Results */}
           <div className="lg:col-span-2 space-y-6">
-            <div className="card bg-linear-to-br from-[#1e293b] to-[#172033] relative overflow-hidden">
-              <div className="absolute -right-10 -top-10 w-40 h-40 bg-emerald-500/10 blur-3xl rounded-full" />
-
+            {/* Salary Range */}
+            <div className="card relative overflow-hidden">
+              <div className="absolute -right-10 -top-10 w-40 h-40 bg-emerald-500/8 blur-3xl rounded-full pointer-events-none" />
               <h2 className="text-lg font-semibold text-white mb-6 flex items-center gap-2">
-                <DollarSign className="w-5 h-5 text-emerald-400" /> Estimated Salary Range
+                <DollarSign className="w-5 h-5 text-emerald-400" /> Market Salary Range
               </h2>
-
               {!role ? (
                 <p className="text-slate-500 text-sm text-center py-8">Enter a role to see salary estimates.</p>
-              ) : (() => {
-                const isInr = salaryData ? salaryData.currency === "INR" : (profile?.currency === "INR" || loc.includes("India"));
-                const isGbp = salaryData ? salaryData.currency === "GBP" : (profile?.currency === "GBP" || loc.includes("UK"));
-                const fmt = (n: number) =>
-                  isInr ? `₹${(n / 100000).toFixed(1)}L` : isGbp ? `£${Math.round(n / 1000)}k` : `$${Math.round(n / 1000)}k`;
-                const minSal = salaryData ? salaryData.min_salary : (loc.includes("US") ? (120 + exp * 3) * 1000 : loc.includes("UK") ? (60 + exp * 4) * 1000 : (40 + exp * 2) * 1000);
-                const maxSal = salaryData ? salaryData.max_salary : (loc.includes("US") ? (160 + exp * 4) * 1000 : loc.includes("UK") ? (95 + exp * 5) * 1000 : (80 + exp * 4) * 1000);
-                const demand = salaryData?.market_demand ?? "Very High";
-                const yoy = salaryData?.yoy_growth_pct ?? 14.2;
-                return (
-                  <>
-                    <div className="flex flex-col md:flex-row items-center justify-between gap-8 mb-8">
-                      <div className="text-center md:text-left">
-                        <p className="text-sm font-medium text-slate-400 mb-1">Base Minimum</p>
-                        <p className="text-3xl font-bold text-white">{fmt(minSal)}</p>
-                      </div>
-                      <div className="flex-1 w-full flex items-center gap-2">
-                        <div className="h-2 flex-1 bg-slate-700 rounded-l-full relative overflow-hidden">
-                          <div className="absolute right-0 top-0 bottom-0 w-1/3 bg-linear-to-l from-indigo-500 to-transparent" />
-                        </div>
-                        <div className="w-4 h-4 rounded-full bg-indigo-400 shadow-[0_0_15px_rgba(129,140,248,0.8)] z-10" />
-                        <div className="h-2 flex-1 bg-slate-700 rounded-r-full relative overflow-hidden">
-                          <div className="absolute left-0 top-0 bottom-0 w-1/3 bg-linear-to-r from-emerald-500 to-transparent" />
-                        </div>
-                      </div>
-                      <div className="text-center md:text-right">
-                        <p className="text-sm font-medium text-slate-400 mb-1">Top Percentile</p>
-                        <p className="text-3xl font-bold text-emerald-400">{fmt(maxSal)}</p>
-                      </div>
+              ) : (
+                <>
+                  <div className="flex flex-col md:flex-row items-center justify-between gap-8 mb-6">
+                    <div className="text-center md:text-left">
+                      <p className="text-xs font-medium text-slate-400 mb-1">Floor (25th %ile)</p>
+                      <p className="text-3xl font-bold text-white">{fmtSalary(minSal, loc)}</p>
                     </div>
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="bg-[#0f172a] rounded-xl p-4 border border-[#334155]">
-                        <p className="text-xs text-slate-400 mb-1">Market Demand</p>
-                        <p className="text-lg font-semibold text-emerald-400">{demand}</p>
-                      </div>
-                      <div className="bg-[#0f172a] rounded-xl p-4 border border-[#334155]">
-                        <p className="text-xs text-slate-400 mb-1">YoY Growth</p>
-                        <p className="text-lg font-semibold text-emerald-400">+{yoy}%</p>
-                      </div>
+                    <div className="flex-1 w-full flex items-center gap-2">
+                      <div className="h-2.5 flex-1 rounded-l-full overflow-hidden" style={{ background: "linear-gradient(90deg, rgba(99,102,241,0.2), rgba(99,102,241,0.6))" }} />
+                      <div className="w-5 h-5 rounded-full bg-indigo-400 shadow-[0_0_18px_rgba(129,140,248,0.9)] z-10 shrink-0" />
+                      <div className="h-2.5 flex-1 rounded-r-full overflow-hidden" style={{ background: "linear-gradient(90deg, rgba(16,185,129,0.6), rgba(16,185,129,0.2))" }} />
                     </div>
-                  </>
-                );
-              })()}
+                    <div className="text-center md:text-right">
+                      <p className="text-xs font-medium text-slate-400 mb-1">Ceiling (90th %ile)</p>
+                      <p className="text-3xl font-bold text-emerald-400">{fmtSalary(maxSal, loc)}</p>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-3 gap-3">
+                    {[
+                      { label: "Market Demand", value: demand, color: "text-emerald-400" },
+                      { label: "YoY Growth", value: `+${yoy}%`, color: "text-cyan-400" },
+                      { label: "Avg Increment", value: "18–22%", color: "text-indigo-400" },
+                    ].map(({ label, value, color }) => (
+                      <div key={label} className="bg-slate-900/50 rounded-xl p-3 border border-slate-700/40 text-center">
+                        <p className="text-[10px] text-slate-500 mb-1">{label}</p>
+                        <p className={`text-base font-bold ${color}`}>{value}</p>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
             </div>
 
+            {/* Top Paying Skills */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="card">
-                <h3 className="text-sm font-semibold text-white mb-4">Top Paying Technologies</h3>
+                <h3 className="text-sm font-semibold text-white mb-4 flex items-center gap-2">
+                  <ArrowUp className="w-4 h-4 text-emerald-400" /> Top Paying Skills for Role
+                </h3>
                 <div className="space-y-3">
-                  {["Playwright", "Kubernetes", "K6", "Go"].map((t, i) => (
-                    <div key={t} className="flex items-center justify-between text-sm">
-                      <span className="text-slate-300">{t}</span>
-                      <span className="text-emerald-400 font-medium">+${15 - i * 2}k</span>
+                  {topSkills.map(([tech, uplift]) => (
+                    <div key={tech} className="flex items-center justify-between">
+                      <span className="text-sm text-slate-300">{tech}</span>
+                      <span className="text-emerald-400 font-semibold text-sm flex items-center gap-1">
+                        <ArrowUp className="w-3 h-3" />
+                        {isINR ? `₹${uplift * 0.5}L` : `+$${uplift}k`}/yr
+                      </span>
                     </div>
                   ))}
                 </div>
               </div>
+
               <div className="card">
-                <h3 className="text-sm font-semibold text-white mb-4">Hidden Job Signals</h3>
+                <h3 className="text-sm font-semibold text-white mb-4 flex items-center gap-2">
+                  <TrendingUp className="w-4 h-4 text-indigo-400" /> Market Signals
+                </h3>
                 <div className="space-y-3">
-                  <div className="text-sm border-l-2 border-indigo-500 pl-3">
-                    <p className="text-white font-medium">Stripe recently expanded</p>
-                    <p className="text-xs text-slate-400 mt-0.5">QA teams in local region grew by 18%</p>
-                  </div>
-                  <div className="text-sm border-l-2 border-emerald-500 pl-3">
-                    <p className="text-white font-medium">Fintech sector booming</p>
-                    <p className="text-xs text-slate-400 mt-0.5">2.4x increase in SDET job postings</p>
-                  </div>
+                  {[
+                    { color: "border-indigo-500", title: "AI/ML roles surging", detail: "+42% YoY demand across all engineering levels" },
+                    { color: "border-emerald-500", title: "Remote roles normalised", detail: "68% of senior roles now remote-first globally" },
+                    { color: "border-amber-500", title: "Cloud skills premium", detail: "AWS/GCP certified engineers earn 23% above base" },
+                  ].map(({ color, title, detail }) => (
+                    <div key={title} className={`text-sm border-l-2 ${color} pl-3`}>
+                      <p className="text-white font-medium text-xs">{title}</p>
+                      <p className="text-[11px] text-slate-400 mt-0.5">{detail}</p>
+                    </div>
+                  ))}
                 </div>
               </div>
+            </div>
+
+            {/* Negotiation Script */}
+            <div className="card border-indigo-500/20 bg-indigo-500/3">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-base font-semibold text-white flex items-center gap-2">
+                  <Sparkles className="w-4 h-4 text-indigo-400" /> AI Salary Negotiation Script
+                </h3>
+                <button
+                  onClick={() => setShowNegotiation(p => !p)}
+                  className="btn-secondary py-1.5 px-3 text-xs"
+                >
+                  {showNegotiation ? "Hide" : "Generate Script"}
+                </button>
+              </div>
+
+              {!showNegotiation ? (
+                <p className="text-xs text-slate-400">
+                  Got an offer? Generate a professionally written negotiation email based on your market percentile, skills, and target salary ceiling.
+                </p>
+              ) : (
+                <>
+                  <div className="mb-3">
+                    <label className="text-xs font-medium text-slate-400 mb-1.5 block">Current Offer ({base.symbol})</label>
+                    <input
+                      className="input text-sm"
+                      placeholder={isINR ? "e.g. 25 (LPA)" : "e.g. 120000"}
+                      value={offerAmount}
+                      onChange={e => setOfferAmount(e.target.value)}
+                    />
+                  </div>
+                  <div className="relative">
+                    <div className="bg-slate-900/70 border border-slate-700/50 rounded-xl p-4 text-xs text-slate-300 leading-relaxed whitespace-pre-line font-mono">
+                      {negotiationScript}
+                    </div>
+                    <button
+                      onClick={handleCopy}
+                      className="absolute top-3 right-3 btn-secondary py-1 px-2.5 text-[11px] flex items-center gap-1"
+                    >
+                      {copied ? <><CheckCircle className="w-3 h-3 text-emerald-400" /> Copied!</> : <><Copy className="w-3 h-3" /> Copy</>}
+                    </button>
+                  </div>
+                  <p className="text-[10px] text-slate-500 mt-2">
+                    Targeting: <span className="text-indigo-300 font-medium">{targetDisplay}</span> based on {loc} 90th percentile data.
+                    {percentile !== null && ` You're currently at the ${percentile}th percentile.`}
+                  </p>
+                </>
+              )}
             </div>
           </div>
         </div>

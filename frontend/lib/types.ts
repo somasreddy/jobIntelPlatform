@@ -29,6 +29,10 @@ export type ApplicationStatus =
   | "Offer"
   | "Rejected";
 
+export type JobPortal =
+  | "LinkedIn" | "Indeed" | "Glassdoor" | "Naukri" | "Adzuna"
+  | "Remotive" | "Arbeitnow" | "TheMuse" | "Direct" | "Other";
+
 export interface Job {
   id: string;
   title: string;
@@ -46,7 +50,8 @@ export interface Job {
   verificationStatus: VerificationStatus;
   postedDate: string;
   matchScore?: number;
-  levelUp: boolean; // true = hierarchically higher than current role
+  levelUp: boolean;
+  source?: JobPortal;       // which portal this job came from
   recruiterName?: string;
   recruiterLinkedIn?: string;
 }

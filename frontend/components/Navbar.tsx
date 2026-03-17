@@ -12,6 +12,7 @@ import {
   BarChart2,
   Zap,
   Linkedin,
+  Brain,
 } from "lucide-react";
 
 const navItems = [
@@ -21,6 +22,7 @@ const navItems = [
   { href: "/applications",  icon: CheckSquare,     label: "Tracker"          },
   { href: "/intelligence",  icon: TrendingUp,      label: "Intelligence"     },
   { href: "/insights",      icon: BarChart2,       label: "Insights"         },
+  { href: "/interview",     icon: Brain,           label: "Interview Prep"   },
   { href: "/linkedin",      icon: Linkedin,        label: "LinkedIn Enhancer"},
 ];
 

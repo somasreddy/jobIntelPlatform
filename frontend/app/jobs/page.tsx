@@ -5,14 +5,16 @@ import Navbar from "@/components/Navbar";
 import JobCard from "@/components/JobCard";
 import { mockJobs } from "@/lib/mockData";
 import { loadProfile } from "@/lib/profile";
-import { Job, CandidateProfile } from "@/lib/types";
+import { Job, CandidateProfile, JobPortal } from "@/lib/types";
 import {
   Search, Filter, MapPin, Sliders, TrendingUp,
-  CheckCircle2, RefreshCw, Briefcase, UserCircle2
+  CheckCircle2, RefreshCw, Briefcase, UserCircle2,
+  Zap, AlertCircle, SlidersHorizontal, Globe
 } from "lucide-react";
 
 const WORK_MODES = ["All", "Remote", "Hybrid", "On-site"];
 const TECH_FILTERS = ["All", "Playwright", "Selenium", "Python", "Java", "TypeScript", "Cypress", "K6", "AWS"];
+const PORTAL_FILTERS: Array<"All" | JobPortal> = ["All", "LinkedIn", "Indeed", "Glassdoor", "Naukri", "Adzuna", "Remotive", "Arbeitnow", "TheMuse", "Direct"];
 const AUTO_REFRESH_MS = 10 * 60 * 1000; // 10 minutes
 
 export default function JobsPage() {
@@ -22,10 +24,15 @@ export default function JobsPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [workMode, setWorkMode] = useState("All");
   const [techFilter, setTechFilter] = useState("All");
+  const [portalFilter, setPortalFilter] = useState<"All" | JobPortal>("All");
   const [levelFilter, setLevelFilter] = useState<"All" | "SameLevel" | "CareerUplift">("All");
+  const [minScore, setMinScore] = useState(0);
+  const [strictMode, setStrictMode] = useState(false);
   const [jobs, setJobs] = useState<Job[]>([]);
   const [loading, setLoading] = useState(false);
+  const [discovering, setDiscovering] = useState(false);
   const [lastRefresh, setLastRefresh] = useState(new Date());
+  const [discoverError, setDiscoverError] = useState<string | null>(null);
   const profileRef = useRef<CandidateProfile | null>(null);
 
   const loadJobs = async (currentProfile: CandidateProfile) => {
@@ -51,6 +58,44 @@ export default function JobsPage() {
     setLoading(false);
   };
 
+  const findBestMatches = async () => {
+    if (!profile) return;
+    setDiscovering(true);
+    setDiscoverError(null);
+    try {
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL;
+      if (!apiUrl) throw new Error("API not configured");
+      const res = await fetch(`${apiUrl}/api/jobs/discover`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          role: profile.currentRole,
+          skills: profile.skills,
+          frameworks: profile.frameworks,
+          cicd_tools: profile.cicdTools,
+          languages: profile.languages,
+          experience_years: profile.experienceYears,
+          location: profile.preferredLocations?.[0] || profile.currentLocation || "",
+          work_mode: profile.workMode,
+          min_match_score: strictMode ? Math.max(70, minScore) : minScore,
+          run_verification: true,
+        }),
+      });
+      if (!res.ok) throw new Error(`Discovery failed: ${res.status}`);
+      const discovered: Job[] = await res.json();
+      if (discovered.length > 0) {
+        setJobs(discovered);
+        setLastRefresh(new Date());
+      } else {
+        setDiscoverError("No matches found from live portals. Showing local data.");
+      }
+    } catch (err) {
+      setDiscoverError(err instanceof Error ? err.message : "Discovery unavailable — showing cached jobs.");
+    } finally {
+      setDiscovering(false);
+    }
+  };
+
   useEffect(() => {
     const p = loadProfile();
     setProfile(p);
@@ -59,12 +104,10 @@ export default function JobsPage() {
 
     if (!p) return;
 
-    // Default work mode filter from saved profile preference
     if (p.workMode && p.workMode !== "Any") setWorkMode(p.workMode);
 
     loadJobs(p);
 
-    // Auto-refresh every 10 minutes
     const interval = setInterval(() => {
       if (profileRef.current) loadJobs(profileRef.current);
     }, AUTO_REFRESH_MS);
@@ -87,12 +130,15 @@ export default function JobsPage() {
     const matchesTech = techFilter === "All" || j.technologies.includes(techFilter);
     const matchesLevel =
       levelFilter === "All" ? true : levelFilter === "CareerUplift" ? j.levelUp : !j.levelUp;
-    return matchesQ && matchesMode && matchesTech && matchesLevel;
+    const matchesPortal = portalFilter === "All" || j.source === portalFilter;
+    const matchesScore = (j.matchScore ?? 0) >= minScore;
+    return matchesQ && matchesMode && matchesTech && matchesLevel && matchesPortal && matchesScore;
   });
 
   const upliftCount = jobs.filter((j) => j.levelUp).length;
   const sameLevelCount = jobs.filter((j) => !j.levelUp).length;
   const verifiedCount = jobs.filter((j) => j.verificationStatus === "VERIFIED").length;
+  const unverifiedCount = jobs.filter((j) => j.verificationStatus !== "VERIFIED").length;
 
   if (profileChecked && !profile) {
     return (
@@ -134,23 +180,41 @@ export default function JobsPage() {
               </span>
             </p>
           </div>
-          <button
-            onClick={refresh}
-            disabled={loading}
-            className="btn-secondary flex items-center gap-2 text-sm"
-          >
-            <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
-            Refresh Jobs
-          </button>
+          <div className="flex gap-2">
+            <button
+              onClick={findBestMatches}
+              disabled={discovering || loading}
+              className="btn-primary flex items-center gap-2 text-sm"
+            >
+              <Zap className={`w-4 h-4 ${discovering ? "animate-pulse" : ""}`} />
+              {discovering ? "Searching Portals…" : "Find Best Matches"}
+            </button>
+            <button
+              onClick={refresh}
+              disabled={loading || discovering}
+              className="btn-secondary flex items-center gap-2 text-sm"
+            >
+              <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
+              Refresh
+            </button>
+          </div>
         </div>
+
+        {/* Discovery error / info banner */}
+        {discoverError && (
+          <div className="flex items-center gap-2 mb-4 px-4 py-2.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-300 text-sm">
+            <AlertCircle className="w-4 h-4 shrink-0" />
+            {discoverError}
+          </div>
+        )}
 
         {/* Stats row */}
         <div className="grid grid-cols-4 gap-4 mb-6">
           {[
             { label: "Total Matches", value: jobs.length, icon: Briefcase, color: "text-indigo-400" },
             { label: "Career Uplift", value: upliftCount, icon: TrendingUp, color: "text-rose-400" },
-            { label: "Same Level+", value: sameLevelCount, icon: Briefcase, color: "text-amber-400" },
-            { label: "Verified Jobs", value: verifiedCount, icon: CheckCircle2, color: "text-emerald-400" },
+            { label: "Verified", value: verifiedCount, icon: CheckCircle2, color: "text-emerald-400" },
+            { label: "Unverified", value: unverifiedCount, icon: AlertCircle, color: "text-amber-400" },
           ].map(({ label, value, icon: Icon, color }) => (
             <div key={label} className="card py-3 px-4">
               <div className="flex items-center gap-2 text-xs text-slate-400 mb-1">
@@ -162,7 +226,8 @@ export default function JobsPage() {
         </div>
 
         {/* Filters */}
-        <div className="card mb-6 py-4">
+        <div className="card mb-6 py-4 space-y-3">
+          {/* Row 1 — search + level toggle + strict mode */}
           <div className="flex flex-wrap gap-3 items-center">
             <div className="flex-1 min-w-56 relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
@@ -188,6 +253,29 @@ export default function JobsPage() {
               ))}
             </div>
 
+            {/* Strict mode toggle */}
+            <button
+              onClick={() => {
+                setStrictMode((s) => !s);
+                if (!strictMode) setMinScore((m) => Math.max(m, 70));
+              }}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition-all ${
+                strictMode
+                  ? "bg-indigo-600/20 border-indigo-500/50 text-indigo-300"
+                  : "bg-slate-800/60 border-slate-700/40 text-slate-400 hover:text-white"
+              }`}
+            >
+              <SlidersHorizontal className="w-3.5 h-3.5" />
+              Strict Match {strictMode ? "ON" : "OFF"}
+            </button>
+
+            <span className="text-xs text-slate-500 whitespace-nowrap">
+              <Filter className="w-3 h-3 inline mr-1" />{filtered.length} results
+            </span>
+          </div>
+
+          {/* Row 2 — work mode, tech, portal, min score */}
+          <div className="flex flex-wrap gap-3 items-center">
             <div className="flex items-center gap-1 text-slate-400 text-xs">
               <MapPin className="w-3.5 h-3.5" />
               <select className="input py-1.5 text-xs w-28" value={workMode} onChange={(e) => setWorkMode(e.target.value)}>
@@ -202,14 +290,37 @@ export default function JobsPage() {
               </select>
             </div>
 
-            <span className="text-xs text-slate-500 whitespace-nowrap">
-              <Filter className="w-3 h-3 inline mr-1" />{filtered.length} results
-            </span>
+            {/* Portal source filter */}
+            <div className="flex items-center gap-1 text-slate-400 text-xs">
+              <Globe className="w-3.5 h-3.5" />
+              <select
+                className="input py-1.5 text-xs w-36"
+                value={portalFilter}
+                onChange={(e) => setPortalFilter(e.target.value as "All" | JobPortal)}
+              >
+                {PORTAL_FILTERS.map((p) => <option key={p}>{p}</option>)}
+              </select>
+            </div>
+
+            {/* Min match score slider */}
+            <div className="flex items-center gap-2 text-xs text-slate-400">
+              <CheckCircle2 className="w-3.5 h-3.5 text-indigo-400" />
+              <span className="whitespace-nowrap">Min match:</span>
+              <input
+                type="range" min={0} max={95} step={5}
+                value={minScore}
+                onChange={(e) => setMinScore(Number(e.target.value))}
+                className="w-24 accent-indigo-500"
+              />
+              <span className={`font-semibold w-8 ${minScore >= 80 ? "text-emerald-400" : minScore >= 60 ? "text-indigo-400" : "text-slate-400"}`}>
+                {minScore > 0 ? `${minScore}%` : "Any"}
+              </span>
+            </div>
           </div>
         </div>
 
         {/* Job Grid */}
-        {loading ? (
+        {loading || discovering ? (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
             {Array.from({ length: 6 }).map((_, i) => (
               <div key={i} className="card h-64 skeleton" />
@@ -219,7 +330,7 @@ export default function JobsPage() {
           <div className="card text-center py-16 text-slate-400">
             <Search className="w-10 h-10 mx-auto mb-3 text-slate-600" />
             <p className="font-medium">No jobs match your current filters</p>
-            <p className="text-sm mt-1">Try adjusting your search or filters</p>
+            <p className="text-sm mt-1">Try adjusting your search or filters, or click <strong>Find Best Matches</strong> to search live portals</p>
           </div>
         ) : (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
