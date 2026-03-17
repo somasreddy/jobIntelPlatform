@@ -156,7 +156,7 @@ export default function ProfilePage() {
                       <option value="AUD">AUD</option>
                     </select>
                     <input
-                      className="input"
+                      className="input flex-1 min-w-0"
                       type="number"
                       placeholder="95000"
                       value={form.currentSalary}
