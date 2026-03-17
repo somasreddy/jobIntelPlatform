@@ -23,7 +23,7 @@ class Settings(BaseSettings):
     REDIS_URL: str = "redis://localhost:6379/0"
     
     # LLM API
-    LLM_PROVIDER: str = "anthropic"  # "anthropic", "openai", "google", or "groq"
+    LLM_PROVIDER: str = "anthropic"  # "anthropic", "openai", "google", "groq", or "perplexity"
     ANTHROPIC_API_KEY: str = ""
     ANTHROPIC_MODEL: str = "claude-haiku-4-5-20251001"
     
@@ -35,6 +35,9 @@ class Settings(BaseSettings):
     
     GROQ_API_KEY: str = ""
     GROQ_MODEL: str = "llama-3.3-70b-versatile"
+    
+    PERPLEXITY_API_KEY: str = ""
+    PERPLEXITY_MODEL: str = "sonar-reasoning"
     
     CONSOLIDATED_MODE: bool = False
     

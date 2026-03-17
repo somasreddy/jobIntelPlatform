@@ -8,6 +8,7 @@ from core.config import settings
 _anthropic_client: AsyncAnthropic | None = None
 _openai_client: AsyncOpenAI | None = None
 _groq_client: AsyncGroq | None = None
+_perplexity_client: AsyncOpenAI | None = None
 
 
 def get_anthropic_client() -> AsyncAnthropic:
@@ -29,6 +30,16 @@ def get_groq_client() -> AsyncGroq:
     if _groq_client is None:
         _groq_client = AsyncGroq(api_key=settings.GROQ_API_KEY)
     return _groq_client
+
+
+def get_perplexity_client() -> AsyncOpenAI:
+    global _perplexity_client
+    if _perplexity_client is None:
+        _perplexity_client = AsyncOpenAI(
+            api_key=settings.PERPLEXITY_API_KEY,
+            base_url="https://api.perplexity.ai"
+        )
+    return _perplexity_client
 
 
 import asyncio
@@ -61,6 +72,19 @@ async def chat(
     elif target_provider == "groq":
         client = get_groq_client()
         target_model = model or settings.GROQ_MODEL
+        response = await client.chat.completions.create(
+            model=target_model,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+            max_tokens=max_tokens,
+            temperature=temperature,
+        )
+        return response.choices[0].message.content or ""
+    elif target_provider == "perplexity":
+        client = get_perplexity_client()
+        target_model = model or settings.PERPLEXITY_MODEL
         response = await client.chat.completions.create(
             model=target_model,
             messages=[
@@ -113,6 +137,7 @@ async def consolidated_chat(
     if "openai" in target_providers and settings.OPENAI_API_KEY: active_providers.append("openai")
     if "google" in target_providers and settings.GOOGLE_API_KEY: active_providers.append("google")
     if "groq" in target_providers and settings.GROQ_API_KEY: active_providers.append("groq")
+    if "perplexity" in target_providers and settings.PERPLEXITY_API_KEY: active_providers.append("perplexity")
     
     if not active_providers:
         return await chat(system_prompt, user_prompt, max_tokens=max_tokens, temperature=temperature)
