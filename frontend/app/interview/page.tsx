@@ -4,51 +4,71 @@ import { useRouter } from "next/navigation";
 import Navbar from "@/components/Navbar";
 import { loadProfile } from "@/lib/profile";
 import { CandidateProfile } from "@/lib/types";
+import { getQuestionsForRole, QuestionBankItem } from "@/lib/questionBank";
 import {
-  Brain, Sparkles, ChevronDown, ChevronUp, CheckCircle,
+  Brain, Sparkles, ChevronDown, ChevronUp,
   MessageSquare, Code2, Users, Lightbulb, Target,
-  Star, UserCircle2, RefreshCw, ClipboardList, Trophy
+  Star, UserCircle2, RefreshCw, ClipboardList, Trophy,
+  BookOpen, Cpu, GitMerge, Database, Cloud, Globe2, TestTube2, BarChart2,
 } from "lucide-react";
 
-interface InterviewQuestion {
+// ─── Local interview question type (profile-personalised behavioral) ───────────
+interface LocalQuestion {
   id: string;
+  domain: string;
   type: "behavioral" | "technical" | "situational" | "leadership";
   difficulty: "Easy" | "Medium" | "Hard";
   question: string;
-  starTemplate?: { situation: string; task: string; action: string; result: string };
   hint: string;
   keyPoints: string[];
+  modelAnswer?: string;
+  starTemplate?: { situation: string; task: string; action: string; result: string };
 }
 
+type AnyQuestion = LocalQuestion | QuestionBankItem;
+
 const TYPE_META = {
-  behavioral:  { label: "Behavioural",  icon: Users,      color: "text-indigo-400",  bg: "bg-indigo-500/10 border-indigo-500/25" },
-  technical:   { label: "Technical",    icon: Code2,      color: "text-cyan-400",    bg: "bg-cyan-500/10 border-cyan-500/25" },
-  situational: { label: "Situational",  icon: Lightbulb,  color: "text-amber-400",   bg: "bg-amber-500/10 border-amber-500/25" },
-  leadership:  { label: "Leadership",   icon: Trophy,     color: "text-purple-400",  bg: "bg-purple-500/10 border-purple-500/25" },
+  behavioral:  { label: "Behavioural",  icon: Users,    color: "text-indigo-400",  bg: "bg-indigo-500/10 border-indigo-500/25" },
+  technical:   { label: "Technical",    icon: Code2,    color: "text-cyan-400",    bg: "bg-cyan-500/10 border-cyan-500/25" },
+  situational: { label: "Situational",  icon: Lightbulb, color: "text-amber-400",  bg: "bg-amber-500/10 border-amber-500/25" },
+  leadership:  { label: "Leadership",   icon: Trophy,   color: "text-purple-400",  bg: "bg-purple-500/10 border-purple-500/25" },
 };
 
 const DIFF_COLOR = { Easy: "text-emerald-400", Medium: "text-amber-400", Hard: "text-rose-400" };
 
-function buildQuestions(profile: CandidateProfile, targetRole: string, company: string): InterviewQuestion[] {
-  const role = targetRole || profile.currentRole || "Software Engineer";
+const DOMAIN_META: Record<string, { icon: React.ComponentType<{ className?: string }>, color: string }> = {
+  "Behavioral":        { icon: Users,      color: "text-indigo-400" },
+  "Leadership":        { icon: Trophy,     color: "text-purple-400" },
+  "DSA":               { icon: Cpu,        color: "text-cyan-400" },
+  "System Design":     { icon: BarChart2,  color: "text-violet-400" },
+  "CI/CD & DevOps":    { icon: GitMerge,   color: "text-orange-400" },
+  "B2B Integration":   { icon: Globe2,     color: "text-emerald-400" },
+  "API Management":    { icon: Cloud,      color: "text-sky-400" },
+  "Databases":         { icon: Database,   color: "text-amber-400" },
+  "Cloud":             { icon: Cloud,      color: "text-blue-400" },
+  "QA & Testing":      { icon: TestTube2,  color: "text-rose-400" },
+};
+
+// ─── Profile-personalised behavioral + situational questions ──────────────────
+function buildProfileQuestions(
+  profile: CandidateProfile,
+  company: string,
+  exp: number,
+): LocalQuestion[] {
   const skills = profile.skills ?? [];
-  const exp = profile.experienceYears ?? 0;
   const s1 = skills[0] || "your primary stack";
   const s2 = skills[1] || "automation frameworks";
   const s3 = skills[2] || "cloud infrastructure";
   const resumeHint = profile.resumeText && !profile.resumeText.startsWith("[Resume file:")
-    ? profile.resumeText.slice(0, 400)
-    : "";
+    ? profile.resumeText.slice(0, 400) : "";
+  const prevProject =
+    resumeHint.match(/(?:built|designed|led|developed|implemented)\s+([^.,;]{10,50})/i)?.[1] ||
+    `a ${s1} solution`;
 
-  const prevProject = resumeHint.match(/(?:built|designed|led|developed|implemented)\s+([^.,;]{10,50})/i)?.[1] || `a ${s1} solution`;
-
-  return [
-    // ── Behavioural ──────────────────────────────────────────────────────────
+  const questions: LocalQuestion[] = [
     {
-      id: "b1",
-      type: "behavioral",
-      difficulty: "Medium",
-      question: `Tell me about a time you had to deliver a complex ${s1} project under a tight deadline. How did you manage it?`,
+      id: "b1", domain: "Behavioral", type: "behavioral", difficulty: "Medium",
+      question: `Tell me about a time you delivered a complex ${s1} project under a tight deadline. How did you manage it?`,
       starTemplate: {
         situation: `We had a critical ${s1} feature that needed to ship in 2 weeks due to a client commitment.`,
         task: `I was responsible for ${prevProject} while coordinating with 3 other engineers.`,
@@ -59,23 +79,19 @@ function buildQuestions(profile: CandidateProfile, targetRole: string, company: 
       keyPoints: ["Scoping & prioritisation", "Communication under pressure", "Quantified outcome"],
     },
     {
-      id: "b2",
-      type: "behavioral",
-      difficulty: "Medium",
+      id: "b2", domain: "Behavioral", type: "behavioral", difficulty: "Medium",
       question: `Describe a situation where you disagreed with a technical decision made by your team lead. What did you do?`,
       starTemplate: {
-        situation: `Our team was adopting a new ${s2} approach that I believed would create long-term maintenance issues.`,
+        situation: `Our team was adopting a new ${s2} approach I believed would create long-term maintenance issues.`,
         task: `I needed to raise the concern without undermining the team lead or damaging relationships.`,
         action: `I prepared a written comparison with pros/cons, requested a 30-min sync, and proposed a pilot on a low-risk service first.`,
-        result: `The lead agreed to the pilot. Results confirmed my concerns, and the team adopted my approach for all new services.`,
+        result: `The lead agreed to the pilot. Results confirmed my concerns and the team adopted my approach for all new services.`,
       },
-      hint: "Show that you're principled but collaborative. ${company || 'Top companies'} values people who push back constructively.",
+      hint: `${company || "Top companies"} values people who push back constructively with data. Show you're principled but collaborative.`,
       keyPoints: ["Data-driven advocacy", "Diplomacy", "Outcome focus"],
     },
     {
-      id: "b3",
-      type: "behavioral",
-      difficulty: "Hard",
+      id: "b3", domain: "Behavioral", type: "behavioral", difficulty: "Hard",
       question: `Tell me about the most impactful project you've led in your ${exp}+ year career. What was your specific contribution?`,
       starTemplate: {
         situation: `At my previous role, the team was struggling with slow release cycles — deployments took 4 days due to manual ${s1} processes.`,
@@ -83,89 +99,63 @@ function buildQuestions(profile: CandidateProfile, targetRole: string, company: 
         action: `Over 6 weeks, I designed the architecture, wrote the core framework, onboarded 4 engineers, and created runbooks. I presented weekly updates to stakeholders.`,
         result: `Deployment time dropped from 4 days to 45 minutes. Engineering satisfaction scores increased 30%. The approach was adopted company-wide.`,
       },
-      hint: "This is your 'hero' story. Quantify impact with real numbers — time saved, defects reduced, revenue protected, team size.",
+      hint: "This is your 'hero' story. Quantify impact with real numbers — time saved, defects reduced, revenue protected.",
       keyPoints: ["Leadership scope", "Technical depth", "Business impact with numbers"],
     },
-    // ── Technical ────────────────────────────────────────────────────────────
     {
-      id: "t1",
-      type: "technical",
-      difficulty: "Hard",
-      question: `How would you design a scalable ${s1} system that handles 10 million events per day? Walk me through your architecture.`,
-      starTemplate: undefined,
-      hint: `Think in layers: ingestion → processing → storage → serving. For ${s1} at scale, discuss trade-offs on consistency vs. availability.`,
-      keyPoints: [`${s1} internals`, "Distributed systems trade-offs", "Scaling patterns (horizontal vs. vertical)", "Monitoring & observability"],
+      id: "b4", domain: "Behavioral", type: "behavioral", difficulty: "Medium",
+      question: `Tell me about a time you had to learn a new technology quickly to deliver a project. How did you approach it?`,
+      starTemplate: {
+        situation: `I joined a project that required ${s3}, which I hadn't used in production before.`,
+        task: `I had 2 weeks to become proficient enough to deliver the integration component.`,
+        action: `I followed the official documentation, built a proof-of-concept in week 1, paired with a colleague who had experience, and documented my learnings for the team.`,
+        result: `Delivered the component on time with no production incidents. Created an internal guide that reduced onboarding time for two subsequent team members by 50%.`,
+      },
+      hint: "Highlight your learning methodology, not just that you learned it. Interviewers are assessing your growth mindset.",
+      keyPoints: ["Self-directed learning", "Knowledge sharing", "Adaptability"],
     },
     {
-      id: "t2",
-      type: "technical",
-      difficulty: "Medium",
-      question: `Walk me through how you would debug a critical production issue in a ${s1} service that is causing intermittent failures affecting 5% of users.`,
-      starTemplate: undefined,
-      hint: "Start with observability — logs, metrics, traces. Explain your hypothesis-driven debugging approach and how you'd minimize blast radius.",
-      keyPoints: ["Observability tooling", "Incident management process", "Root cause analysis methodology", "Communication during incidents"],
-    },
-    {
-      id: "t3",
-      type: "technical",
-      difficulty: "Medium",
-      question: `${skills.includes("AWS") || skills.includes("GCP") || skills.includes("Azure") ? `Explain how you would architect a CI/CD pipeline on cloud that supports blue-green deployments for a microservices application.` : `How do you ensure code quality and prevent regressions in a fast-moving engineering team?`}`,
-      starTemplate: undefined,
-      hint: "Draw on your hands-on experience. Mention specific tools you've used, trade-offs you've made, and lessons learned from production.",
-      keyPoints: ["Pipeline stages", "Rollback strategy", "Testing gates", "Feature flags"],
-    },
-    // ── Situational ──────────────────────────────────────────────────────────
-    {
-      id: "s1",
-      type: "situational",
-      difficulty: "Medium",
-      question: `You join ${company || "this company"} and discover the codebase has significant technical debt that's slowing the team down. The business wants features, not refactoring. How do you handle this?`,
+      id: "s1", domain: "Behavioral", type: "situational", difficulty: "Medium",
+      question: `You join ${company || "this company"} and discover the codebase has significant technical debt slowing the team down. The business wants features, not refactoring. How do you handle this?`,
       starTemplate: {
         situation: `Technical debt is creating a 30% overhead on every feature — bugs are frequent and onboarding takes 4 weeks.`,
         task: `I need to make the case for refactoring while keeping business stakeholders satisfied.`,
-        action: `I'd quantify the debt's cost in eng hours, propose a "20% time" model where refactoring is embedded into feature sprints rather than separate, and pick one high-leverage area to prove ROI quickly.`,
+        action: `I'd quantify the debt's cost in eng hours, propose a "20% time" model embedding refactoring into feature sprints, and pick one high-leverage area to prove ROI quickly.`,
         result: `After the first 6-week cycle, feature velocity increases by 25%, which makes the business case self-evident.`,
       },
       hint: `${company || "Top engineering companies"} values engineers who balance technical excellence with business pragmatism. Show both sides.`,
-      keyPoints: ["Quantifying tech debt", "Stakeholder management", "Incremental improvement strategy"],
+      keyPoints: ["Quantifying tech debt", "Stakeholder management", "Incremental improvement"],
     },
     {
-      id: "s2",
-      type: "situational",
-      difficulty: "Hard",
+      id: "s2", domain: "Behavioral", type: "situational", difficulty: "Hard",
       question: `A critical bug is found in production 2 hours before a major product launch. Your fix is ready but needs 30 minutes of testing. The CEO wants to launch on time. What do you do?`,
       starTemplate: {
         situation: `Launch is at noon. The bug affects 20% of checkout flows. My fix is written but untested.`,
         task: `I need to make a risk assessment and communicate it clearly to leadership.`,
-        action: `I run focused smoke tests on the critical path (15 min), prepare a rollback plan, brief engineering leadership with clear risk levels, and present the option to either delay 45 min or launch with a feature flag disabling the affected flow.`,
+        action: `I run focused smoke tests on the critical path (15 min), prepare a rollback plan, brief engineering leadership with clear risk levels, and present the option: delay 45 min OR launch with a feature flag disabling the affected flow.`,
         result: `We launch on time with the flow disabled, affecting 0 customers at launch. Fix is deployed 2 hours later with full test coverage.`,
       },
-      hint: "Demonstrate structured risk thinking. CEOs respect engineers who give clear options with trade-offs, not just 'yes' or 'no'.",
+      hint: "CEOs respect engineers who give clear options with trade-offs, not just 'yes' or 'no'. Show structured risk thinking.",
       keyPoints: ["Risk assessment framework", "Communication under pressure", "Rollback planning"],
     },
-    // ── Leadership ───────────────────────────────────────────────────────────
     ...(exp >= 4 ? [
       {
-        id: "l1",
-        type: "leadership" as const,
-        difficulty: "Hard" as const,
+        id: "l1", domain: "Leadership", type: "leadership" as const, difficulty: "Hard" as const,
         question: `How do you build a high-performing engineering team culture? What concrete practices have you implemented?`,
         starTemplate: {
           situation: `I inherited a team of 6 engineers with low morale, 40% test coverage, and no clear engineering standards.`,
           task: `Transform team culture and output quality within 6 months.`,
-          action: `I introduced: weekly 1:1s focused on growth not status, blameless post-mortems, a team charter for engineering standards, pairing sessions for knowledge sharing, and quarterly team retros with action items. I also created growth ladders so engineers knew their paths forward.`,
+          action: `I introduced weekly 1:1s focused on growth, blameless post-mortems, a team charter for engineering standards, pairing sessions, and quarterly retros with action items. I also created growth ladders so engineers knew their paths forward.`,
           result: `Attrition dropped to zero, test coverage reached 82%, and the team shipped 40% more features in H2 vs H1. Two engineers got promotions.`,
         },
-        hint: "Show you understand that great teams are built through psychological safety, clear expectations, and growth opportunities — not just process.",
+        hint: "Great teams are built through psychological safety, clear expectations, and growth opportunities — not just process.",
         keyPoints: ["Psychological safety", "1:1 frameworks", "Engineering standards", "Growth paths & retention"],
       },
       {
-        id: "l2",
-        type: "leadership" as const,
-        difficulty: "Medium" as const,
+        id: "l2", domain: "Leadership", type: "leadership" as const, difficulty: "Medium" as const,
         question: `Tell me about a time you had to influence a major technical decision without direct authority.`,
         starTemplate: {
-          situation: `Three engineering teams were independently building similar data pipeline solutions, creating duplication and inconsistency.`,
+          situation: `Three engineering teams were independently building similar ${s2} solutions, creating duplication and inconsistency.`,
           task: `Propose a shared platform without the authority to mandate it.`,
           action: `I built a prototype, ran a workshop showing the cost of fragmentation (6 engineer-months/year), proposed a joint working group, and secured buy-in from two senior engineers who became advocates.`,
           result: `All three teams adopted the shared platform within 2 quarters. Maintenance cost dropped by 60%.`,
@@ -173,41 +163,60 @@ function buildQuestions(profile: CandidateProfile, targetRole: string, company: 
         hint: "Influence without authority is a top leadership skill. Focus on building coalitions, not issuing directives.",
         keyPoints: ["Coalition building", "Data-driven persuasion", "Stakeholder mapping"],
       },
+      {
+        id: "l3", domain: "Leadership", type: "leadership" as const, difficulty: "Hard" as const,
+        question: `Describe how you approach hiring and growing engineers on your team. What signals do you look for in interviews?`,
+        hint: "Cover your hiring criteria beyond technical skills — curiosity, ownership, collaboration. Discuss how you onboard and develop engineers.",
+        starTemplate: undefined,
+        keyPoints: ["Technical + cultural bar", "Structured onboarding (30/60/90 day plan)", "Mentorship vs stretch assignments", "Promotion criteria clarity"],
+        modelAnswer: `I look for three things beyond technical fundamentals: **curiosity** (do they explore why, not just how?), **ownership** (do they care about outcomes, not just tasks?), and **communication clarity** (can they explain complex ideas simply?).
+
+In interviews, I use structured questions with consistent rubrics — avoids bias and enables calibration across interviewers. I favour pair-problem-solving over "gotcha" algorithm questions — it shows how the candidate thinks collaboratively.
+
+**Onboarding**: 30/60/90 day plan. Week 1: set up environment, read architecture docs, shadow teammates. By day 30: own a small, well-scoped ticket end-to-end. By day 60: propose improvements they noticed. By day 90: lead a feature with guidance.
+
+**Growth**: Bi-annual calibrations with clear, level-specific expectations written down. Stretch assignments slightly beyond their current level. Regular 1:1s focused on career goals, not just task updates. Internal conference talks or blog posts to build visibility.
+
+**Result**: Teams I've built consistently have low attrition (<10% annually) and multiple internal promotions per year. I measure team health via quarterly anonymous surveys (safety, clarity, growth, belonging).`,
+      },
     ] : []),
   ];
+
+  return questions;
 }
 
+// ─── Page Component ───────────────────────────────────────────────────────────
 export default function InterviewPrepPage() {
   const router = useRouter();
   const [profile, setProfile] = useState<CandidateProfile | null>(null);
   const [profileChecked, setProfileChecked] = useState(false);
   const [targetRole, setTargetRole] = useState("");
   const [targetCompany, setTargetCompany] = useState("");
-  const [questions, setQuestions] = useState<InterviewQuestion[] | null>(null);
+  const [questions, setQuestions] = useState<AnyQuestion[] | null>(null);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [scores, setScores] = useState<Record<string, number>>({});
+  const [filterDomain, setFilterDomain] = useState<string>("all");
   const [filterType, setFilterType] = useState<string>("all");
   const [generating, setGenerating] = useState(false);
+  const [questionSeed, setQuestionSeed] = useState(0);
 
   useEffect(() => {
     const p = loadProfile();
     setProfile(p);
     setProfileChecked(true);
-    if (p) {
-      setTargetRole(p.currentRole || "");
-    }
+    if (p) setTargetRole(p.currentRole || "");
   }, []);
 
-  const handleGenerate = async () => {
+  const handleGenerate = async (seedOverride?: number) => {
     if (!profile) return;
     setGenerating(true);
     setQuestions(null);
     setExpanded({});
     setAnswers({});
     setScores({});
+    const activeSeed = seedOverride ?? questionSeed;
 
-    // Try API
     const apiUrl = process.env.NEXT_PUBLIC_API_URL;
     if (apiUrl) {
       try {
@@ -224,31 +233,44 @@ export default function InterviewPrepPage() {
             return;
           }
         }
-      } catch { /* fall through */ }
+      } catch { /* fall through to local generation */ }
     }
 
     await new Promise((r) => setTimeout(r, 1600));
-    setQuestions(buildQuestions(profile, targetRole, targetCompany));
+    const profileQs = buildProfileQuestions(profile, targetCompany, profile.experienceYears ?? 0);
+    const bankQs = getQuestionsForRole(targetRole, profile.skills ?? [], profile.experienceYears ?? 0, activeSeed);
+    setQuestions([...profileQs, ...bankQs]);
     setGenerating(false);
   };
 
   const scoreAnswer = (id: string, answer: string) => {
     if (!answer.trim()) return;
-    // Heuristic scoring: length, STAR keywords, quantification
     let pts = 0;
     if (answer.length > 100) pts += 20;
     if (answer.length > 300) pts += 15;
     const starWords = ["situation", "task", "action", "result", "led", "designed", "built", "improved", "reduced", "increased", "delivered"];
     pts += Math.min(starWords.filter(w => answer.toLowerCase().includes(w)).length * 5, 30);
-    const numRegex = /\d+[%$kKLM]?/g;
-    const nums = answer.match(numRegex)?.length ?? 0;
+    const nums = answer.match(/\d+[%$kKLM]?/g)?.length ?? 0;
     pts += Math.min(nums * 7, 35);
     setScores(p => ({ ...p, [id]: Math.min(pts, 100) }));
   };
 
   const toggle = (id: string) => setExpanded(p => ({ ...p, [id]: !p[id] }));
 
-  const filtered = questions?.filter(q => filterType === "all" || q.type === filterType) ?? [];
+  const domains = questions
+    ? ["all", ...Array.from(new Set(questions.map(q => q.domain)))]
+    : ["all"];
+
+  const filtered = (questions ?? []).filter(q => {
+    const domainMatch = filterDomain === "all" || q.domain === filterDomain;
+    const typeMatch = filterType === "all" || q.type === filterType;
+    return domainMatch && typeMatch;
+  });
+
+  const completedCount = Object.keys(scores).length;
+  const avgScore = completedCount > 0
+    ? Math.round(Object.values(scores).reduce((a, b) => a + b, 0) / completedCount)
+    : 0;
 
   if (profileChecked && !profile) {
     return (
@@ -260,16 +282,13 @@ export default function InterviewPrepPage() {
               <UserCircle2 className="w-8 h-8 text-indigo-400" />
             </div>
             <h2 className="text-white font-semibold text-xl mb-2">No profile found</h2>
-            <p className="text-slate-400 text-sm mb-6">Set up your career profile first — we use your skills and experience to generate personalised interview questions.</p>
+            <p className="text-slate-400 text-sm mb-6">Set up your career profile first to get personalised interview questions.</p>
             <button onClick={() => router.push("/")} className="btn-primary text-sm px-6 py-2.5">Set Up Profile</button>
           </div>
         </main>
       </div>
     );
   }
-
-  const completedCount = Object.keys(scores).length;
-  const avgScore = completedCount > 0 ? Math.round(Object.values(scores).reduce((a, b) => a + b, 0) / completedCount) : 0;
 
   return (
     <div className="flex min-h-screen bg-transparent">
@@ -284,8 +303,22 @@ export default function InterviewPrepPage() {
             Interview <span className="gradient-text">Preparation</span>
           </h1>
           <p className="text-slate-400 text-sm max-w-2xl">
-            AI-generated questions tailored to your role, experience, and skills — with pre-filled STAR answer templates from your profile. Practice, self-score, and ace your next interview.
+            Covers Behavioural, System Design, DSA, CI/CD & DevOps, B2B Integration (webMethods, MuleSoft, EDI),
+            API Management, Databases, Cloud — with model answers, STAR templates, and self-scoring.
           </p>
+        </div>
+
+        {/* Coverage chips */}
+        <div className="flex flex-wrap gap-2 mb-6">
+          {Object.entries(DOMAIN_META).map(([d, meta]) => {
+            const Icon = meta.icon;
+            return (
+              <span key={d} className={`flex items-center gap-1.5 text-[11px] font-medium px-2.5 py-1 rounded-full border border-slate-700/60 ${meta.color}`}
+                style={{ background: "rgba(255,255,255,0.03)" }}>
+                <Icon className="w-3 h-3" />{d}
+              </span>
+            );
+          })}
         </div>
 
         {/* Setup Card */}
@@ -295,7 +328,7 @@ export default function InterviewPrepPage() {
               <label className="text-xs font-medium text-slate-400 mb-1.5 block">Target Role</label>
               <input
                 className="input text-sm"
-                placeholder="e.g. Senior Backend Engineer"
+                placeholder="e.g. webMethods Integration Developer"
                 value={targetRole}
                 onChange={(e) => setTargetRole(e.target.value)}
               />
@@ -304,34 +337,47 @@ export default function InterviewPrepPage() {
               <label className="text-xs font-medium text-slate-400 mb-1.5 block">Target Company</label>
               <input
                 className="input text-sm"
-                placeholder="e.g. Stripe, Google, Atlassian"
+                placeholder="e.g. Bosch, IBM, Capgemini"
                 value={targetCompany}
                 onChange={(e) => setTargetCompany(e.target.value)}
               />
             </div>
-            <div className="flex items-end">
+            <div className="flex items-end gap-2">
               <button
-                onClick={handleGenerate}
+                onClick={() => handleGenerate()}
                 disabled={generating}
-                className="btn-primary w-full flex items-center justify-center gap-2 text-sm"
+                className="btn-primary flex-1 flex items-center justify-center gap-2 text-sm"
               >
-                {generating ? (
-                  <><RefreshCw className="w-4 h-4 animate-spin" /> Generating…</>
-                ) : (
-                  <><Sparkles className="w-4 h-4" /> Generate Questions</>
-                )}
+                {generating
+                  ? <><RefreshCw className="w-4 h-4 animate-spin" /> Generating…</>
+                  : <><Sparkles className="w-4 h-4" /> Generate Questions</>}
               </button>
+              {questions && !generating && (
+                <button
+                  onClick={() => {
+                    const nextSeed = questionSeed + 1;
+                    setQuestionSeed(nextSeed);
+                    handleGenerate(nextSeed);
+                  }}
+                  title="Get a fresh set of questions"
+                  className="btn-secondary px-3 py-2.5 flex items-center gap-1.5 text-xs shrink-0"
+                >
+                  <RefreshCw className="w-3.5 h-3.5" /> New Set
+                </button>
+              )}
             </div>
           </div>
           <p className="text-[11px] text-slate-500">
-            Profile: <span className="text-slate-300">{profile?.name || "—"}</span> · <span className="text-slate-300">{profile?.experienceYears}yr exp</span> · <span className="text-slate-300">{(profile?.skills ?? []).slice(0, 3).join(", ")}</span>
+            Profile: <span className="text-slate-300">{profile?.name || "—"}</span>
+            {" · "}<span className="text-slate-300">{profile?.experienceYears}yr exp</span>
+            {" · "}<span className="text-slate-300">{(profile?.skills ?? []).slice(0, 3).join(", ")}</span>
             {profile?.resumeText && !profile.resumeText.startsWith("[Resume file:") && (
-              <span className="text-emerald-400 ml-2">· Resume text loaded ✓</span>
+              <span className="text-emerald-400 ml-2">· Resume enriched ✓</span>
             )}
           </p>
         </div>
 
-        {/* Progress bar when questions exist */}
+        {/* Progress bar */}
         {questions && completedCount > 0 && (
           <div className="card mb-4 py-3">
             <div className="flex items-center gap-4">
@@ -364,34 +410,71 @@ export default function InterviewPrepPage() {
               <Brain className="w-7 h-7 text-indigo-400 animate-pulse" />
             </div>
             <p className="text-white font-semibold mb-1">Analysing your profile & crafting questions…</p>
-            <p className="text-slate-400 text-sm">Tailoring STAR templates to your experience at {targetCompany || "your target company"}</p>
+            <p className="text-slate-400 text-sm">
+              Selecting DSA, System Design, {targetRole || "role-specific"}, and Behavioural questions
+              tailored to your skills
+            </p>
           </div>
         )}
 
-        {/* Filter tabs */}
+        {/* Filters */}
         {questions && !generating && (
           <>
-            <div className="flex gap-2 mb-4 flex-wrap">
-              {(["all", "behavioral", "technical", "situational", "leadership"] as const).map((f) => (
-                <button
-                  key={f}
-                  onClick={() => setFilterType(f)}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all border ${
-                    filterType === f
-                      ? "bg-indigo-600 text-white border-indigo-500"
-                      : "bg-transparent text-slate-400 border-slate-700 hover:text-white hover:border-slate-500"
-                  }`}
-                >
-                  {f === "all" ? `All (${questions.length})` : `${TYPE_META[f]?.label} (${questions.filter(q => q.type === f).length})`}
-                </button>
-              ))}
+            {/* Domain filter */}
+            <div className="mb-2">
+              <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-2">Filter by Domain</p>
+              <div className="flex gap-2 flex-wrap">
+                {domains.map((d) => {
+                  const meta = d !== "all" ? DOMAIN_META[d] : null;
+                  const Icon = meta?.icon;
+                  const count = d === "all" ? questions.length : questions.filter(q => q.domain === d).length;
+                  return (
+                    <button
+                      key={d}
+                      onClick={() => setFilterDomain(d)}
+                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all border ${
+                        filterDomain === d
+                          ? "bg-indigo-600 text-white border-indigo-500"
+                          : "bg-transparent text-slate-400 border-slate-700 hover:text-white hover:border-slate-500"
+                      }`}
+                    >
+                      {Icon && <Icon className="w-3 h-3" />}
+                      {d === "all" ? `All (${count})` : `${d} (${count})`}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Type filter */}
+            <div className="mb-4">
+              <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-2">Filter by Type</p>
+              <div className="flex gap-2 flex-wrap">
+                {(["all", "behavioral", "technical", "situational", "leadership"] as const).map((f) => (
+                  <button
+                    key={f}
+                    onClick={() => setFilterType(f)}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all border ${
+                      filterType === f
+                        ? "bg-indigo-600 text-white border-indigo-500"
+                        : "bg-transparent text-slate-400 border-slate-700 hover:text-white hover:border-slate-500"
+                    }`}
+                  >
+                    {f === "all"
+                      ? `All Types (${questions.length})`
+                      : `${TYPE_META[f]?.label} (${questions.filter(q => q.type === f).length})`}
+                  </button>
+                ))}
+              </div>
             </div>
 
             {/* Question Cards */}
             <div className="space-y-3">
               {filtered.map((q, idx) => {
                 const meta = TYPE_META[q.type];
-                const Icon = meta.icon;
+                const TypeIcon = meta.icon;
+                const domainMeta = DOMAIN_META[q.domain];
+                const DomainIcon = domainMeta?.icon;
                 const isOpen = expanded[q.id];
                 const myAnswer = answers[q.id] ?? "";
                 const myScore = scores[q.id];
@@ -399,17 +482,19 @@ export default function InterviewPrepPage() {
                 return (
                   <div key={q.id} className={`card border transition-all ${isOpen ? "border-indigo-500/30" : ""}`}>
                     {/* Question Header */}
-                    <button
-                      onClick={() => toggle(q.id)}
-                      className="w-full text-left flex items-start gap-3"
-                    >
+                    <button onClick={() => toggle(q.id)} className="w-full text-left flex items-start gap-3">
                       <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 mt-0.5 border ${meta.bg}`}>
-                        <Icon className={`w-4 h-4 ${meta.color}`} />
+                        <TypeIcon className={`w-4 h-4 ${meta.color}`} />
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 mb-1 flex-wrap">
                           <span className={`text-[10px] font-bold uppercase tracking-wider ${meta.color}`}>{meta.label}</span>
                           <span className={`text-[10px] font-semibold ${DIFF_COLOR[q.difficulty]}`}>· {q.difficulty}</span>
+                          {DomainIcon && (
+                            <span className={`flex items-center gap-1 text-[10px] font-medium ${domainMeta.color}`}>
+                              · <DomainIcon className="w-2.5 h-2.5" /> {q.domain}
+                            </span>
+                          )}
                           <span className="text-[10px] text-slate-600">Q{idx + 1}</span>
                           {myScore !== undefined && (
                             <span className={`text-[10px] font-bold ml-auto ${myScore >= 70 ? "text-emerald-400" : myScore >= 50 ? "text-amber-400" : "text-rose-400"}`}>
@@ -420,7 +505,9 @@ export default function InterviewPrepPage() {
                         <p className="text-sm font-medium text-white leading-relaxed pr-8">{q.question}</p>
                       </div>
                       <div className="shrink-0 mt-1">
-                        {isOpen ? <ChevronUp className="w-4 h-4 text-slate-400" /> : <ChevronDown className="w-4 h-4 text-slate-400" />}
+                        {isOpen
+                          ? <ChevronUp className="w-4 h-4 text-slate-400" />
+                          : <ChevronDown className="w-4 h-4 text-slate-400" />}
                       </div>
                     </button>
 
@@ -447,6 +534,18 @@ export default function InterviewPrepPage() {
                           <p className="text-xs text-slate-300 leading-relaxed">{q.hint}</p>
                         </div>
 
+                        {/* Model Answer (technical questions) */}
+                        {q.modelAnswer && (
+                          <div className="p-3 bg-cyan-500/5 border border-cyan-500/20 rounded-lg">
+                            <p className="text-[10px] font-semibold text-cyan-400 mb-2 flex items-center gap-1">
+                              <BookOpen className="w-3 h-3" /> Model Answer
+                            </p>
+                            <div className="text-xs text-slate-300 leading-relaxed whitespace-pre-wrap font-mono bg-slate-900/40 rounded-lg p-3 border border-slate-700/40 max-h-80 overflow-y-auto">
+                              {q.modelAnswer}
+                            </div>
+                          </div>
+                        )}
+
                         {/* STAR Template */}
                         {q.starTemplate && (
                           <div className="space-y-2">
@@ -472,7 +571,7 @@ export default function InterviewPrepPage() {
                           <textarea
                             className="input text-sm resize-none leading-relaxed"
                             rows={5}
-                            placeholder="Type your answer here — use the STAR template above as a guide. Include specific numbers, technologies, and outcomes..."
+                            placeholder="Type your answer here — use the STAR template or model answer above as a guide. Include specific numbers, technologies, and outcomes..."
                             value={myAnswer}
                             onChange={(e) => setAnswers(p => ({ ...p, [q.id]: e.target.value }))}
                           />
@@ -496,8 +595,8 @@ export default function InterviewPrepPage() {
                               {myScore >= 70
                                 ? "Strong answer! Good use of specifics and structure."
                                 : myScore >= 50
-                                ? "Decent answer. Add quantified outcomes (numbers, percentages) to strengthen it."
-                                : "Needs improvement. Use the STAR format above and add concrete metrics."}
+                                ? "Decent. Add quantified outcomes (numbers, percentages) to strengthen it."
+                                : "Needs improvement. Use the STAR format or model answer above and add concrete metrics."}
                             </div>
                           )}
                         </div>
@@ -508,10 +607,9 @@ export default function InterviewPrepPage() {
               })}
             </div>
 
-            {/* Empty state for filter */}
             {filtered.length === 0 && (
               <div className="card text-center py-12 text-slate-400">
-                <p>No {filterType} questions generated for your profile level.</p>
+                <p>No questions match the selected filters.</p>
               </div>
             )}
           </>
@@ -523,17 +621,20 @@ export default function InterviewPrepPage() {
             <div className="w-14 h-14 rounded-full bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center mx-auto mb-4">
               <Brain className="w-7 h-7 text-indigo-400" />
             </div>
-            <p className="text-white font-semibold mb-2">Ready to prepare</p>
-            <p className="text-slate-400 text-sm max-w-sm mx-auto mb-6">
-              Enter the role and company above, then click <strong className="text-white">Generate Questions</strong> to get a personalised set of behavioural, technical, situational, and leadership questions with STAR templates built from your profile.
+            <p className="text-white font-semibold mb-2">One-stop interview destination</p>
+            <p className="text-slate-400 text-sm max-w-md mx-auto mb-6">
+              Enter your target role and company above, then click{" "}
+              <strong className="text-white">Generate Questions</strong> to get a personalised question set covering all domains below.
             </p>
-            <div className="flex items-center justify-center gap-6 text-xs text-slate-500 flex-wrap">
-              {(["behavioral", "technical", "situational", "leadership"] as const).map((t) => {
-                const Icon = TYPE_META[t].icon;
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 max-w-2xl mx-auto text-xs text-slate-400">
+              {Object.entries(DOMAIN_META).map(([d, meta]) => {
+                const Icon = meta.icon;
                 return (
-                  <span key={t} className={`flex items-center gap-1.5 ${TYPE_META[t].color}`}>
-                    <Icon className="w-3.5 h-3.5" /> {TYPE_META[t].label}
-                  </span>
+                  <div key={d} className={`flex items-center gap-2 p-2 rounded-lg border border-slate-700/50 ${meta.color}`}
+                    style={{ background: "rgba(255,255,255,0.02)" }}>
+                    <Icon className="w-3.5 h-3.5 shrink-0" />
+                    <span className="text-[11px]">{d}</span>
+                  </div>
                 );
               })}
             </div>
@@ -542,7 +643,8 @@ export default function InterviewPrepPage() {
 
         {questions && !generating && (
           <p className="text-xs text-slate-600 text-center mt-8">
-            {questions.length} questions generated · Based on {profile?.skills?.length} skills & {profile?.experienceYears}yr exp
+            {questions.length} questions generated · {domains.length - 1} domains covered
+            {" · "}{profile?.skills?.length} skills in profile · {profile?.experienceYears}yr exp
             {profile?.resumeText && !profile.resumeText.startsWith("[Resume file:") ? " · Resume enriched" : ""}
           </p>
         )}

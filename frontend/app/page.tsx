@@ -32,15 +32,109 @@ const SKILL_CATEGORIES: Record<string, string[]> = {
     "Data Pipelines", "Feature Engineering", "A/B Testing", "Statistics",
   ],
   "Cloud & DevOps": [
-    "AWS", "Azure", "GCP", "Docker", "Kubernetes", "Terraform", "Pulumi",
-    "GitHub Actions", "GitLab CI", "Jenkins", "ArgoCD", "Helm", "Istio",
-    "CI/CD", "Linux", "Ansible", "Prometheus", "Grafana", "OpenTelemetry",
-    "Service Mesh", "Site Reliability Engineering",
+    // Cloud Platforms
+    "AWS", "Azure", "GCP", "Oracle Cloud (OCI)", "IBM Cloud",
+    // Containers & Orchestration
+    "Docker", "Kubernetes", "Helm", "ArgoCD", "Flux CD", "Kustomize",
+    "OpenShift", "Rancher", "Docker Compose", "Podman",
+    // IaC & Configuration Management
+    "Terraform", "Pulumi", "Ansible", "Chef", "Puppet", "SaltStack",
+    "AWS CloudFormation", "AWS CDK", "Crossplane",
+    // CI/CD Pipelines
+    "GitHub Actions", "GitLab CI/CD", "Jenkins", "Azure DevOps Pipelines",
+    "CircleCI", "TeamCity", "Bamboo", "Bitbucket Pipelines", "Tekton",
+    "Drone CI", "Travis CI", "AWS CodePipeline", "AWS CodeBuild",
+    // Service Mesh & Networking
+    "Istio", "Linkerd", "Envoy Proxy", "NGINX", "HAProxy", "Traefik",
+    // Observability & Monitoring
+    "Prometheus", "Grafana", "Datadog", "New Relic", "Dynatrace",
+    "ELK Stack (Elasticsearch, Logstash, Kibana)", "Splunk", "Jaeger",
+    "Zipkin", "OpenTelemetry", "CloudWatch", "Azure Monitor",
+    // DevSecOps
+    "SonarQube", "Trivy", "Snyk", "OWASP ZAP", "HashiCorp Vault",
+    "Falco", "SAST", "DAST", "Aqua Security", "Checkov",
+    // Other
+    "Linux", "Bash/Shell Scripting", "KEDA", "Cert-Manager",
+    "Site Reliability Engineering", "GitOps", "Platform Engineering",
+    "Blue-Green Deployment", "Canary Releases", "Feature Flags",
+  ],
+  "B2B Integration": [
+    // webMethods Platform (Software AG)
+    "webMethods Integration Server", "webMethods.IO Integration",
+    "webMethods.IO B2B", "webMethods Trading Networks",
+    "webMethods BPM / Process Engine", "webMethods Designer (Eclipse IDE)",
+    "webMethods Flow Services", "webMethods Universal Messaging",
+    "webMethods Mediator", "webMethods API Gateway",
+    "webMethods API Portal", "webMethods CloudStreams",
+    "webMethods ActiveTransfer", "webMethods Broker",
+    "webMethods Optimize / BAM", "webMethods CAF",
+    "webMethods Document Types", "webMethods JDBC Adapter",
+    "webMethods SAP Adapter", "webMethods Flat File Schema",
+    // EDI & Standards
+    "EDI X12", "EDIFACT", "RosettaNet (RNIF)", "AS2 (EDIINT)",
+    "AS4", "SFTP/FTP/FTPS", "HL7", "HIPAA EDI", "ANSI X12 850/855/856/810",
+    "XML/JSON Mapping", "XSLT", "ebXML", "SWIFT",
+    // Other Integration Platforms
+    "MuleSoft Anypoint Platform", "Dell Boomi AtomSphere",
+    "IBM Sterling B2B Integrator", "IBM MQ", "IBM DataPower Gateway",
+    "IBM App Connect Enterprise (ACE/IIB)",
+    "TIBCO BusinessWorks", "TIBCO EMS",
+    "SAP Integration Suite (CPI/BTP)", "SAP PI/PO",
+    "Axway AMPLIFY / B2Bi", "Informatica PowerCenter",
+    "Informatica IICS", "OpenText Business Network",
+    "Cleo Integration Cloud", "Jitterbit", "SnapLogic",
+    // BPM & Workflow
+    "BPMN 2.0", "Business Process Modelling", "Process Automation",
+    "Camunda BPM", "IBM Business Automation Workflow (BAW)",
+    "Pega BPM", "Appian", "ServiceNow Integration Hub",
+    // Protocols & Formats
+    "SOAP/WSDL", "REST APIs", "GraphQL", "JSON", "XML",
+    "FIX Protocol", "OData", "JDBC/ODBC",
+  ],
+  "API Management": [
+    // Gateways & Platforms
+    "webMethods API Gateway", "webMethods API Portal",
+    "Kong Gateway", "Kong Konnect", "AWS API Gateway",
+    "Azure API Management (APIM)", "Google Apigee", "Apigee X",
+    "MuleSoft API Manager", "IBM API Connect",
+    "Axway Amplify API Management", "WSO2 API Manager",
+    "3scale (Red Hat)", "Tyk Gateway",
+    // API Design & Standards
+    "OpenAPI 3.x / Swagger", "API-first Design",
+    "API Versioning", "Rate Limiting", "Throttling", "SLA Policies",
+    "OAuth 2.0", "JWT", "API Keys", "mTLS",
+    "API Security (OWASP API Top 10)", "GraphQL APIs",
+    // Testing & Monitoring
+    "Postman", "Newman", "Insomnia", "SoapUI",
+    "API Contract Testing", "API Mock Servers", "WireMock",
+    "API Analytics", "API Monitoring",
   ],
   "Databases": [
-    "PostgreSQL", "MySQL", "SQLite", "MongoDB", "Redis", "Elasticsearch",
-    "DynamoDB", "Cassandra", "Neo4j", "InfluxDB", "Snowflake", "BigQuery",
-    "SQL", "GraphQL", "Vector Databases", "Prisma", "Sequelize",
+    // Relational
+    "PostgreSQL", "MySQL", "Oracle Database", "SQL Server (MSSQL)",
+    "IBM DB2", "MariaDB", "SQLite", "CockroachDB",
+    // NoSQL - Document
+    "MongoDB", "CouchDB", "Amazon DocumentDB", "Firestore",
+    // NoSQL - Key-Value / Cache
+    "Redis", "Memcached", "DynamoDB", "Azure Cosmos DB", "Hazelcast",
+    // NoSQL - Wide Column
+    "Apache Cassandra", "HBase", "Google Bigtable",
+    // Graph
+    "Neo4j", "Amazon Neptune", "ArangoDB", "TigerGraph",
+    // Time Series
+    "InfluxDB", "TimescaleDB", "OpenTSDB", "Prometheus (metrics store)",
+    // Search
+    "Elasticsearch", "OpenSearch", "Apache Solr",
+    // Data Warehouse / OLAP
+    "Snowflake", "Google BigQuery", "Amazon Redshift",
+    "Azure Synapse Analytics", "Databricks Lakehouse",
+    "ClickHouse", "Apache Druid", "Greenplum",
+    // Skills & Concepts
+    "SQL Query Optimisation", "Database Design / ERD", "Indexing Strategies",
+    "Stored Procedures", "Views & Triggers", "Partitioning & Sharding",
+    "Replication & High Availability", "Database Migration",
+    "JDBC / ODBC", "Connection Pooling", "Prisma", "Sequelize",
+    "Vector Databases (pgvector, Pinecone, Weaviate)",
   ],
   "Testing & QA": [
     "Selenium", "Playwright", "Cypress", "Jest", "Vitest", "Pytest", "JUnit",
@@ -78,10 +172,16 @@ function getOrderedCategories(role: string): [string, string[]][] {
     Object.assign(priorities, { "Data & AI/ML": 10, "Databases": 10, "Cloud & DevOps": 8, "Backend": 6, "Tools & Practices": 5 });
   } else if (/machine learning|ml engineer|data scientist|ai engineer|nlp|deep learning|research/i.test(r)) {
     Object.assign(priorities, { "Data & AI/ML": 10, "Databases": 7, "Cloud & DevOps": 7, "Backend": 5, "Architecture & Design": 5 });
-  } else if (/devops|sre|platform|infra|cloud engineer|reliability|kubernetes|terraform/i.test(r)) {
+  } else if (/devops|sre|platform|infra|cloud engineer|reliability|kubernetes|terraform|cicd|ci\/cd|pipeline/i.test(r)) {
     Object.assign(priorities, { "Cloud & DevOps": 10, "Architecture & Design": 8, "Databases": 6, "Backend": 5, "Tools & Practices": 5 });
   } else if (/qa|quality|test|sdet|automation.*test|test.*automation/i.test(r)) {
     Object.assign(priorities, { "Testing & QA": 10, "Architecture & Design": 7, "Backend": 7, "Cloud & DevOps": 6, "Tools & Practices": 5 });
+  } else if (/b2b|integration|webmethod|trading network|edi|bpm|mulesoft|boomi|tibco|sterling|api gateway|middleware|ipaas/i.test(r)) {
+    Object.assign(priorities, { "B2B Integration": 10, "API Management": 9, "Databases": 7, "Architecture & Design": 8, "Cloud & DevOps": 5, "Tools & Practices": 4 });
+  } else if (/api management|api manager|api platform|kong|apigee|apim/i.test(r)) {
+    Object.assign(priorities, { "API Management": 10, "B2B Integration": 8, "Architecture & Design": 9, "Cloud & DevOps": 6, "Backend": 5 });
+  } else if (/database|dba|data engineer|sql|nosql|postgres|oracle dba/i.test(r)) {
+    Object.assign(priorities, { "Databases": 10, "Data & AI/ML": 8, "Backend": 7, "Cloud & DevOps": 6, "Architecture & Design": 5 });
   } else if (/security|cyber|pentest|appsec/i.test(r)) {
     Object.assign(priorities, { "Cloud & DevOps": 10, "Architecture & Design": 9, "Backend": 8, "Databases": 6, "Tools & Practices": 5 });
   } else if (/architect|principal|staff|tech lead/i.test(r)) {

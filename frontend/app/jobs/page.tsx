@@ -13,7 +13,25 @@ import {
 } from "lucide-react";
 
 const WORK_MODES = ["All", "Remote", "Hybrid", "On-site"];
-const TECH_FILTERS = ["All", "Playwright", "Selenium", "Python", "Java", "TypeScript", "Cypress", "K6", "AWS"];
+const TECH_FILTERS = [
+  "All",
+  // QA / Automation
+  "Playwright", "Selenium", "Cypress", "K6",
+  // Languages
+  "Python", "Java", "TypeScript",
+  // Cloud / DevOps
+  "AWS", "Azure", "Kubernetes", "Terraform", "Jenkins", "GitHub Actions", "Docker",
+  // B2B Integration
+  "webMethods", "webMethods.IO", "Trading Networks", "webMethods BPM",
+  "MuleSoft", "Dell Boomi", "IBM Sterling", "IBM MQ", "TIBCO",
+  "SAP CPI", "Axway", "Informatica",
+  // API Management
+  "Kong", "Apigee", "Azure APIM", "IBM API Connect",
+  // EDI / Standards
+  "EDI X12", "EDIFACT", "AS2",
+  // Databases
+  "PostgreSQL", "Oracle DB", "MongoDB", "Snowflake",
+];
 const PORTAL_FILTERS: Array<"All" | JobPortal> = ["All", "LinkedIn", "Indeed", "Glassdoor", "Naukri", "Adzuna", "Remotive", "Arbeitnow", "TheMuse", "Direct"];
 const AUTO_REFRESH_MS = 10 * 60 * 1000; // 10 minutes
 
@@ -113,7 +131,6 @@ export default function JobsPage() {
     }, AUTO_REFRESH_MS);
 
     return () => clearInterval(interval);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const refresh = () => { if (profile) loadJobs(profile); };
@@ -136,7 +153,6 @@ export default function JobsPage() {
   });
 
   const upliftCount = jobs.filter((j) => j.levelUp).length;
-  const sameLevelCount = jobs.filter((j) => !j.levelUp).length;
   const verifiedCount = jobs.filter((j) => j.verificationStatus === "VERIFIED").length;
   const unverifiedCount = jobs.filter((j) => j.verificationStatus !== "VERIFIED").length;
 

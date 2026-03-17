@@ -4,7 +4,7 @@ import { Job, JobPortal } from "@/lib/types";
 import {
   MapPin, Building2, Clock, ArrowUpRight, CheckCircle2,
   ExternalLink, TrendingUp, Bookmark, BookmarkCheck,
-  ChevronDown, ChevronUp, Zap, DollarSign
+  ChevronUp, Zap, DollarSign
 } from "lucide-react";
 import Link from "next/link";
 import { getSavedJobIds, toggleSavedJob, loadProfile } from "@/lib/profile";

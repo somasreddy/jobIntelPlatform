@@ -5,9 +5,9 @@ import Navbar from "@/components/Navbar";
 import { loadProfile } from "@/lib/profile";
 import { CandidateProfile } from "@/lib/types";
 import {
-  Linkedin, Sparkles, CheckCircle, AlertCircle, ArrowRight,
-  Star, Zap, User, Briefcase, Award, BookOpen, UserCircle2,
-  TrendingUp, MessageSquare, Eye
+  Linkedin, Sparkles, CheckCircle, AlertCircle,
+  Star, User, Briefcase, Award, UserCircle2,
+  MessageSquare, Eye
 } from "lucide-react";
 
 interface Suggestion {

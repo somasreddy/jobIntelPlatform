@@ -57,16 +57,31 @@ function fmtSalary(n: number, loc: string): string {
   return `${base.symbol}${Math.round(n)}k`;
 }
 
+// Role-specific salary adjusters (multiplier applied to base salary range)
+function getRoleMultiplier(role: string): number {
+  const r = role.toLowerCase();
+  if (/b2b|webmethod|mulesoft|boomi|tibco|sterling|trading network|edi|middleware|ipaas/i.test(r)) return 1.12;
+  if (/api management|api gateway|kong|apigee/i.test(r)) return 1.10;
+  if (/devops|sre|platform engineer|cicd|ci\/cd|devsecops/i.test(r)) return 1.15;
+  if (/cloud architect|solution architect|enterprise architect/i.test(r)) return 1.20;
+  if (/data engineer|ml engineer|ai engineer|machine learning/i.test(r)) return 1.18;
+  if (/database|dba/i.test(r)) return 1.05;
+  if (/fullstack|full.?stack/i.test(r)) return 1.08;
+  if (/qa|test|sdet/i.test(r)) return 0.95;
+  return 1.0;
+}
+
 function computeSalary(role: string, exp: number, loc: string) {
   const base = SALARY_BASE[loc] ?? SALARY_BASE["United States (Remote)"];
   const isINR = base.currency === "INR";
+  const mult = getRoleMultiplier(role);
   if (isINR) {
-    const min = base.minMult + exp * base.expMult;
-    const max = base.maxMult + exp * (base.expMult * 1.4);
+    const min = (base.minMult + exp * base.expMult) * mult;
+    const max = (base.maxMult + exp * (base.expMult * 1.4)) * mult;
     return { min: min, max: max, isINR: true };
   }
-  const min = (base.minMult + exp * base.expMult) * 1000;
-  const max = (base.maxMult + exp * (base.expMult * 1.3)) * 1000;
+  const min = (base.minMult + exp * base.expMult) * 1000 * mult;
+  const max = (base.maxMult + exp * (base.expMult * 1.3)) * 1000 * mult;
   return { min, max, isINR: false };
 }
 
@@ -82,8 +97,13 @@ const TOP_SKILLS_BY_ROLE = (role: string) => {
   if (/frontend|react|vue|angular/.test(r)) return [["TypeScript", 18], ["React", 15], ["Next.js", 14], ["GraphQL", 12]];
   if (/backend|api|node|java|python/.test(r)) return [["Go", 22], ["Rust", 20], ["Kubernetes", 18], ["AWS", 16]];
   if (/data|ml|ai|machine/.test(r)) return [["LLMs", 28], ["PyTorch", 22], ["MLOps", 20], ["Spark", 16]];
-  if (/devops|platform|cloud|sre/.test(r)) return [["Kubernetes", 22], ["Terraform", 18], ["AWS", 16], ["Helm", 14]];
+  if (/devops|platform|cloud|sre|cicd|ci\/cd|pipeline/.test(r)) return [["Kubernetes", 22], ["Terraform", 18], ["ArgoCD", 16], ["Helm", 14]];
   if (/qa|test|sdet/.test(r)) return [["Playwright", 15], ["Kubernetes", 18], ["K6", 12], ["Go", 20]];
+  if (/b2b|integration|webmethod|mulesoft|boomi|middleware|ipaas/.test(r)) return [["webMethods API Gateway", 20], ["MuleSoft Anypoint", 22], ["webMethods.IO Integration", 18], ["IBM Sterling", 15]];
+  if (/api management|api manager|api gateway|apigee|kong/.test(r)) return [["Apigee X", 22], ["Kong Konnect", 20], ["AWS API Gateway", 18], ["Azure APIM", 16]];
+  if (/database|dba|sql|nosql/.test(r)) return [["Snowflake", 22], ["Databricks", 20], ["PostgreSQL", 15], ["Redis", 14]];
+  if (/edi|trading network|sterling|b2b/.test(r)) return [["EDI X12", 18], ["AS2/EDIINT", 16], ["webMethods Trading Networks", 20], ["EDIFACT", 14]];
+  if (/bpm|process|workflow|camunda|pega/.test(r)) return [["Camunda BPM", 20], ["BPMN 2.0", 16], ["webMethods BPM", 18], ["Pega", 15]];
   return [["Kubernetes", 20], ["AWS", 18], ["Go", 22], ["TypeScript", 15]];
 };
 
@@ -160,7 +180,6 @@ export default function InsightsPage() {
   const topSkills = TOP_SKILLS_BY_ROLE(role) as [string, number][];
 
   // Negotiation script generator
-  const offerNum = parseFloat(offerAmount) || 0;
   const targetAsk = isINR ? maxSal * 1.08 : maxSal * 1000 * 1.08;
   const targetDisplay = isINR ? `${base.symbol}${(targetAsk).toFixed(1)}L` : `${base.symbol}${Math.round(targetAsk / 1000)}k`;
 
