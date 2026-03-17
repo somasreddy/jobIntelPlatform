@@ -55,11 +55,11 @@ export function toggleSavedJob(id: string): boolean {
  */
 export function saveProfile(data: CandidateProfile & { resumeFile?: unknown; preferredLocation?: string }): void {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const { resumeFile: _rf, preferredLocation: _pl, ...clean } = data as Record<string, unknown>;
+  const { resumeFile: _rf, preferredLocation: _pl, ...clean } = data as unknown as Record<string, unknown>;
   const typed: CandidateProfile = {
-    ...(clean as CandidateProfile),
-    currentSalary: Number((clean as CandidateProfile).currentSalary) || 0,
-    experienceYears: Number((clean as CandidateProfile).experienceYears) || 0,
+    ...(clean as unknown as CandidateProfile),
+    currentSalary: Number((clean as unknown as CandidateProfile).currentSalary) || 0,
+    experienceYears: Number((clean as unknown as CandidateProfile).experienceYears) || 0,
   };
   const json = JSON.stringify(typed);
   localStorage.setItem("candidateProfile", json);

@@ -55,7 +55,7 @@ function ScoreBar({ label, score, color }: { label: string; score: number; color
   );
 }
 
-function ScoreRing({ score, onClick }: { score: number; onClick: () => void }) {
+function ScoreRing({ score, onClick }: { score: number; onClick: (e: React.MouseEvent) => void }) {
   const r = 22;
   const circ = 2 * Math.PI * r;
   const fill = (score / 100) * circ;
