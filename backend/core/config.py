@@ -39,7 +39,7 @@ class Settings(BaseSettings):
     PERPLEXITY_API_KEY: str = ""
     PERPLEXITY_MODEL: str = "sonar-reasoning"
     
-    CONSOLIDATED_MODE: bool = False
+    CONSOLIDATED_MODE: bool = True
     
     class Config:
         env_file = ".env"
