@@ -315,7 +315,7 @@ export default function ProfilePage() {
                         {pct}% — {label}
                       </span>
                     </div>
-                    <div className="h-1.5 bg-[#0f172a] rounded-full overflow-hidden">
+                    <div className="h-1.5 rounded-full overflow-hidden" style={{ background: "var(--bg-base)" }}>
                       <div className={`h-full rounded-full transition-all duration-500 ${color}`} style={{ width: `${pct}%` }} />
                     </div>
                   </div>

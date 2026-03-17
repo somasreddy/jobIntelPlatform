@@ -305,7 +305,7 @@ export default function LinkedInEnhancerPage() {
                         </div>
 
                         {s.current && (
-                          <div className="mb-2 p-2 bg-[#0f172a] rounded-lg border border-slate-700/50">
+                          <div className="mb-2 p-2 rounded-lg" style={{ background: "var(--bg-base)", border: "1px solid var(--border)" }}>
                             <p className="text-[10px] text-slate-500 mb-0.5 uppercase font-semibold">Current</p>
                             <p className="text-xs text-slate-400">{s.current}</p>
                           </div>

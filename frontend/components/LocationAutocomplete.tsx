@@ -151,20 +151,29 @@ export default function LocationAutocomplete({
       {open && suggestions.length > 0 && (
         <ul
           ref={listRef}
-          className="absolute z-50 w-full mt-1 max-h-56 overflow-y-auto rounded-xl border border-slate-700/60 bg-[#0d1526] shadow-2xl shadow-black/40 py-1"
+          className="absolute z-50 w-full mt-1 max-h-56 overflow-y-auto rounded-xl shadow-2xl shadow-black/50 py-1"
+          style={{
+            background: "var(--bg-elevated)",
+            border: "1px solid var(--border-hover)",
+            backdropFilter: "blur(20px)",
+          }}
         >
           {suggestions.map((city, i) => (
             <li
               key={city}
               onMouseDown={() => handleSelect(city)}
               onMouseEnter={() => setHighlighted(i)}
-              className={`flex items-center gap-2 px-3 py-2 text-sm cursor-pointer transition-colors ${
+              className="flex items-center gap-2 px-3 py-2 text-sm cursor-pointer transition-colors"
+              style={
                 i === highlighted
-                  ? "bg-indigo-600/20 text-indigo-300"
-                  : "text-slate-300 hover:bg-slate-800/60"
-              }`}
+                  ? {
+                      background: "color-mix(in srgb, var(--accent) 18%, transparent)",
+                      color: "var(--accent-bright)",
+                    }
+                  : { color: "var(--text-secondary)" }
+              }
             >
-              <MapPin className="w-3 h-3 text-slate-500 shrink-0" />
+              <MapPin className="w-3 h-3 shrink-0" style={{ color: "var(--accent)" }} />
               {city}
             </li>
           ))}

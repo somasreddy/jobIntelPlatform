@@ -3,6 +3,9 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState, useEffect } from "react";
 import { loadProfile } from "@/lib/profile";
+import { useTheme } from "@/components/ThemeProvider";
+import ThemeSelector from "@/components/ThemeSelector";
+import { THEMES } from "@/lib/theme";
 import {
   LayoutDashboard,
   Briefcase,
@@ -13,6 +16,7 @@ import {
   Zap,
   Linkedin,
   Brain,
+  Palette,
 } from "lucide-react";
 
 const navItems = [
@@ -29,6 +33,9 @@ const navItems = [
 export default function Navbar() {
   const path = usePathname();
   const [userName, setUserName] = useState<string>("");
+  const [themeOpen, setThemeOpen] = useState(false);
+  const { theme } = useTheme();
+
   useEffect(() => {
     const p = loadProfile();
     if (p?.name) setUserName(p.name);
@@ -38,12 +45,20 @@ export default function Navbar() {
     ? userName.trim().split(/\s+/).map((w) => w[0]).slice(0, 2).join("").toUpperCase()
     : "";
 
+  const currentTheme = THEMES.find((t) => t.id === theme);
+
   return (
-    <aside className="fixed left-0 top-0 h-screen w-64 flex flex-col bg-[#1e293b] border-r border-[#334155] z-50">
+    <aside className="fixed left-0 top-0 h-screen w-64 flex flex-col z-50">
       {/* Logo */}
-      <div className="px-6 py-5 border-b border-[#334155]">
+      <div className="px-6 py-5" style={{ borderBottom: "1px solid var(--border)" }}>
         <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-xl bg-linear-to-br from-indigo-500 to-cyan-400 flex items-center justify-center shadow-lg shadow-indigo-500/30">
+          <div
+            className="w-9 h-9 rounded-xl flex items-center justify-center shadow-lg"
+            style={{
+              background: "linear-gradient(135deg, var(--accent-deep), var(--accent), var(--accent-secondary))",
+              boxShadow: "0 4px 14px -3px var(--glow-accent)",
+            }}
+          >
             <Zap className="w-5 h-5 text-white" />
           </div>
           <div>
@@ -61,16 +76,27 @@ export default function Navbar() {
             <Link
               key={href}
               href={href}
-              className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all ${
-                active
-                  ? "bg-indigo-500/15 text-indigo-300 border border-indigo-500/30 shadow-sm"
-                  : "text-slate-400 hover:bg-slate-700/40 hover:text-slate-200"
-              }`}
+              className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all"
+              style={active ? {
+                background: "color-mix(in srgb, var(--accent) 15%, transparent)",
+                color: "var(--accent-bright)",
+                border: "1px solid var(--border-hover)",
+                boxShadow: "0 0 12px -4px var(--glow-accent)",
+              } : {
+                color: "#94a3b8",
+                border: "1px solid transparent",
+              }}
             >
-              <Icon className={`w-5 h-5 ${active ? "text-indigo-400" : ""}`} />
+              <Icon
+                className="w-5 h-5"
+                style={active ? { color: "var(--accent-bright)" } : {}}
+              />
               {label}
               {active && (
-                <div className="ml-auto w-1.5 h-1.5 rounded-full bg-indigo-400" />
+                <div
+                  className="ml-auto w-1.5 h-1.5 rounded-full"
+                  style={{ background: "var(--accent-bright)" }}
+                />
               )}
             </Link>
           );
@@ -78,10 +104,54 @@ export default function Navbar() {
       </nav>
 
       {/* Footer */}
-      <div className="px-4 pb-4 pt-2 border-t border-[#334155]">
+      <div className="px-4 pb-4 pt-2 space-y-2" style={{ borderTop: "1px solid var(--border)" }}>
+        {/* Theme picker button */}
+        <div className="relative">
+          <button
+            onClick={() => setThemeOpen((o) => !o)}
+            className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-sm transition-all"
+            style={{
+              background: themeOpen
+                ? "color-mix(in srgb, var(--accent) 12%, transparent)"
+                : "rgba(255,255,255,0.03)",
+              border: themeOpen
+                ? "1px solid var(--border-hover)"
+                : "1px solid var(--border)",
+              color: themeOpen ? "var(--accent-bright)" : "#94a3b8",
+            }}
+          >
+            <Palette className="w-4 h-4 shrink-0" />
+            <span className="flex-1 text-left text-xs font-medium">
+              {currentTheme?.emoji} {currentTheme?.name || "Theme"}
+            </span>
+            {/* Live preview dots */}
+            <div className="flex gap-1">
+              {(currentTheme?.colors ?? []).map((c, i) => (
+                <span
+                  key={i}
+                  className="w-2.5 h-2.5 rounded-full border border-white/10"
+                  style={{ background: c }}
+                />
+              ))}
+            </div>
+          </button>
+
+          <ThemeSelector open={themeOpen} onClose={() => setThemeOpen(false)} />
+        </div>
+
+        {/* Profile chip */}
         {userName ? (
-          <div className="flex items-center gap-3 rounded-xl bg-[#263348] border border-[#334155] p-3">
-            <div className="w-8 h-8 rounded-full bg-linear-to-br from-indigo-500 to-cyan-400 flex items-center justify-center shrink-0 text-white text-xs font-bold shadow-md">
+          <div
+            className="flex items-center gap-3 rounded-xl p-3"
+            style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)" }}
+          >
+            <div
+              className="w-8 h-8 rounded-full flex items-center justify-center shrink-0 text-white text-xs font-bold"
+              style={{
+                background: "linear-gradient(135deg, var(--accent), var(--accent-secondary))",
+                boxShadow: "0 2px 8px -2px var(--glow-accent)",
+              }}
+            >
               {initials}
             </div>
             <div className="min-w-0">
@@ -90,8 +160,16 @@ export default function Navbar() {
             </div>
           </div>
         ) : (
-          <div className="rounded-xl bg-linear-to-br from-indigo-900/60 to-cyan-900/40 border border-indigo-500/20 p-3">
-            <p className="text-xs font-semibold text-indigo-300">AI-Powered Platform</p>
+          <div
+            className="rounded-xl p-3"
+            style={{
+              background: "color-mix(in srgb, var(--accent-deep) 20%, transparent)",
+              border: "1px solid var(--border)",
+            }}
+          >
+            <p className="text-xs font-semibold" style={{ color: "var(--accent-bright)" }}>
+              AI-Powered Platform
+            </p>
             <p className="text-[11px] text-slate-400 mt-0.5">Job Discovery · ATS · Intelligence</p>
           </div>
         )}

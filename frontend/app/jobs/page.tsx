@@ -239,7 +239,7 @@ export default function JobsPage() {
               />
             </div>
 
-            <div className="flex gap-1 bg-[#0f172a] rounded-lg p-1">
+            <div className="flex gap-1 rounded-lg p-1" style={{ background: "var(--bg-base)" }}>
               {(["All", "CareerUplift", "SameLevel"] as const).map((f) => (
                 <button
                   key={f}

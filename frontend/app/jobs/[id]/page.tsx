@@ -107,13 +107,154 @@ export default function JobDetailPage() {
     setTimeout(() => { setGenerating(false); setGenerated(true); }, 2500);
   };
 
+  const buildResumeHTML = (forPrint: boolean): string => {
+    const yrs = profile.experienceYears || 3;
+    const role = profile.currentRole || "Software Engineer";
+    const currentYear = new Date().getFullYear();
+    const currentStart = currentYear - Math.min(yrs, 3);
+    const seniorPrefixes = ["Senior", "Lead", "Principal", "Staff", "Head of", "Director"];
+    const isSenior = seniorPrefixes.some((p) => role.startsWith(p));
+    const strippedRole = role.replace(/^(Senior|Lead|Principal|Staff|Head of|Director)\s+/i, "");
+    const matchedSkills = job!.technologies.filter(
+      (t) => profile.skills.includes(t) || (profile.frameworks ?? []).includes(t)
+    );
+    const bullets = generatedData.bullets ?? [
+      `Architected end-to-end ${job!.technologies[0] || "automation"} framework from scratch, reducing regression cycle time by 40% and enabling daily releases.`,
+      `Designed and implemented ${job!.technologies[1] || "API"} test suites covering 200+ endpoints across microservices, achieving 92% API coverage.`,
+      `Integrated automated test pipeline into CI/CD using ${(profile.cicdTools ?? [job!.technologies[2] || "Jenkins"])[0]}, cutting production defect escape rate by 95%.`,
+      `Mentored a team of 4 junior engineers on test automation best practices, BDD principles, and code review standards.`,
+      `Led performance benchmarking initiative using ${job!.technologies.find(t => ["JMeter","K6","Gatling"].includes(t)) || "load testing tools"}, identifying 3 critical bottlenecks before launch.`,
+      `Collaborated with Product and DevOps to define quality gates, shift-left testing strategy, and release readiness criteria.`,
+    ];
+
+    type ExpEntry = { title: string; period: string; location: string; bullets: string[] };
+    const experienceEntries: ExpEntry[] = [
+      { title: role, period: `${currentStart} – Present`, location: profile.currentLocation || "", bullets },
+    ];
+    if (yrs >= 4) {
+      const prevStart = currentYear - Math.min(yrs, 7);
+      experienceEntries.push({
+        title: isSenior ? strippedRole : `Junior ${strippedRole}`,
+        period: `${prevStart} – ${currentStart}`,
+        location: "",
+        bullets: [
+          `Built and maintained ${job!.technologies[1] || "automated"} test frameworks covering core business workflows, improving overall test reliability by 35%.`,
+          `Collaborated with product managers and developers to define acceptance criteria, reduce defect escape rate, and establish a quality-first culture.`,
+          `Reduced manual testing effort by 60% through systematic automation of regression suites using ${(profile.cicdTools?.[0]) || job!.technologies[2] || "CI/CD pipelines"}.`,
+          `Owned end-to-end release validation for ${job!.technologies[0] || "key product"} features, coordinating UAT sign-off with stakeholders across 3 business units.`,
+        ],
+      });
+    }
+    if (yrs >= 7) {
+      experienceEntries.push({
+        title: `Associate ${strippedRole}`,
+        period: `${currentYear - yrs} – ${currentYear - Math.min(yrs, 7)}`,
+        location: "",
+        bullets: [
+          `Developed manual test cases and exploratory testing strategies for mobile and web applications, catching 40+ critical bugs pre-launch.`,
+          `Participated in sprint ceremonies, contributed to test planning sessions, and documented test results for management reporting.`,
+          `Gained hands-on experience with ${(profile.languages?.[0]) || job!.technologies[0] || "core technologies"}, ${(profile.frameworks?.[0]) || job!.technologies[1] || "automation frameworks"}, and Agile delivery methodologies.`,
+        ],
+      });
+    }
+
+    type SkillCat = { label: string; skills: string[] };
+    const skillCategories: SkillCat[] = [];
+    if ((profile.languages ?? []).length > 0) skillCategories.push({ label: "Programming Languages", skills: profile.languages });
+    if ((profile.frameworks ?? []).length > 0) skillCategories.push({ label: "Frameworks & Libraries", skills: profile.frameworks });
+    if ((profile.skills ?? []).length > 0) skillCategories.push({ label: "Testing & QA Tools", skills: profile.skills });
+    if ((profile.cicdTools ?? []).length > 0) skillCategories.push({ label: "CI/CD & DevOps", skills: profile.cicdTools });
+    if (skillCategories.length === 0) skillCategories.push({ label: "Technologies", skills: job!.technologies });
+
+    const nameParts = (profile.name || "Your Name").trim().toLowerCase().replace(/\s+/g, ".");
+    const mockEmail = profile.name ? `${nameParts}@email.com` : "your.email@example.com";
+    const mockLinkedIn = profile.name ? `linkedin.com/in/${nameParts}` : "linkedin.com/in/yourprofile";
+
+    const skillsHTML = skillCategories.map((cat) =>
+      `<tr><td style="width:28%;font-weight:700;color:#334155;padding-bottom:5px;vertical-align:top;padding-right:10px">${cat.label}:</td>` +
+      `<td style="padding-bottom:5px;color:#475569">${cat.skills.map((s) => matchedSkills.includes(s) ? `<strong style="color:#15803d">${s}</strong>` : s).join(" · ")}</td></tr>`
+    ).join("");
+
+    const expHTML = experienceEntries.map((entry, ei) =>
+      `<div style="margin-bottom:${ei < experienceEntries.length - 1 ? "14px" : "0"}">` +
+      `<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:2px">` +
+      `<span style="font-weight:700;font-size:13px;color:#0f172a">${entry.title}</span>` +
+      `<span style="font-size:11px;color:#64748b;font-style:italic">${entry.period}</span></div>` +
+      `<p style="font-size:11px;color:#64748b;font-style:italic;margin:0 0 5px">${ei === 0 ? (entry.location || "Current Position") : "Previous Position"}</p>` +
+      `<ul style="padding-left:18px;margin:0">${entry.bullets.map((b) => `<li style="margin-bottom:4px;line-height:1.55;font-size:11.5px;color:#334155">${b}</li>`).join("")}</ul>` +
+      `</div>`
+    ).join("");
+
+    const certsHTML = (profile.certifications ?? []).length > 0
+      ? `<div style="margin-bottom:14px"><h2 style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.12em;color:#64748b;border-bottom:1px solid #cbd5e1;padding-bottom:2px;margin-bottom:6px">Certifications</h2>` +
+        `<div style="display:grid;grid-template-columns:1fr 1fr;gap:3px 16px">${profile.certifications.map((c) => `<div style="font-size:11.5px;color:#334155"><span style="color:#15803d;font-weight:700">✓</span> ${c}</div>`).join("")}</div></div>`
+      : "";
+
+    const keywordHTML = matchedSkills.length > 0
+      ? `<div style="margin-top:10px;padding:8px 10px;background:#f0fdf4;border-radius:6px;border:1px solid #bbf7d0">` +
+        `<p style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:#15803d;margin:0 0 4px">✓ ATS Keyword Match — ${job!.organization} · ${job!.title}</p>` +
+        `<p style="font-size:11px;color:#166534;margin:0">${matchedSkills.join("  ·  ")}</p></div>`
+      : "";
+
+    const printStyle = forPrint
+      ? `<style>@media print{body{margin:0}@page{margin:1.5cm;size:A4}}</style>`
+      : "";
+    const printScript = forPrint
+      ? `<script>window.onload=function(){window.print();window.onafterprint=function(){window.close();}}</script>`
+      : "";
+
+    return `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>ATS Resume – ${profile.name || "Candidate"}</title>
+    ${printStyle}${printScript}
+    </head><body style="font-family:'Georgia','Times New Roman',serif;color:#1e293b;font-size:12px;line-height:1.5;max-width:800px;margin:0 auto;padding:40px">
+    <div style="text-align:center;border-bottom:2px solid #1e293b;padding-bottom:16px;margin-bottom:16px">
+      <h1 style="font-size:22px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;margin:0 0 4px">${profile.name || "Your Name"}</h1>
+      <p style="font-size:13px;color:#475569;font-weight:600;margin:0 0 4px">${role} · ${yrs}+ Years Experience</p>
+      <p style="font-size:11px;color:#64748b;margin:0">${mockEmail} · ${profile.currentLocation || "Location"} · ${mockLinkedIn}</p>
+    </div>
+    <div style="margin-bottom:14px">
+      <h2 style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.12em;color:#64748b;border-bottom:1px solid #cbd5e1;padding-bottom:2px;margin-bottom:6px">Professional Summary</h2>
+      <p style="font-size:12px;line-height:1.65;color:#334155;margin:0">Results-driven <strong>${role}</strong> with ${yrs}+ years of proven expertise delivering ${matchedSkills.length > 0 ? matchedSkills.slice(0, 3).join(", ") : job!.technologies.slice(0, 3).join(", ")} solutions in high-velocity engineering environments. ${profile.resumeText && !profile.resumeText.startsWith("[Resume file:") ? `Track record of ${isSenior ? "technical leadership, cross-functional collaboration," : "delivering quality software,"} and driving measurable engineering outcomes.` : "Consistently bridges the gap between quality engineering and rapid delivery through automation-first thinking and data-driven insights."} Eager to leverage deep expertise in <strong>${job!.technologies[0]}</strong>${job!.technologies[1] ? ` and <strong>${job!.technologies[1]}</strong>` : ""} to accelerate ${job!.organization}'s ${job!.levelUp ? "next growth phase and drive platform excellence" : "engineering goals and raise the quality bar"}.</p>
+    </div>
+    <div style="margin-bottom:14px">
+      <h2 style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.12em;color:#64748b;border-bottom:1px solid #cbd5e1;padding-bottom:2px;margin-bottom:6px">Technical Skills</h2>
+      <table style="width:100%;border-collapse:collapse;font-size:11.5px"><tbody>${skillsHTML}</tbody></table>
+    </div>
+    <div style="margin-bottom:14px">
+      <h2 style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.12em;color:#64748b;border-bottom:1px solid #cbd5e1;padding-bottom:2px;margin-bottom:6px">Professional Experience</h2>
+      ${expHTML}
+    </div>
+    <div style="margin-bottom:14px">
+      <h2 style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.12em;color:#64748b;border-bottom:1px solid #cbd5e1;padding-bottom:2px;margin-bottom:6px">Education</h2>
+      <p style="font-weight:700;font-size:12.5px;color:#0f172a;margin:0 0 2px">Bachelor of Engineering / Computer Science</p>
+      <p style="font-size:11px;color:#64748b;font-style:italic;margin:0">University · ${currentYear - yrs - 4} – ${currentYear - yrs}</p>
+    </div>
+    ${certsHTML}
+    ${keywordHTML}
+    </body></html>`;
+  };
+
   const handleDownload = (type: "pdf" | "docx") => {
+    // If backend provided base64, use it directly
     const b64 = type === "pdf" ? generatedData.pdf_base64 : generatedData.docx_base64;
-    if (!b64) return;
-    const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
-    const blob = new Blob([bytes], { type: type === "pdf" ? "application/pdf" : "application/vnd.openxmlformats-officedocument.wordprocessingml.document" });
-    const a = Object.assign(document.createElement("a"), { href: URL.createObjectURL(blob), download: `ats_resume.${type}` });
-    a.click(); URL.revokeObjectURL(a.href);
+    if (b64) {
+      const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+      const mimeType = type === "pdf" ? "application/pdf" : "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+      const blob = new Blob([bytes], { type: mimeType });
+      const a = Object.assign(document.createElement("a"), { href: URL.createObjectURL(blob), download: `ats_resume.${type}` });
+      a.click(); URL.revokeObjectURL(a.href);
+      return;
+    }
+    // Client-side generation fallback
+    const html = buildResumeHTML(type === "pdf");
+    if (type === "pdf") {
+      const win = window.open("", "_blank");
+      if (win) { win.document.write(html); win.document.close(); }
+    } else {
+      // Word-compatible HTML exported as .doc
+      const blob = new Blob([html], { type: "application/msword;charset=utf-8" });
+      const a = Object.assign(document.createElement("a"), { href: URL.createObjectURL(blob), download: `ats_resume_${profile.name?.replace(/\s+/g, "_") || "candidate"}.doc` });
+      a.click(); URL.revokeObjectURL(a.href);
+    }
   };
 
   const handleCopy = (text: string, key: "cover" | "recruiter") => {
@@ -175,13 +316,13 @@ export default function JobDetailPage() {
               </div>
 
               {job.matchScore && (
-                <div className="bg-[#0f172a] rounded-xl border border-[#334155] p-4 mb-6">
+                <div className="rounded-xl p-4 mb-6" style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)" }}>
                   <div className="flex items-center justify-between mb-2">
                     <span className="text-sm font-medium text-slate-300">Your Match Score</span>
                     <span className="text-lg font-bold text-emerald-400">{job.matchScore}%</span>
                   </div>
                   <div className="progress-bar mb-3">
-                    <div className="progress-fill" style={{ width: `${job.matchScore}%`, background: job.matchScore > 80 ? "#10b981" : "#6366f1" }} />
+                    <div className="progress-fill" style={{ width: `${job.matchScore}%`, background: job.matchScore > 80 ? "#10b981" : "var(--accent)" }} />
                   </div>
                   <p className="text-xs text-slate-500">
                     {profile.skills.length > 0
@@ -226,7 +367,7 @@ export default function JobDetailPage() {
           <div className="flex-1 min-w-0">
             <div className="card h-full flex flex-col p-0 overflow-hidden">
               {/* Tabs */}
-              <div className="flex border-b border-[#334155] bg-[#1e293b]">
+              <div className="flex border-b" style={{ background: "var(--bg-elevated)", borderColor: "var(--border)" }}>
                 {(["resume", "cover", "recruiter", "company"] as const).map((tab) => {
                   const labels: Record<string, { icon: React.ReactNode; label: string }> = {
                     resume: { icon: <FileText className="w-4 h-4" />, label: "ATS Resume" },
@@ -238,7 +379,10 @@ export default function JobDetailPage() {
                     <button
                       key={tab}
                       onClick={() => setActiveTab(tab)}
-                      className={`flex-1 py-4 text-sm font-medium flex items-center justify-center gap-2 transition-colors border-b-2 ${activeTab === tab ? "border-indigo-500 text-indigo-400 bg-indigo-500/5" : "border-transparent text-slate-400 hover:text-slate-200"}`}
+                      className="flex-1 py-4 text-sm font-medium flex items-center justify-center gap-2 transition-colors border-b-2"
+                      style={activeTab === tab
+                        ? { borderColor: "var(--accent)", color: "var(--accent-bright)", background: "color-mix(in srgb, var(--accent) 8%, transparent)" }
+                        : { borderColor: "transparent", color: "#94a3b8" }}
                     >
                       {labels[tab].icon} {labels[tab].label}
                     </button>
@@ -297,12 +441,6 @@ export default function JobDetailPage() {
                           const matchedSkills = job.technologies.filter(
                             (t) => profile.skills.includes(t) || (profile.frameworks ?? []).includes(t)
                           );
-                          const allProfileSkills = [
-                            ...profile.skills,
-                            ...(profile.frameworks ?? []),
-                            ...(profile.languages ?? []),
-                            ...(profile.cicdTools ?? []),
-                          ].filter(Boolean);
                           const bullets = generatedData.bullets ?? [
                             `Architected end-to-end ${job.technologies[0] || "automation"} framework from scratch, reducing regression cycle time by 40% and enabling daily releases.`,
                             `Designed and implemented ${job.technologies[1] || "API"} test suites covering 200+ endpoints across microservices, achieving 92% API coverage.`,
@@ -311,75 +449,223 @@ export default function JobDetailPage() {
                             `Led performance benchmarking initiative using ${job.technologies.find(t => ["JMeter","K6","Gatling"].includes(t)) || "load testing tools"}, identifying 3 critical bottlenecks before launch.`,
                             `Collaborated with Product and DevOps to define quality gates, shift-left testing strategy, and release readiness criteria.`,
                           ];
+                          // Build past experience entries
+                          const currentYear = new Date().getFullYear();
+                          const yrs = profile.experienceYears || 3;
+                          const role = profile.currentRole || "Software Engineer";
+                          const seniorPrefixes = ["Senior", "Lead", "Principal", "Staff", "Head of", "Director"];
+                          const isSenior = seniorPrefixes.some((p) => role.startsWith(p));
+                          const strippedRole = role.replace(/^(Senior|Lead|Principal|Staff|Head of|Director)\s+/i, "");
+                          const currentStart = currentYear - Math.min(yrs, 3);
+                          const experienceEntries: { title: string; period: string; location: string; bullets: string[] }[] = [
+                            {
+                              title: role,
+                              period: `${currentStart} – Present`,
+                              location: profile.currentLocation || "",
+                              bullets,
+                            },
+                          ];
+                          if (yrs >= 4) {
+                            const prevStart = currentYear - Math.min(yrs, 7);
+                            experienceEntries.push({
+                              title: isSenior ? strippedRole : `Junior ${strippedRole}`,
+                              period: `${prevStart} – ${currentStart}`,
+                              location: "",
+                              bullets: [
+                                `Built and maintained ${job.technologies[1] || "automated"} test frameworks covering core business workflows, improving overall test reliability by 35%.`,
+                                `Collaborated with product managers and developers to define acceptance criteria, reduce defect escape rate, and establish a quality-first culture.`,
+                                `Reduced manual testing effort by 60% through systematic automation of regression suites using ${(profile.cicdTools?.[0]) || job.technologies[2] || "CI/CD pipelines"}.`,
+                                `Owned end-to-end release validation for ${job.technologies[0] || "key product"} features, coordinating UAT sign-off with stakeholders across 3 business units.`,
+                              ],
+                            });
+                          }
+                          if (yrs >= 7) {
+                            experienceEntries.push({
+                              title: `Associate ${strippedRole}`,
+                              period: `${currentYear - yrs} – ${currentYear - Math.min(yrs, 7)}`,
+                              location: "",
+                              bullets: [
+                                `Developed manual test cases and exploratory testing strategies for mobile and web applications, catching 40+ critical bugs pre-launch.`,
+                                `Participated in sprint ceremonies, contributed to test planning sessions, and documented test results for management reporting.`,
+                                `Gained hands-on experience with ${(profile.languages?.[0]) || job.technologies[0] || "core technologies"}, ${(profile.frameworks?.[0]) || job.technologies[1] || "automation frameworks"}, and Agile delivery methodologies.`,
+                              ],
+                            });
+                          }
+
+                          // Categorize skills
+                          type SkillCategory = { label: string; skills: string[] };
+                          const skillCategories: SkillCategory[] = [];
+                          if ((profile.languages ?? []).length > 0) skillCategories.push({ label: "Programming Languages", skills: profile.languages });
+                          if ((profile.frameworks ?? []).length > 0) skillCategories.push({ label: "Frameworks & Libraries", skills: profile.frameworks });
+                          if ((profile.skills ?? []).length > 0) skillCategories.push({ label: "Testing & QA Tools", skills: profile.skills });
+                          if ((profile.cicdTools ?? []).length > 0) skillCategories.push({ label: "CI/CD & DevOps", skills: profile.cicdTools });
+                          if (skillCategories.length === 0) skillCategories.push({ label: "Technologies", skills: job.technologies });
+
+                          // Derive contact line
+                          const nameParts = (profile.name || "Your Name").trim().toLowerCase().replace(/\s+/g, ".");
+                          const mockEmail = profile.name ? `${nameParts}@email.com` : "your.email@example.com";
+                          const mockLinkedIn = profile.name ? `linkedin.com/in/${nameParts}` : "linkedin.com/in/yourprofile";
+
+                          // ATS score (from API or estimated)
+                          const displayAtsScore = generatedData.ats_score ?? (
+                            matchedSkills.length > 0
+                              ? Math.min(98, 60 + Math.round((matchedSkills.length / Math.max(job.technologies.length, 1)) * 38))
+                              : 72
+                          );
+
                           return (
-                            <div className="flex-1 bg-white rounded-lg p-6 overflow-y-auto border border-slate-700 font-serif text-slate-800 shadow-inner text-sm">
-                              {/* Header */}
-                              <div className="text-center border-b-2 border-slate-800 pb-3 mb-4">
-                                <h1 className="text-xl font-bold tracking-wide uppercase">{profile.name || "Your Name"}</h1>
-                                <p className="text-xs text-slate-600 mt-0.5">
-                                  {profile.currentLocation || "Location"}{profile.currentLocation ? " · " : ""}{profile.currency} {profile.currentSalary ? Number(profile.currentSalary).toLocaleString() : ""}{" "}
-                                  {profile.experienceYears ? `· ${profile.experienceYears}+ years exp` : ""}
-                                </p>
-                              </div>
-
-                              {/* Summary */}
-                              <h2 className="text-xs font-bold uppercase tracking-widest text-slate-500 border-b border-slate-300 pb-0.5 mb-2">Professional Summary</h2>
-                              <p className="mb-4 leading-relaxed text-[13px]">
-                                Results-driven <strong>{profile.currentRole || "professional"}</strong> with {profile.experienceYears}+ years of experience delivering{" "}
-                                {matchedSkills.length > 0 ? matchedSkills.slice(0, 3).join(", ") : job.technologies.slice(0, 3).join(", ")} solutions at scale.
-                                {profile.resumeText && !profile.resumeText.startsWith("[Resume file:")
-                                  ? ` Demonstrated track record of ${profile.resumeText.toLowerCase().includes("lead") || profile.resumeText.toLowerCase().includes("senior") ? "technical leadership and " : ""}building high-quality, production-grade systems. `
-                                  : " Proven ability to architect robust systems, drive engineering excellence, and deliver measurable results. "}
-                                Excited to bring deep expertise in {job.technologies[0]} to {job.organization}&apos;s engineering team and drive {job.levelUp ? "next-level impact" : "continued excellence"}.
-                              </p>
-
-                              {/* Core Skills */}
-                              <h2 className="text-xs font-bold uppercase tracking-widest text-slate-500 border-b border-slate-300 pb-0.5 mb-2">Core Competencies</h2>
-                              <div className="grid grid-cols-2 gap-x-4 mb-4 text-[12px]">
-                                {(allProfileSkills.length > 0 ? allProfileSkills : job.technologies).slice(0, 10).map((s, i) => (
-                                  <div key={i} className="flex items-center gap-1 py-0.5">
-                                    <span className="w-1 h-1 rounded-full bg-slate-400 shrink-0" />
-                                    <span className={matchedSkills.includes(s) ? "font-semibold text-slate-900" : "text-slate-600"}>{s}</span>
+                            <div className="flex-1 flex flex-col gap-3">
+                              {/* ATS Score Banner */}
+                              <div className="flex items-center gap-3 px-4 py-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/25">
+                                <div className="flex items-center gap-2">
+                                  <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white"
+                                    style={{ background: displayAtsScore >= 80 ? "#10b981" : displayAtsScore >= 60 ? "#f59e0b" : "#f43f5e" }}>
+                                    {displayAtsScore}
                                   </div>
-                                ))}
-                              </div>
-
-                              {/* JD Tech Match */}
-                              {matchedSkills.length > 0 && (
-                                <>
-                                  <h2 className="text-xs font-bold uppercase tracking-widest text-slate-500 border-b border-slate-300 pb-0.5 mb-2">JD Technology Match</h2>
-                                  <p className="text-[12px] mb-4 text-emerald-700 font-medium">
-                                    ✓ {matchedSkills.join("  ·  ")}
-                                  </p>
-                                </>
-                              )}
-
-                              {/* Experience */}
-                              <h2 className="text-xs font-bold uppercase tracking-widest text-slate-500 border-b border-slate-300 pb-0.5 mb-2">Professional Experience</h2>
-                              <div className="mb-4">
-                                <div className="flex justify-between items-baseline mb-0.5">
-                                  <p className="font-bold text-[13px]">{profile.currentRole || "Current Role"}</p>
-                                  <p className="text-[11px] text-slate-500">Current</p>
+                                  <div>
+                                    <p className="text-xs font-bold text-emerald-400">ATS Compatibility Score</p>
+                                    <p className="text-[10px] text-slate-400">{displayAtsScore >= 80 ? "Excellent match — ready to submit" : displayAtsScore >= 60 ? "Good match — minor gaps to address" : "Moderate match — consider upskilling"}</p>
+                                  </div>
                                 </div>
-                                <p className="text-[11px] text-slate-500 mb-2 italic">{profile.currentLocation || ""}</p>
-                                <ul className="list-disc pl-4 space-y-1.5 text-[12px] leading-relaxed">
-                                  {bullets.map((b, i) => <li key={i}>{b}</li>)}
-                                </ul>
+                                <div className="flex-1 h-1.5 bg-slate-700/80 rounded-full overflow-hidden ml-2">
+                                  <div className="h-full rounded-full transition-all duration-700"
+                                    style={{ width: `${displayAtsScore}%`, background: displayAtsScore >= 80 ? "#10b981" : displayAtsScore >= 60 ? "#f59e0b" : "#f43f5e" }} />
+                                </div>
+                                <div className="flex gap-1.5 shrink-0">
+                                  {matchedSkills.slice(0, 3).map((s) => (
+                                    <span key={s} className="px-1.5 py-0.5 rounded text-[10px] bg-emerald-500/15 border border-emerald-500/25 text-emerald-300 flex items-center gap-0.5">
+                                      <CheckCircle className="w-2.5 h-2.5" />{s}
+                                    </span>
+                                  ))}
+                                </div>
                               </div>
 
-                              {/* Certifications */}
-                              {(profile.certifications ?? []).length > 0 && (
-                                <>
-                                  <h2 className="text-xs font-bold uppercase tracking-widest text-slate-500 border-b border-slate-300 pb-0.5 mb-2">Certifications</h2>
-                                  <ul className="list-disc pl-4 space-y-0.5 text-[12px] mb-4">
-                                    {profile.certifications.map((c, i) => <li key={i}>{c}</li>)}
-                                  </ul>
-                                </>
-                              )}
+                              {/* Resume Document */}
+                              <div className="flex-1 bg-white rounded-lg overflow-y-auto border border-slate-600 shadow-inner" style={{ fontFamily: "'Georgia', 'Times New Roman', serif", color: "#1e293b", fontSize: "12px", lineHeight: "1.5" }}>
+                                <div className="p-7">
+                                  {/* Header */}
+                                  <div className="text-center pb-4 mb-4" style={{ borderBottom: "2px solid #1e293b" }}>
+                                    <h1 style={{ fontSize: "22px", fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: "4px" }}>
+                                      {profile.name || "Your Name"}
+                                    </h1>
+                                    <p style={{ fontSize: "13px", color: "#475569", fontWeight: 600, marginBottom: "4px" }}>
+                                      {profile.currentRole || "Software Engineer"} · {profile.experienceYears}+ Years Experience
+                                    </p>
+                                    <p style={{ fontSize: "11px", color: "#64748b", letterSpacing: "0.02em" }}>
+                                      {mockEmail} · {profile.currentLocation || "Location"} · {mockLinkedIn}
+                                    </p>
+                                  </div>
 
-                              <p className="text-[10px] text-slate-400 text-center mt-4 pt-3 border-t border-slate-200">
-                                Generated by JobIntel AI · Tailored for {job.organization} · {job.title}
-                              </p>
+                                  {/* Professional Summary */}
+                                  <div className="mb-4">
+                                    <h2 style={{ fontSize: "10px", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.12em", color: "#64748b", borderBottom: "1px solid #cbd5e1", paddingBottom: "2px", marginBottom: "6px" }}>
+                                      Professional Summary
+                                    </h2>
+                                    <p style={{ fontSize: "12px", lineHeight: "1.65", color: "#334155" }}>
+                                      Results-driven <strong>{role}</strong> with {yrs}+ years of proven expertise delivering{" "}
+                                      {matchedSkills.length > 0 ? matchedSkills.slice(0, 3).join(", ") : job.technologies.slice(0, 3).join(", ")} solutions in high-velocity engineering environments.
+                                      {" "}
+                                      {profile.resumeText && !profile.resumeText.startsWith("[Resume file:")
+                                        ? `Track record of ${profile.resumeText.toLowerCase().includes("lead") || isSenior ? "technical leadership, cross-functional collaboration," : "delivering quality software,"} and driving measurable engineering outcomes. `
+                                        : "Consistently bridges the gap between quality engineering and rapid delivery through automation-first thinking and data-driven insights. "}
+                                      Eager to leverage deep expertise in <strong>{job.technologies[0]}</strong>{job.technologies[1] ? <>{" "}and <strong>{job.technologies[1]}</strong></> : ""} to accelerate {job.organization}&apos;s{" "}
+                                      {job.levelUp ? "next growth phase and drive platform excellence" : "engineering goals and raise the quality bar"}.
+                                    </p>
+                                  </div>
+
+                                  {/* Technical Skills */}
+                                  <div className="mb-4">
+                                    <h2 style={{ fontSize: "10px", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.12em", color: "#64748b", borderBottom: "1px solid #cbd5e1", paddingBottom: "2px", marginBottom: "6px" }}>
+                                      Technical Skills
+                                    </h2>
+                                    <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "11.5px" }}>
+                                      <tbody>
+                                        {skillCategories.map((cat) => (
+                                          <tr key={cat.label}>
+                                            <td style={{ width: "28%", fontWeight: 700, color: "#334155", paddingBottom: "4px", verticalAlign: "top", paddingRight: "8px" }}>
+                                              {cat.label}:
+                                            </td>
+                                            <td style={{ color: "#475569", paddingBottom: "4px" }}>
+                                              {cat.skills.map((s, i) => (
+                                                <span key={s}>
+                                                  <span style={matchedSkills.includes(s) ? { fontWeight: 700, color: "#15803d" } : {}}>
+                                                    {s}
+                                                  </span>
+                                                  {i < cat.skills.length - 1 && <span style={{ color: "#94a3b8" }}> · </span>}
+                                                </span>
+                                              ))}
+                                            </td>
+                                          </tr>
+                                        ))}
+                                      </tbody>
+                                    </table>
+                                  </div>
+
+                                  {/* Professional Experience */}
+                                  <div className="mb-4">
+                                    <h2 style={{ fontSize: "10px", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.12em", color: "#64748b", borderBottom: "1px solid #cbd5e1", paddingBottom: "2px", marginBottom: "6px" }}>
+                                      Professional Experience
+                                    </h2>
+                                    {experienceEntries.map((entry, ei) => (
+                                      <div key={ei} style={{ marginBottom: ei < experienceEntries.length - 1 ? "14px" : "0" }}>
+                                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: "1px" }}>
+                                          <span style={{ fontWeight: 700, fontSize: "13px", color: "#0f172a" }}>{entry.title}</span>
+                                          <span style={{ fontSize: "11px", color: "#64748b", fontStyle: "italic" }}>{entry.period}</span>
+                                        </div>
+                                        <p style={{ fontSize: "11px", color: "#64748b", fontStyle: "italic", marginBottom: "5px" }}>
+                                          {ei === 0 ? (entry.location || "Current Position") : "Previous Position"}{entry.location && ei > 0 ? ` · ${entry.location}` : ""}
+                                        </p>
+                                        <ul style={{ paddingLeft: "18px", margin: 0 }}>
+                                          {entry.bullets.map((b, bi) => (
+                                            <li key={bi} style={{ marginBottom: "4px", lineHeight: "1.55", fontSize: "11.5px", color: "#334155" }}>{b}</li>
+                                          ))}
+                                        </ul>
+                                      </div>
+                                    ))}
+                                  </div>
+
+                                  {/* Education */}
+                                  <div className="mb-4">
+                                    <h2 style={{ fontSize: "10px", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.12em", color: "#64748b", borderBottom: "1px solid #cbd5e1", paddingBottom: "2px", marginBottom: "6px" }}>
+                                      Education
+                                    </h2>
+                                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+                                      <div>
+                                        <p style={{ fontWeight: 700, fontSize: "12.5px", color: "#0f172a" }}>Bachelor of Engineering / Computer Science</p>
+                                        <p style={{ fontSize: "11px", color: "#64748b", fontStyle: "italic" }}>University · {currentYear - yrs - 4} – {currentYear - yrs}</p>
+                                      </div>
+                                    </div>
+                                  </div>
+
+                                  {/* Certifications */}
+                                  {(profile.certifications ?? []).length > 0 && (
+                                    <div className="mb-4">
+                                      <h2 style={{ fontSize: "10px", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.12em", color: "#64748b", borderBottom: "1px solid #cbd5e1", paddingBottom: "2px", marginBottom: "6px" }}>
+                                        Certifications
+                                      </h2>
+                                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "3px 16px" }}>
+                                        {profile.certifications.map((c, i) => (
+                                          <div key={i} style={{ display: "flex", alignItems: "center", gap: "5px", fontSize: "11.5px", color: "#334155" }}>
+                                            <span style={{ color: "#15803d", fontWeight: 700 }}>✓</span> {c}
+                                          </div>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  )}
+
+                                  {/* JD Keyword Match */}
+                                  {matchedSkills.length > 0 && (
+                                    <div style={{ marginTop: "10px", padding: "8px 10px", background: "#f0fdf4", borderRadius: "6px", border: "1px solid #bbf7d0" }}>
+                                      <p style={{ fontSize: "10px", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "#15803d", marginBottom: "4px" }}>
+                                        ✓ ATS Keyword Match — {job.organization} · {job.title}
+                                      </p>
+                                      <p style={{ fontSize: "11px", color: "#166534" }}>
+                                        {matchedSkills.join("  ·  ")}
+                                      </p>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
                             </div>
                           );
                         })()}
@@ -404,7 +690,7 @@ export default function JobDetailPage() {
                             )}
                           </button>
                         </div>
-                        <div className="flex-1 bg-[#263348] rounded-lg p-6 overflow-y-auto border border-slate-600 text-sm text-slate-200 leading-relaxed font-sans shadow-inner whitespace-pre-wrap">
+                        <div className="flex-1 rounded-lg p-6 overflow-y-auto text-sm text-slate-200 leading-relaxed font-sans shadow-inner whitespace-pre-wrap" style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)" }}>
                           {generatedData.cover_letter ?? `Dear Hiring Manager,\n\nI am writing to express my strong interest in the ${job.title} position at ${job.organization}.\n\nWith ${profile.experienceYears}+ years of experience in ${job.technologies.slice(0, 3).join(", ")}, I have consistently delivered high-quality solutions in fast-paced engineering environments.${profile.resumeText && !profile.resumeText.startsWith("[Resume file:") ? "\n\nHighlights from my background include hands-on delivery of production systems, strong collaboration with cross-functional teams, and a proven ability to ramp up quickly on new technology stacks." : ""}\n\nI am particularly excited about the opportunity at ${job.organization} because of its technical depth and scale. The role aligns closely with my expertise in ${job.technologies[0]} and ${job.technologies[1] || "modern engineering practices"}.\n\nI would welcome the opportunity to discuss how my experience can contribute to ${job.organization}'s goals.\n\nBest regards,\n${profile.name || "Your Name"}`}
                         </div>
                       </div>
@@ -421,11 +707,11 @@ export default function JobDetailPage() {
                             <ExternalLink className="w-3.5 h-3.5" /> Find {generatedData.recruiter_name ?? job.recruiterName ?? "Recruiter"}
                           </button>
                         </div>
-                        <div className="bg-[#1e293b] rounded-lg border border-slate-600 overflow-hidden shadow-inner mb-3">
-                          <div className="px-4 py-2 border-b border-slate-600 bg-[#263348] text-xs text-slate-400 font-mono">
+                        <div className="rounded-lg overflow-hidden shadow-inner mb-3" style={{ background: "var(--bg-base)", border: "1px solid var(--border)" }}>
+                          <div className="px-4 py-2 text-xs text-slate-400 font-mono" style={{ borderBottom: "1px solid var(--border)", background: "var(--bg-elevated)" }}>
                             Subject: {profile.currentRole || "Professional"} interested in {job.title} role
                           </div>
-                          <div className="p-4 text-sm text-slate-300 leading-relaxed whitespace-pre-wrap bg-[#0f172a]">
+                          <div className="p-4 text-sm text-slate-300 leading-relaxed whitespace-pre-wrap" style={{ background: "var(--bg-base)" }}>
                             {generatedData.recruiter_message ?? `Hi ${job.recruiterName?.split(" ")[0] ?? "there"},\n\nI saw that ${job.organization} is hiring for a ${job.title}. Given my ${profile.experienceYears}+ years with ${job.technologies.slice(0, 3).join(", ")}, I believe I'd be a great fit. Would you be open to a quick 10-minute chat?\n\nThanks,\n${profile.name}`}
                           </div>
                         </div>
@@ -522,7 +808,7 @@ export default function JobDetailPage() {
                           {/* Hiring Signals Grid */}
                           <div className="grid grid-cols-2 gap-3">
                             {hiringSignals.map((sig, i) => (
-                              <div key={i} className="p-3 rounded-xl bg-slate-900/60 border border-slate-700/50">
+                              <div key={i} className="p-3 rounded-xl" style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)" }}>
                                 <div className="flex items-center gap-2 mb-1">
                                   {sig.icon}
                                   <span className="text-[11px] text-slate-400 uppercase tracking-wide font-semibold">{sig.label}</span>
@@ -533,7 +819,7 @@ export default function JobDetailPage() {
                           </div>
 
                           {/* Tech Stack Analysis */}
-                          <div className="p-4 rounded-xl bg-slate-900/60 border border-indigo-500/20">
+                          <div className="p-4 rounded-xl border border-indigo-500/20">
                             <p className="text-xs font-bold text-indigo-400 uppercase tracking-wider mb-3 flex items-center gap-1.5">
                               <BarChart3 className="w-3.5 h-3.5" /> Tech Stack Analysis
                             </p>
@@ -606,7 +892,7 @@ export default function JobDetailPage() {
                           </div>
 
                           {/* Interview Talking Points */}
-                          <div className="p-4 rounded-xl bg-slate-900/60 border border-violet-500/20">
+                          <div className="p-4 rounded-xl border border-violet-500/20">
                             <p className="text-xs font-bold text-violet-400 uppercase tracking-wider mb-3 flex items-center gap-1.5">
                               <MessageCircle className="w-3.5 h-3.5" /> Interview Talking Points
                             </p>
@@ -621,7 +907,7 @@ export default function JobDetailPage() {
                           </div>
 
                           {/* Culture Sentiment (mock Glassdoor-style) */}
-                          <div className="p-4 rounded-xl bg-slate-900/60 border border-amber-500/20">
+                          <div className="p-4 rounded-xl border border-amber-500/20">
                             <p className="text-xs font-bold text-amber-400 uppercase tracking-wider mb-3 flex items-center gap-1.5">
                               <Star className="w-3.5 h-3.5" /> Culture Sentiment Indicators
                             </p>

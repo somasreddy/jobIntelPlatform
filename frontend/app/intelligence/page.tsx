@@ -110,16 +110,16 @@ export default function IntelligencePage() {
               ) : (
                 <div className="grid gap-3">
                   {gaps.map((gap) => (
-                    <div key={gap.skill} className="bg-[#1e293b] border border-[#334155] rounded-xl p-4 flex items-center gap-4">
+                    <div key={gap.skill} className="rounded-xl p-4 flex items-center gap-4" style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)" }}>
                       <div className="flex-1">
                         <div className="flex items-center gap-2 mb-1">
                           <span className="text-base font-medium text-white">{gap.skill}</span>
-                          <span className="text-[10px] uppercase font-bold text-slate-500 bg-[#0f172a] px-2 py-0.5 rounded">
+                          <span className="text-[10px] uppercase font-bold text-slate-500 px-2 py-0.5 rounded" style={{ background: "var(--bg-base)" }}>
                             {gap.category}
                           </span>
                         </div>
                         <div className="flex items-center gap-3">
-                          <div className="flex-1 max-w-[200px] h-1.5 bg-[#0f172a] rounded-full overflow-hidden">
+                          <div className="flex-1 max-w-[200px] h-1.5 rounded-full overflow-hidden" style={{ background: "var(--bg-base)" }}>
                             <div className="h-full bg-linear-to-r from-rose-500 to-amber-500" style={{ width: `${gap.demandScore}%` }} />
                           </div>
                           <span className="text-xs text-rose-400 font-medium">{gap.demandScore}% Market Demand</span>
@@ -175,15 +175,18 @@ export default function IntelligencePage() {
                   Your learning roadmap will appear here once your profile is analysed.
                 </p>
               ) : (
-                <div className="relative pl-6 border-l-2 border-[#334155] space-y-8">
+                <div className="relative pl-6 border-l-2 space-y-8" style={{ borderColor: "var(--border)" }}>
                   {roadmap.map((phase, i) => (
                     <div key={phase.phase} className="relative">
-                      <div className={`absolute -left-[35px] w-4 h-4 rounded-full border-4 border-[#1e293b] ${i === 0 ? "bg-indigo-400 shadow-[0_0_10px_rgba(129,140,248,0.5)]" : "bg-[#334155]"}`} />
+                      <div
+                        className={`absolute -left-[35px] w-4 h-4 rounded-full border-4 ${i === 0 ? "bg-indigo-400 shadow-[0_0_10px_rgba(129,140,248,0.5)]" : ""}`}
+                        style={{ borderColor: "var(--bg-base)", background: i === 0 ? undefined : "var(--border)" }}
+                      />
                       <span className="text-xs font-bold text-indigo-400 uppercase tracking-wider">Phase {phase.phase} · {phase.duration}</span>
                       <h3 className="text-base font-semibold text-white mt-1 mb-2">{phase.title}</h3>
                       <div className="flex flex-wrap gap-1.5 mb-3">
                         {phase.skills.map(s => (
-                          <span key={s} className="tag bg-[#0f172a] border-slate-700 text-slate-300">{s}</span>
+                          <span key={s} className="tag border-slate-700 text-slate-300" style={{ background: "var(--bg-base)" }}>{s}</span>
                         ))}
                       </div>
                       {phase.resources && phase.resources.length > 0 && (

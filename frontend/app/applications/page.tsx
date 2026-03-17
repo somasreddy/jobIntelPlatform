@@ -159,7 +159,8 @@ export default function TrackerPage() {
                         key={app.id}
                         draggable
                         onDragStart={(e) => handleDragStart(e, app.id)}
-                        className="bg-[#263348] border border-[#334155] hover:border-indigo-500/40 rounded-xl p-3 cursor-grab active:cursor-grabbing transition-colors"
+                        className="rounded-xl p-3 cursor-grab active:cursor-grabbing transition-colors"
+                        style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)" }}
                       >
                         <h4 className="text-sm font-semibold text-white mb-1 leading-tight w-full hover:text-indigo-300">
                           {app.job.title}
@@ -176,7 +177,7 @@ export default function TrackerPage() {
                               ? "bg-rose-500/10 border-rose-500/30 text-rose-400"
                               : isDueToday
                               ? "bg-amber-500/10 border-amber-500/30 text-amber-400"
-                              : "bg-[#0f172a] border-slate-700 text-slate-400"
+                              : "border-slate-700 text-slate-400"
                           }`}>
                             <div className="flex items-center gap-1.5">
                               <Bell className="w-3 h-3" />
@@ -196,7 +197,8 @@ export default function TrackerPage() {
                               type="date"
                               min={today}
                               defaultValue={followUp ?? ""}
-                              className="flex-1 bg-[#0f172a] border border-slate-600 rounded px-2 py-1 text-[11px] text-slate-200 focus:outline-none focus:border-indigo-500"
+                              className="flex-1 border border-slate-600 rounded px-2 py-1 text-[11px] text-slate-200 focus:outline-none focus:border-indigo-500"
+                              style={{ background: "var(--bg-input)" }}
                               onKeyDown={(e) => {
                                 if (e.key === "Escape") setEditingFollowUp(null);
                               }}
