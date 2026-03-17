@@ -31,5 +31,7 @@ Follow these steps to deploy the platform live.
 
 ## Technical Notes
 
-- **LLM Model**: To switch to a higher quality model, set `ANTHROPIC_MODEL=claude-sonnet-4-6` in your Render environment variables.
+- **LLM Model**:
+  - To use Anthropic (Enterprise): Set `LLM_PROVIDER=anthropic`, `ANTHROPIC_API_KEY`, and `ANTHROPIC_MODEL`.
+  - To use OpenAI: Set `LLM_PROVIDER=openai`, `OPENAI_API_KEY`, and `OPENAI_MODEL`.
 - **Static Export**: The project is configured for standard Next.js deployment (SSR/ISR) on Vercel. Static export (`output: export`) is disabled to support dynamic job detail pages.

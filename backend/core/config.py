@@ -23,8 +23,12 @@ class Settings(BaseSettings):
     REDIS_URL: str = "redis://localhost:6379/0"
     
     # LLM API
+    LLM_PROVIDER: str = "anthropic"  # "anthropic" or "openai"
     ANTHROPIC_API_KEY: str = ""
     ANTHROPIC_MODEL: str = "claude-haiku-4-5-20251001"
+    
+    OPENAI_API_KEY: str = ""
+    OPENAI_MODEL: str = "gpt-4o-mini"
     
     class Config:
         env_file = ".env"
