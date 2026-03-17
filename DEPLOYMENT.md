@@ -36,4 +36,5 @@ Follow these steps to deploy the platform live.
   - To use OpenAI: Set `LLM_PROVIDER=openai`, `OPENAI_API_KEY`, and `OPENAI_MODEL`.
   - To use Google Gemini: Set `LLM_PROVIDER=google`, `GOOGLE_API_KEY`, and `GOOGLE_MODEL`.
   - To use Groq: Set `LLM_PROVIDER=groq`, `GROQ_API_KEY`, and `GROQ_MODEL`.
+- **Consolidated Mode**: Set `CONSOLIDATED_MODE=true` to fetch data from ALL configured providers in parallel and consolidate the results into a single high-quality response. (Requires at least two API keys).
 - **Static Export**: The project is configured for standard Next.js deployment (SSR/ISR) on Vercel. Static export (`output: export`) is disabled to support dynamic job detail pages.

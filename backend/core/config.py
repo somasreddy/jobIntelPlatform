@@ -36,6 +36,8 @@ class Settings(BaseSettings):
     GROQ_API_KEY: str = ""
     GROQ_MODEL: str = "llama-3.3-70b-versatile"
     
+    CONSOLIDATED_MODE: bool = False
+    
     class Config:
         env_file = ".env"
         case_sensitive = True

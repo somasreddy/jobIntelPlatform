@@ -31,15 +31,21 @@ def get_groq_client() -> AsyncGroq:
     return _groq_client
 
 
+import asyncio
+from typing import List, Dict
+
 async def chat(
     system_prompt: str,
     user_prompt: str,
+    provider: str | None = None,
     model: str | None = None,
     max_tokens: int = 2000,
     temperature: float = 0.7,
 ) -> str:
     """Multi-provider chat call."""
-    if settings.LLM_PROVIDER == "openai":
+    target_provider = provider or settings.LLM_PROVIDER
+    
+    if target_provider == "openai":
         client = get_openai_client()
         target_model = model or settings.OPENAI_MODEL
         response = await client.chat.completions.create(
@@ -52,7 +58,7 @@ async def chat(
             temperature=temperature,
         )
         return response.choices[0].message.content or ""
-    elif settings.LLM_PROVIDER == "groq":
+    elif target_provider == "groq":
         client = get_groq_client()
         target_model = model or settings.GROQ_MODEL
         response = await client.chat.completions.create(
@@ -65,7 +71,7 @@ async def chat(
             temperature=temperature,
         )
         return response.choices[0].message.content or ""
-    elif settings.LLM_PROVIDER == "google":
+    elif target_provider == "google":
         genai.configure(api_key=settings.GOOGLE_API_KEY)
         target_model = model or settings.GOOGLE_MODEL
         client = genai.GenerativeModel(
@@ -90,3 +96,48 @@ async def chat(
             messages=[{"role": "user", "content": user_prompt}],
         )
         return response.content[0].text if response.content else ""
+
+async def consolidated_chat(
+    system_prompt: str,
+    user_prompt: str,
+    providers: List[str] | None = None,
+    max_tokens: int = 2000,
+    temperature: float = 0.7,
+) -> str:
+    """Fetch from multiple providers in parallel and consolidate."""
+    target_providers = providers or ["anthropic", "openai", "google", "groq"]
+    
+    # Filter only providers with keys
+    active_providers = []
+    if "anthropic" in target_providers and settings.ANTHROPIC_API_KEY: active_providers.append("anthropic")
+    if "openai" in target_providers and settings.OPENAI_API_KEY: active_providers.append("openai")
+    if "google" in target_providers and settings.GOOGLE_API_KEY: active_providers.append("google")
+    if "groq" in target_providers and settings.GROQ_API_KEY: active_providers.append("groq")
+    
+    if not active_providers:
+        return await chat(system_prompt, user_prompt, max_tokens=max_tokens, temperature=temperature)
+
+    tasks = [
+        chat(system_prompt, user_prompt, provider=p, max_tokens=max_tokens, temperature=temperature)
+        for p in active_providers
+    ]
+    
+    results = await asyncio.gather(*tasks, return_exceptions=True)
+    
+    valid_results = []
+    for i, res in enumerate(results):
+        if isinstance(res, str) and res.strip():
+            valid_results.append(f"--- Provider: {active_providers[i]} ---\n{res}")
+    
+    if not valid_results:
+        return "Error: All LLM providers failed to return a result."
+
+    # Final consolidation step using the primary provider
+    consolidation_prompt = f"Consolidate the following responses from different AI models into one high-quality, comprehensive answer. Maintain the best parts of each while removing redundancies:\n\n" + "\n\n".join(valid_results)
+    
+    return await chat(
+        system_prompt="You are a Master AI Aggregator. Your job is to take multiple AI responses and combine them into a single, perfect version.",
+        user_prompt=consolidation_prompt,
+        max_tokens=max_tokens,
+        temperature=0.3
+    )
