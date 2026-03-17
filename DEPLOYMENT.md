@@ -4,10 +4,11 @@ Follow these steps to deploy the platform live.
 
 ## Prerequisites
 
-1. **PostgreSQL**: Sign up at [neon.tech](https://neon.tech), create a project, and copy the **connection string**.
+1. **Render Backend URL**: `https://jobintelplatform.onrender.com`
+2. **Neon PostgreSQL**: Connection string ready.
     - *Format*: `postgresql+asyncpg://user:pass@ep-xxx.neon.tech/neondb?ssl=require`
-2. **Redis**: Sign up at [upstash.com](https://upstash.com), create a Redis database, and copy the `rediss://` URL.
-3. **Anthropic API**: Get your API key from [console.anthropic.com](https://console.anthropic.com).
+3. **Redis**: Sign up at [upstash.com](https://upstash.com), create a Redis database, and copy the `rediss://` URL.
+4. **Anthropic API**: Get your API key from [console.anthropic.com](https://console.anthropic.com).
 
 ## 1. Backend Deployment (Render.com)
 
