@@ -23,7 +23,7 @@ class Settings(BaseSettings):
     REDIS_URL: str = "redis://localhost:6379/0"
     
     # LLM API
-    LLM_PROVIDER: str = "anthropic"  # "anthropic", "openai", "google", "groq", or "perplexity"
+    LLM_PROVIDER: str = "openai"  # "anthropic", "openai", "google", "groq", or "perplexity"
     ANTHROPIC_API_KEY: str = ""
     ANTHROPIC_MODEL: str = "claude-haiku-4-5-20251001"
     
