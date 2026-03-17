@@ -277,6 +277,150 @@ class Trie:
 
 **Real usage**: OSPF routing protocol uses Dijkstra. Border Gateway Protocol (BGP) uses path-vector (not Dijkstra).`,
   },
+  {
+    id: "dsa11", domain: "DSA", type: "technical", difficulty: "Medium",
+    question: "Explain the Sliding Window technique. Solve: find the maximum sum subarray of size k.",
+    hint: "The key insight: instead of re-summing each window from scratch, slide the window by adding the new element and removing the leftmost element in O(1).",
+    keyPoints: ["O(n) single pass", "Fixed vs variable window", "Two-pointer variant for dynamic window", "Applications: strings, arrays, streams"],
+    modelAnswer: `**Sliding Window** maintains a contiguous window over a sequence, updating incrementally instead of recomputing from scratch. Reduces O(n×k) brute force to O(n).
+
+**Fixed Window — Max Sum Subarray of size k**:
+\`\`\`python
+def max_sum_subarray(arr, k):
+    window_sum = sum(arr[:k])   # initial window
+    max_sum = window_sum
+    for i in range(k, len(arr)):
+        window_sum += arr[i] - arr[i - k]  # slide: add new, drop old
+        max_sum = max(max_sum, window_sum)
+    return max_sum
+# Time: O(n), Space: O(1)
+\`\`\`
+
+**Variable Window** (two-pointer variant): Used when the window size isn't fixed.
+Example: Longest substring with at most k distinct characters.
+\`\`\`python
+left = 0; freq = {}
+for right in range(len(s)):
+    freq[s[right]] = freq.get(s[right], 0) + 1
+    while len(freq) > k:
+        freq[s[left]] -= 1
+        if freq[s[left]] == 0: del freq[s[left]]
+        left += 1
+    result = max(result, right - left + 1)
+\`\`\`
+
+**Common patterns**:
+- Fixed size: max/min/average of subarray, DNA sequence matching
+- Variable size: longest/shortest substring satisfying a condition
+- Two strings: minimum window substring, permutation in string`,
+  },
+  {
+    id: "dsa12", domain: "DSA", type: "technical", difficulty: "Medium",
+    question: "What is the Two Pointers technique? Solve: given a sorted array, find all pairs that sum to a target.",
+    hint: "Place one pointer at the start, one at the end. If sum > target, move right pointer left. If sum < target, move left pointer right.",
+    keyPoints: ["O(n) for sorted arrays", "Replaces O(n²) nested loops", "In-place, O(1) space", "Variants: fast-slow pointers for cycle detection"],
+    modelAnswer: `**Two Pointers** uses two indices moving toward or away from each other to eliminate nested loops. Requires sorted array for the pair-sum problem.
+
+\`\`\`python
+def two_sum_sorted(arr, target):
+    left, right = 0, len(arr) - 1
+    pairs = []
+    while left < right:
+        s = arr[left] + arr[right]
+        if s == target:
+            pairs.append((arr[left], arr[right]))
+            left += 1; right -= 1
+        elif s < target:
+            left += 1   # need larger sum
+        else:
+            right -= 1  # need smaller sum
+    return pairs
+# Time: O(n), Space: O(1) [excluding output]
+\`\`\`
+
+**Why it works**: In a sorted array, if sum is too small, only moving left pointer right can increase it. If too large, only moving right pointer left can decrease it. Each iteration eliminates a pair in O(1).
+
+**Variants**:
+- **Three Sum**: Fix one element, run two-pointer on the rest. O(n²).
+- **Fast-Slow Pointers** (Floyd's cycle detection): detect cycle in linked list in O(n) space O(1). Slow moves 1 step, fast moves 2 steps. They meet if there's a cycle.
+- **Container with most water**: two pointers from ends, move the shorter side inward.
+- **Palindrome check**: left and right from ends toward middle.`,
+  },
+  {
+    id: "dsa13", domain: "DSA", type: "technical", difficulty: "Medium",
+    question: "Explain Binary Search and its variants. How would you find the first and last occurrence of a target in a sorted array?",
+    hint: "Standard binary search finds a target. For first/last occurrence, don't stop when you find it — keep narrowing toward the left (or right) boundary.",
+    keyPoints: ["O(log n) on sorted arrays", "Boundary-finding variants", "Rotated array search", "Search on answer space (not just arrays)"],
+    modelAnswer: `**Standard Binary Search**: O(log n).
+\`\`\`python
+def binary_search(arr, target):
+    lo, hi = 0, len(arr) - 1
+    while lo <= hi:
+        mid = (lo + hi) // 2
+        if arr[mid] == target: return mid
+        elif arr[mid] < target: lo = mid + 1
+        else: hi = mid - 1
+    return -1
+\`\`\`
+
+**First Occurrence** (left boundary):
+\`\`\`python
+def first_occurrence(arr, target):
+    lo, hi, result = 0, len(arr) - 1, -1
+    while lo <= hi:
+        mid = (lo + hi) // 2
+        if arr[mid] == target:
+            result = mid
+            hi = mid - 1   # don't stop — keep searching left
+        elif arr[mid] < target: lo = mid + 1
+        else: hi = mid - 1
+    return result
+\`\`\`
+
+**Last Occurrence**: same but \`lo = mid + 1\` when found.
+
+**Search in Rotated Sorted Array** (LeetCode 33): One half is always sorted. Check which half is sorted, then determine which half the target falls in.
+
+**Binary Search on Answer Space**: Don't just search in arrays.
+- Minimum days to ship packages (search in [max_weight, sum_weights])
+- Square root of N (search in [0, N])
+- Capacity to ship within D days
+Pattern: define a monotonic predicate, binary search for the boundary.`,
+  },
+  {
+    id: "dsa14", domain: "DSA", type: "technical", difficulty: "Medium",
+    question: "What is a Heap (Priority Queue)? How would you find the top-k frequent elements in an array?",
+    hint: "Build a frequency map first, then use a min-heap of size k. For each new element, if its frequency > heap minimum, swap it in.",
+    keyPoints: ["Min-heap vs max-heap", "O(log k) insert/extract", "Top-k pattern", "Merge k sorted lists", "Heap sort"],
+    modelAnswer: `**Heap**: A complete binary tree satisfying the heap property. Min-heap: parent ≤ children (root = minimum). Max-heap: parent ≥ children (root = maximum).
+
+**Operations**: insert O(log n), extract-min/max O(log n), peek O(1), heapify O(n).
+
+**Top-K Frequent Elements** using min-heap of size k:
+\`\`\`python
+import heapq
+from collections import Counter
+
+def top_k_frequent(nums, k):
+    freq = Counter(nums)          # O(n)
+    # min-heap of (count, num) — keeps k largest frequencies
+    heap = []
+    for num, count in freq.items():
+        heapq.heappush(heap, (count, num))
+        if len(heap) > k:
+            heapq.heappop(heap)   # remove smallest frequency
+    return [num for count, num in heap]
+# Time: O(n log k), Space: O(n + k)
+\`\`\`
+
+**Why min-heap, not max-heap?** We want to evict the SMALLEST frequency to keep the top-k. A min-heap of size k holds the k largest seen so far.
+
+**Merge K Sorted Lists**: Push first element from each list into a min-heap. Extract min, push next element from that list. O(N log k) where N = total elements, k = number of lists.
+
+**Heap Sort**: Heapify array O(n), extract-max n times O(n log n). In-place but not stable.
+
+**Real uses**: Dijkstra's shortest path (priority queue), task scheduling (process with highest priority), median of stream (two heaps: max-heap for lower half, min-heap for upper half).`,
+  },
 ];
 
 // ─── System Design ────────────────────────────────────────────────────────────
@@ -363,6 +507,166 @@ export const SYSTEM_DESIGN_QUESTIONS: QuestionBankItem[] = [
 - Rate limit: token bucket per user to prevent notification spam.
 
 **Reliability**: At-least-once delivery. Track sent status in Redis (TTL 24h). Retry with exponential backoff. Dead-letter queue for failed deliveries.`,
+  },
+  {
+    id: "sd4", domain: "System Design", type: "technical", difficulty: "Hard",
+    question: "Design a Rate Limiter. What algorithms would you consider and how would you implement it in a distributed system?",
+    hint: "Cover Token Bucket, Leaky Bucket, Fixed Window Counter, Sliding Window Log, and Sliding Window Counter. Then address distributed rate limiting with Redis.",
+    keyPoints: ["Token Bucket vs Leaky Bucket", "Fixed vs Sliding window", "Redis atomic operations (INCR + EXPIRE, Lua)", "Rate limit headers", "Per-user vs per-IP vs per-API-key"],
+    modelAnswer: `**Rate Limiting Algorithms**:
+
+**1. Token Bucket** (most common):
+- Bucket holds max N tokens. Tokens added at rate R/sec. Each request consumes 1 token.
+- Allows bursts up to N, smoothed by rate R. Implementation: track (tokens, lastRefillTime).
+- Used by: AWS API Gateway, Stripe.
+
+**2. Fixed Window Counter**:
+- Count requests in a fixed time window (e.g., 1-min slots). Reset counter at window boundary.
+- Problem: boundary burst — 100 req in last second of window + 100 req in first second of next window = 200 req in 2 seconds.
+
+**3. Sliding Window Log**:
+- Store timestamp of each request in a sorted set. On new request, remove entries older than window, count remaining.
+- Accurate but O(requests) memory per user.
+
+**4. Sliding Window Counter** (hybrid, best balance):
+- Use two fixed window counters. Estimate: previous_count × (1 - elapsed/window) + current_count.
+- O(1) memory, ~0.1% error rate at boundary. Used by Cloudflare.
+
+**Distributed Rate Limiting with Redis**:
+\`\`\`lua
+-- Atomic Lua script (executes atomically in Redis)
+local key = KEYS[1]
+local limit = tonumber(ARGV[1])
+local window = tonumber(ARGV[2])
+local current = redis.call('INCR', key)
+if current == 1 then
+  redis.call('EXPIRE', key, window)
+end
+if current > limit then
+  return 0  -- rate limited
+end
+return 1  -- allowed
+\`\`\`
+
+**Architecture**:
+- Rate limiter as middleware (API Gateway layer or sidecar).
+- Redis Cluster for distributed counter storage. Use pipeline for low latency.
+- Response headers: X-RateLimit-Limit, X-RateLimit-Remaining, X-RateLimit-Reset, Retry-After.
+- HTTP 429 Too Many Requests on limit exceeded.
+- Multi-tier: per-IP (DDoS protection) + per-API-key (quota) + per-endpoint (protection).`,
+  },
+  {
+    id: "sd5", domain: "System Design", type: "technical", difficulty: "Hard",
+    question: "Design a distributed cache system like Redis. What are the key architectural decisions?",
+    hint: "Cover eviction policies, data structures, persistence, replication, clustering (consistent hashing), and cache invalidation strategies.",
+    keyPoints: ["Eviction policies (LRU, LFU, TTL)", "Consistent hashing for sharding", "Replication (leader-follower)", "Cache-aside vs write-through vs write-behind", "Hot key problem"],
+    modelAnswer: `**Core Data Structures**: Strings, Hashes, Lists, Sets, Sorted Sets, HyperLogLog, Streams. Each optimised in memory with ziplist/listpack encoding for small sizes.
+
+**Eviction Policies** (when memory full):
+- **LRU** (Least Recently Used): evict item not accessed longest. Good for general workloads.
+- **LFU** (Least Frequently Used): evict item accessed fewest times. Better for skewed access patterns.
+- **TTL-based**: set expiry per key. Active expiry on access + passive lazy expiry background thread.
+
+**Persistence**:
+- **RDB** (snapshot): periodic point-in-time dump. Fast restart, potential data loss.
+- **AOF** (Append-Only File): log every write command. Durable but slower. Best: AOF with fsync every second.
+
+**Clustering — Consistent Hashing**:
+- Hash key → position on ring → nearest node clockwise.
+- Adding/removing a node only redistributes keys from/to adjacent nodes (~1/n of keys).
+- Redis Cluster: 16,384 hash slots distributed across nodes. Each node handles a slot range.
+
+**Replication**: Leader-follower. Leader handles writes, followers replicate async. Sentinel for automatic failover. Redis Cluster has built-in replication (1 primary + N replicas per shard).
+
+**Caching Patterns**:
+- **Cache-aside** (lazy loading): App checks cache, on miss fetches from DB and populates cache. Most common.
+- **Write-through**: Write to cache and DB synchronously. Consistent but slower writes.
+- **Write-behind**: Write to cache, async flush to DB. Fast writes, risk of data loss.
+
+**Problems & Solutions**:
+- **Cache avalanche**: Many keys expire at once → DB overload. Add random jitter to TTLs.
+- **Cache penetration**: Non-existent keys miss cache every time → cache null results with short TTL, or Bloom Filter.
+- **Hot key**: One key gets millions of requests/sec → replicate hot keys across multiple instances, local in-process cache.`,
+  },
+  {
+    id: "sd6", domain: "System Design", type: "technical", difficulty: "Hard",
+    question: "Design a Search Autocomplete (typeahead) system like Google Search suggestions. Handle 10M queries/day.",
+    hint: "Cover data collection (query log aggregation), Trie vs inverted index for prefix matching, ranking by frequency/personalisation, and low-latency serving.",
+    keyPoints: ["Trie for prefix matching", "Top-k per prefix caching", "Query log aggregation pipeline", "Debounce on client", "Personalisation layer"],
+    modelAnswer: `**Requirements**: Return top-5 suggestions for a prefix within 100ms. 10M queries/day = ~115 QPS average, peak 3×.
+
+**Data Collection Pipeline**:
+- Log all search queries with timestamps to Kafka.
+- Spark/Flink aggregation job (hourly/daily): count query frequencies, compute trending score.
+- Store in: {prefix → [(query, score), ...]} materialised in a fast KV store.
+
+**Core Data Structure — Trie with Top-k Cache**:
+\`\`\`
+TrieNode {
+  children: Map<char, TrieNode>
+  topK: [(query, score)]  ← top 5 queries for this prefix
+}
+\`\`\`
+Each node caches the top-5 queries for its prefix. Insert is O(L), lookup is O(L), topK access is O(1). Rebuild trie periodically from aggregated query data.
+
+**Alternative — Inverted Index approach**: Elasticsearch/OpenSearch with prefix query. Easier to operate but higher latency. Use for personalised suggestions.
+
+**Read Path** (hot path, must be <100ms):
+1. Client debounces input (300ms) — reduces API calls by 70%.
+2. Client-side cache of recent prefix results.
+3. CDN caches top N prefix responses (covers 80% of traffic).
+4. Autocomplete service reads from pre-built trie in memory.
+
+**Scale**:
+- Trie for 1M queries ≈ 1GB RAM. Shard by first character (26 shards).
+- 5 read replicas per shard, load balanced.
+- Rebuild trie in background, hot-swap atomically.
+
+**Personalisation** (optional): Blend global score with user's own search history using weighted sum. Stored in user profile cache (Redis).`,
+  },
+  {
+    id: "sd7", domain: "System Design", type: "technical", difficulty: "Hard",
+    question: "Design a chat system like WhatsApp. How do you handle real-time message delivery, storage, and offline users?",
+    hint: "Cover WebSocket connections, message queuing for offline delivery, chat storage (append-only log), group chat fan-out, and end-to-end encryption.",
+    keyPoints: ["WebSocket for real-time", "Presence service", "Message store (Cassandra)", "Fan-out for group chat", "Push notification for offline users"],
+    modelAnswer: `**Core Components**:
+
+**1. Connection Service** (WebSocket servers):
+- Each client maintains a persistent WebSocket to a connection server.
+- Connection servers are stateful (hold socket references) — can't scale with simple round-robin.
+- Connection registry: user_id → {server_id, socket_id} stored in Redis.
+
+**2. Message Flow** (1-to-1 chat):
+\`\`\`
+Sender → Connection Server A
+  → Message Service (persist to Cassandra)
+  → Look up recipient's server from Redis
+  → Push to Connection Server B → Recipient socket
+\`\`\`
+
+**3. Offline Delivery**:
+- If recipient is offline (not in connection registry): store message in inbox (Cassandra), send push notification (APNs/FCM).
+- On reconnect: client requests messages since last_seen_id. Inbox drained, push delivered.
+
+**4. Storage** — Cassandra (append-only, high write throughput):
+\`\`\`
+Table: messages
+  partition key: conversation_id
+  clustering key: message_id (time-ordered Snowflake ID)
+  columns: sender_id, content, timestamp, status
+\`\`\`
+Supports: fetch messages in a conversation (range scan by clustering key). Cassandra handles millions of writes/sec.
+
+**5. Group Chat Fan-out**:
+- Small groups (<500): write a copy to each member's inbox (fan-out on write).
+- Large groups/broadcast channels (like WhatsApp Communities): fan-out on read — store one message, readers fetch on demand.
+
+**6. Presence Service**:
+- Users send heartbeat every 30s. Redis sorted set: user_id → last_heartbeat_timestamp.
+- "Online" if heartbeat < 30s ago. "Last seen" stored on disconnect.
+
+**7. End-to-End Encryption**:
+- Signal Protocol: Double Ratchet algorithm. Server stores only encrypted ciphertext. Keys never leave devices.`,
   },
 ];
 
@@ -1171,6 +1475,207 @@ Each downstream service has its own SQS queue with its own retry/DLQ settings. S
 
 **Common mistake**: Using \`"Effect": "Allow", "Action": "*", "Resource": "*"\` — full admin access. Use AWS Access Advisor to see which services are actually used.`,
   },
+  {
+    id: "cl3", domain: "Cloud", type: "technical", difficulty: "Medium",
+    question: "How does AWS Lambda work? Explain cold starts, concurrency models, and when Lambda is NOT the right choice.",
+    hint: "Cover the execution environment lifecycle, provisioned concurrency, reserved concurrency, and trade-offs vs containers.",
+    keyPoints: ["Execution environment lifecycle", "Cold start causes & mitigation", "Provisioned vs reserved concurrency", "Event sources (SQS, API GW, EventBridge)", "When to avoid Lambda"],
+    modelAnswer: `**Lambda Execution Model**:
+- AWS provisions a micro-VM (Firecracker) per invocation. First invocation = **cold start**: download code, init runtime, run init code.
+- Subsequent invocations reuse the warm environment — fast (~1ms overhead vs 100–500ms cold start).
+
+**Cold Start Causes**:
+- Infrequent invocations (environment recycled after ~15 min idle).
+- Large deployment packages (> 10MB zip).
+- Heavy init code (DB connections, SDK initialisation in global scope).
+- VPC-attached Lambdas (ENI provisioning) — largely fixed by hyperplane ENI pooling.
+
+**Mitigation**:
+- **Provisioned Concurrency**: pre-warm N environments, always ready. Costs $ even when idle.
+- Keep package size small (tree-shaking, Lambda layers for shared deps).
+- Move heavy init to global scope (runs once per cold start, not per invocation).
+- Scheduled ping (EventBridge rule every 5 min) — cheap but unreliable.
+
+**Concurrency**:
+- **Reserved Concurrency**: cap max concurrent invocations for a function (throttle protection).
+- **Provisioned Concurrency**: pre-initialised environments for predictable performance.
+- Default account limit: 1000 concurrent executions per region. Request increase as needed.
+
+**Event Sources**: API Gateway (sync), SQS (async, batch), SNS, EventBridge, S3 events, DynamoDB Streams, Kinesis.
+
+**When NOT to use Lambda**:
+- Execution > 15 minutes (Lambda max timeout).
+- Long-lived WebSocket connections (use ECS/Fargate).
+- High-frequency, steady workloads — always-on containers are cheaper.
+- GPU workloads, custom runtimes not supported.
+- Latency-sensitive paths where cold starts are unacceptable and provisioned concurrency cost is too high.`,
+  },
+  {
+    id: "cl4", domain: "Cloud", type: "technical", difficulty: "Medium",
+    question: "Compare EKS, ECS, and Lambda for running containerised workloads on AWS. How do you choose?",
+    hint: "Cover operational complexity, cost model, scaling behaviour, and the right use case for each.",
+    keyPoints: ["EKS: Kubernetes, max control", "ECS: AWS-native, simpler", "Lambda: serverless, event-driven", "Fargate: serverless compute for ECS/EKS", "Cost: idle vs active"],
+    modelAnswer: `**AWS Lambda**:
+- No containers to manage. Deploy code (zip or container image up to 10GB).
+- Scales to 0 (no cost when idle). Scales to thousands of concurrent executions automatically.
+- **Best for**: Event-driven, short-lived tasks (<15 min), unpredictable or spiky traffic, data pipelines, API backends with variable load.
+- **Not for**: Long-running processes, always-on services, GPU workloads.
+
+**Amazon ECS (Elastic Container Service)**:
+- AWS-native container orchestration. Less complex than Kubernetes.
+- Two launch types: **EC2** (you manage nodes) or **Fargate** (serverless — no node management).
+- Tight integration with ALB, CloudWatch, IAM, ECR.
+- **Best for**: Teams new to containers, microservices on AWS, when Kubernetes complexity isn't needed.
+- Fargate: pay per vCPU/memory per second. No idle node cost.
+
+**Amazon EKS (Elastic Kubernetes Service)**:
+- Managed Kubernetes control plane. You manage worker nodes (EC2) or use Fargate/Karpenter.
+- Full Kubernetes ecosystem: Helm, Istio, ArgoCD, KEDA, Prometheus.
+- Portable: same manifests work on GKE, AKS, on-prem.
+- **Best for**: Large engineering teams, multi-cloud strategy, complex workloads needing K8s ecosystem, existing Kubernetes expertise.
+- Higher operational complexity and cost.
+
+**Decision Framework**:
+\`\`\`
+Event-driven, short tasks → Lambda
+Simple microservices, AWS-only → ECS + Fargate
+Complex orchestration, K8s ecosystem → EKS
+Need GPU / custom OS → EC2 Auto Scaling Groups
+\`\`\`
+
+**Cost Rule of Thumb**: For workloads running >40% of the time, EC2/Fargate is cheaper than Lambda. For <10%, Lambda wins.`,
+  },
+  {
+    id: "cl5", domain: "Cloud", type: "technical", difficulty: "Medium",
+    question: "Explain AWS VPC architecture. What is the difference between Security Groups, NACLs, and when would you use each?",
+    hint: "Cover subnets (public/private), route tables, Internet Gateway, NAT Gateway, and the stateful vs stateless distinction between SGs and NACLs.",
+    keyPoints: ["Public vs private subnets", "IGW vs NAT Gateway", "Security Groups (stateful)", "NACLs (stateless)", "VPC peering vs Transit Gateway"],
+    modelAnswer: `**VPC (Virtual Private Cloud)**: Isolated network in AWS. You control IP ranges (CIDR), subnets, routing, and gateways.
+
+**Subnet Types**:
+- **Public Subnet**: Has a route to the Internet Gateway (IGW). Resources here get public IPs. For: load balancers, bastion hosts.
+- **Private Subnet**: No direct internet route. For: application servers, databases. Outbound internet via NAT Gateway (in public subnet).
+
+**Routing**:
+- Route Table: per-subnet routing rules. Public subnet: 0.0.0.0/0 → IGW. Private subnet: 0.0.0.0/0 → NAT Gateway.
+- NAT Gateway: allows outbound internet from private subnets (e.g., OS updates, API calls) without allowing inbound connections.
+
+**Security Groups** (instance-level firewall):
+- **Stateful**: if inbound traffic is allowed, response is automatically allowed (no need to add outbound rule).
+- Allow rules only (no explicit deny).
+- Evaluated as a group — all rules checked.
+- **Use for**: fine-grained control at resource level. Default: deny all inbound, allow all outbound.
+
+**NACLs** (subnet-level firewall):
+- **Stateless**: must explicitly allow inbound AND outbound for each direction.
+- Support allow AND deny rules. Rules evaluated in order (lowest number first).
+- Applied at subnet boundary.
+- **Use for**: blocking known malicious IPs, subnet-level isolation, additional defense layer.
+
+**Layered Security**: NACLs (subnet boundary) + Security Groups (instance) = defense in depth.
+
+**VPC Connectivity**:
+- **VPC Peering**: direct connection between two VPCs. No transitive routing.
+- **Transit Gateway**: hub-and-spoke connecting many VPCs + on-prem. Supports transitive routing.
+- **VPC Endpoints**: private access to AWS services (S3, DynamoDB) without internet traffic.`,
+  },
+  {
+    id: "cl6", domain: "Cloud", type: "technical", difficulty: "Medium",
+    question: "Explain AWS RDS high availability. What is Multi-AZ vs Read Replicas vs Aurora? When would you choose each?",
+    hint: "Cover synchronous vs asynchronous replication, failover time, read scaling vs HA, and Aurora's shared storage architecture.",
+    keyPoints: ["Multi-AZ: synchronous, HA", "Read Replicas: async, read scaling", "Aurora: shared storage volume", "RPO vs RTO", "Aurora Global Database for multi-region"],
+    modelAnswer: `**RDS Multi-AZ** (High Availability):
+- Synchronous replication to a standby instance in another AZ.
+- Standby is NOT readable — pure hot standby for HA.
+- Automatic failover on primary failure: DNS CNAME updated in ~30-60s (RTO ~1 min, RPO ~0).
+- **Use for**: production databases requiring HA with minimal data loss.
+
+**RDS Read Replicas** (Read Scaling):
+- Asynchronous replication. Replica can be in same AZ, different AZ, or different region.
+- Readable — offload analytics/reporting queries from primary.
+- **Replication lag**: async → potential stale reads (seconds of lag).
+- Can be promoted to standalone DB in disaster recovery (RPO = replication lag, RTO = minutes).
+- **Use for**: read-heavy workloads, analytics, reporting.
+
+**Aurora** (AWS's reimagined relational DB):
+- Shared distributed storage volume across 3 AZs (6 copies of data). No replication lag between writer and storage.
+- **Aurora Replicas**: up to 15, all share the same storage → near-zero lag reads.
+- Writer failover: ~30s (vs ~60s for RDS Multi-AZ). Replicas can be promoted to writer instantly.
+- 5× better performance than MySQL RDS, 3× better than PostgreSQL RDS (AWS claims).
+- **Aurora Serverless v2**: auto-scales compute (ACUs) from 0.5 to 128 ACUs. Zero when idle.
+- **Aurora Global Database**: replicates across 5 regions with <1s lag. RTO <1 min for regional failover.
+- **Use for**: business-critical apps needing high throughput, low-latency reads, or multi-region HA.
+
+**Decision**:
+- Dev/Test → Single-AZ RDS (cheapest)
+- Production HA → Multi-AZ RDS
+- High read traffic → Read Replicas
+- Business-critical / high performance → Aurora
+- Unpredictable workloads → Aurora Serverless`,
+  },
+  {
+    id: "cl7", domain: "Cloud", type: "technical", difficulty: "Medium",
+    question: "Compare Terraform and AWS CloudFormation for Infrastructure as Code. What are the key differences and when would you choose each?",
+    hint: "Cover provider support, state management, HCL vs JSON/YAML, drift detection, and module/registry ecosystem.",
+    keyPoints: ["Terraform: multi-cloud, HCL, state file", "CloudFormation: AWS-native, no state file", "Drift detection", "Modules vs Nested Stacks", "CDK as a middle ground"],
+    modelAnswer: `**AWS CloudFormation**:
+- AWS-native. Supports all AWS resources (often before Terraform).
+- No separate state file — AWS manages stack state internally.
+- Templates in JSON/YAML. Can use AWS CDK to generate CloudFormation (TypeScript/Python code → CF templates).
+- **Stack Sets**: deploy across multiple accounts/regions.
+- **Change Sets**: preview changes before applying. Rollback on failure.
+- **Drift Detection**: built-in, detect manual changes to resources.
+- **Best for**: AWS-only shops, teams preferring no extra tooling, tight AWS integration, compliance requiring AWS-native tooling.
+
+**Terraform (HashiCorp)**:
+- Multi-cloud: AWS, Azure, GCP, Kubernetes, Datadog, GitHub — 3000+ providers.
+- HCL (HashiCorp Configuration Language) — more readable than YAML for complex configs.
+- **State File**: stores resource metadata locally or in S3+DynamoDB (remote state with locking). Must manage carefully.
+- **Plan/Apply**: \`terraform plan\` shows what will change before applying. Like CloudFormation Change Sets.
+- **Modules**: reusable infrastructure components. Terraform Registry has thousands of community modules.
+- **Workspaces**: manage multiple environments (dev/staging/prod) from one config.
+- Drift detection: \`terraform plan\` shows drift but doesn't auto-detect.
+- **Best for**: multi-cloud, teams with existing Terraform expertise, complex infrastructure, want rich module ecosystem.
+
+**AWS CDK (Cloud Development Kit)**:
+- Write infrastructure in TypeScript, Python, Java, Go — generates CloudFormation.
+- Full programming language constructs (loops, conditions, abstractions) vs declarative YAML.
+- Good middle ground: developer-friendly, AWS-native result.
+
+**My recommendation**: Terraform for new multi-cloud or complex setups. CloudFormation/CDK for AWS-only shops wanting native integration.`,
+  },
+  {
+    id: "cl8", domain: "Cloud", type: "technical", difficulty: "Medium",
+    question: "How do you optimize AWS costs? Explain Reserved Instances, Savings Plans, Spot Instances, and architectural strategies.",
+    hint: "Cover commitment-based discounts vs on-demand, Spot interruption handling, rightsizing, and architectural patterns like auto-scaling and serverless.",
+    keyPoints: ["On-demand vs Reserved vs Savings Plans vs Spot", "Spot interruption handling", "Rightsizing with Compute Optimizer", "Auto-scaling", "Cost allocation tags"],
+    modelAnswer: `**EC2 Pricing Models**:
+
+| Model | Discount | Commitment | Best For |
+|---|---|---|---|
+| On-Demand | 0% | None | Dev/test, unpredictable |
+| Reserved Instances | up to 72% | 1-3 years | Steady-state prod |
+| Savings Plans | up to 66% | 1-3 years | Flexible (any instance type) |
+| Spot Instances | up to 90% | None | Fault-tolerant, batch |
+
+**Reserved Instances**: Commit to specific instance type/region. Standard RI = 40% locked. Convertible RI = change instance family.
+
+**Savings Plans** (preferred over RIs): Commit to $ spend/hour. EC2 Savings Plans = flexibility within instance family. Compute Savings Plans = any EC2/Lambda/Fargate. Easier to manage.
+
+**Spot Instances**: Use spare AWS capacity. Can be interrupted with 2-min warning.
+- Best for: batch jobs, ML training, CI/CD workers, stateless microservices with auto-scaling.
+- Handle interruptions: catch termination signal, checkpoint work, use Spot Fleet with mixed instance types.
+
+**Architectural Optimizations**:
+1. **Auto-scaling**: scale in during off-peak. Schedule scale-in at night.
+2. **Serverless shift**: Lambda + Fargate = pay per use, no idle cost.
+3. **S3 storage classes**: move infrequently accessed data to S3-IA (40% cheaper), Glacier (90% cheaper) via lifecycle rules.
+4. **RDS rightsizing**: AWS Compute Optimizer identifies over-provisioned instances.
+5. **Data transfer**: minimize cross-AZ traffic (high cost). Use VPC Endpoints for S3/DynamoDB (free within VPC).
+6. **Trusted Advisor + Cost Explorer**: weekly review. Set billing alerts. Tag all resources for cost allocation.
+
+**Rule of thumb**: 20-30% savings from Savings Plans + 15% from rightsizing = 35-45% cost reduction with no code changes.`,
+  },
 ];
 
 // ─── QA & Testing ─────────────────────────────────────────────────────────────
@@ -1232,6 +1737,347 @@ export const QA_TESTING_QUESTIONS: QuestionBankItem[] = [
 **When to keep Selenium**: Legacy Java-heavy teams, SAP GUI / thick-client testing, existing large Selenium suite where migration cost > benefit, Internet Explorer (yes, some enterprise still).
 
 **Verdict**: For greenfield projects, Playwright is the clear winner. Faster execution, fewer flaky tests, better developer experience.`,
+  },
+  {
+    id: "qa3", domain: "QA & Testing", type: "technical", difficulty: "Medium",
+    question: "How do you approach performance and load testing? Explain load vs stress vs spike vs soak testing and how you'd use k6 or JMeter.",
+    hint: "Cover the four test types, key metrics (TPS, latency p95/p99, error rate), and how to set up a realistic load model.",
+    keyPoints: ["Load vs stress vs spike vs soak", "TPS, p95/p99 latency, error rate thresholds", "Virtual users vs arrival rate", "Baseline before optimising", "k6 scripting"],
+    modelAnswer: `**Performance Test Types**:
+
+| Type | Purpose | Duration |
+|---|---|---|
+| **Load** | Verify system under expected traffic | 30-60 min |
+| **Stress** | Find breaking point (beyond expected load) | Until failure |
+| **Spike** | Sudden 10× traffic increase | Short bursts |
+| **Soak** | Long-duration at normal load (memory leaks) | 8-24 hours |
+
+**Key Metrics**:
+- **Throughput**: requests/sec (RPS/TPS).
+- **Latency**: p50 (median), **p95**, **p99** — tails matter more than average. SLA often defined on p99.
+- **Error Rate**: % of failed requests. >1% is usually unacceptable.
+- **Resource utilisation**: CPU, memory, DB connections, thread pool saturation.
+
+**k6 Load Test Script**:
+\`\`\`javascript
+import http from 'k6/http';
+import { check, sleep } from 'k6';
+
+export const options = {
+  stages: [
+    { duration: '2m', target: 100 },  // ramp up
+    { duration: '5m', target: 100 },  // steady load
+    { duration: '2m', target: 0 },    // ramp down
+  ],
+  thresholds: {
+    http_req_duration: ['p(95)<500'],  // 95% of requests < 500ms
+    http_req_failed: ['rate<0.01'],    // error rate < 1%
+  },
+};
+
+export default function () {
+  const res = http.get('https://api.example.com/products');
+  check(res, { 'status 200': (r) => r.status === 200 });
+  sleep(1);
+}
+\`\`\`
+
+**Process**: Establish baseline → load test → identify bottleneck → optimize → retest. Don't run perf tests in production without feature flags/canary. Use a production-like staging environment.`,
+  },
+  {
+    id: "qa4", domain: "QA & Testing", type: "technical", difficulty: "Easy",
+    question: "How do you approach API testing? Walk through testing an REST API from contract to performance. What tools and techniques do you use?",
+    hint: "Cover contract testing (OpenAPI), functional testing (status codes, schema, edge cases), auth testing, and integration with CI/CD via Newman/k6.",
+    keyPoints: ["Contract first (OpenAPI/Swagger)", "Postman collections / REST-assured", "Test boundary cases + error scenarios", "Auth (Bearer, API keys, OAuth)", "Newman in CI/CD pipeline"],
+    modelAnswer: `**API Testing Layers**:
+
+**1. Contract Testing** (earliest feedback):
+- Use OpenAPI spec to validate request/response schemas automatically.
+- Tools: Dredd (validates API against spec), Pact (consumer-driven contract testing between services).
+- Catches API breaking changes before integration tests.
+
+**2. Functional Testing**:
+- **Happy path**: correct inputs → correct response (status code, schema, data).
+- **Boundary conditions**: empty arrays, null fields, max string length, integer overflow.
+- **Error scenarios**: 400 (bad input), 401 (unauthorised), 403 (forbidden), 404 (not found), 422 (validation), 500 (server error).
+- **Idempotency**: PUT/DELETE should be idempotent. Test calling twice, expect same result.
+
+**Postman / Newman**:
+\`\`\`javascript
+// Postman test script
+pm.test("Status 200", () => pm.response.to.have.status(200));
+pm.test("Schema valid", () => {
+  const schema = { type: "object", required: ["id", "name"] };
+  pm.response.to.have.jsonSchema(schema);
+});
+pm.test("Response time < 500ms", () => pm.expect(pm.response.responseTime).to.be.below(500));
+\`\`\`
+\`\`\`bash
+# Run in CI/CD
+newman run collection.json -e env-staging.json --reporters cli,junit --reporter-junit-export results.xml
+\`\`\`
+
+**REST-Assured** (Java):
+\`\`\`java
+given().header("Authorization", "Bearer " + token)
+  .when().get("/api/users/1")
+  .then().statusCode(200)
+         .body("name", equalTo("John"))
+         .time(lessThan(500L));
+\`\`\`
+
+**Auth Testing**: Test with no token (expect 401), expired token (401), wrong scope (403), valid token (200).
+
+**CI/CD Integration**: Newman post-deploy smoke test, REST-Assured in integration test stage, k6 in performance stage. Block deployment on failures.`,
+  },
+  {
+    id: "qa5", domain: "QA & Testing", type: "technical", difficulty: "Medium",
+    question: "What is BDD (Behaviour-Driven Development) with Cucumber/Gherkin? When should you use it and when does it become an anti-pattern?",
+    hint: "Cover the three amigos collaboration model, Gherkin syntax, the glue code layer, and the maintenance cost vs value trade-off.",
+    keyPoints: ["Given/When/Then Gherkin syntax", "Three amigos (BA/Dev/QA)", "Step definitions", "Living documentation", "When BDD adds overhead vs value"],
+    modelAnswer: `**BDD Purpose**: Align business, development, and QA around shared acceptance criteria written in plain language (Gherkin). Scenarios become executable tests and living documentation.
+
+**Gherkin Syntax**:
+\`\`\`gherkin
+Feature: User authentication
+
+  Scenario: Successful login with valid credentials
+    Given the user is on the login page
+    And the user has an account with email "user@example.com"
+    When the user enters password "SecurePass123" and clicks Login
+    Then the user should be redirected to the dashboard
+    And the session token should be set
+
+  Scenario Outline: Failed login
+    Given the user enters "<email>" and "<password>"
+    When the user clicks Login
+    Then they should see error "<message>"
+    Examples:
+      | email          | password | message           |
+      | wrong@test.com | pass123  | Invalid credentials |
+      | user@test.com  | wrongpw  | Invalid credentials |
+\`\`\`
+
+**Three Amigos**: BA writes acceptance criteria → Dev + QA refine into Gherkin scenarios together before development starts. Ensures shared understanding.
+
+**Step Definitions** (glue code in Java/JS/Python):
+\`\`\`java
+@When("the user enters password {string} and clicks Login")
+public void userLogsIn(String password) {
+    loginPage.enterPassword(password).clickLogin();
+}
+\`\`\`
+
+**BDD works well when**:
+- Non-technical stakeholders actively read/contribute scenarios.
+- Domain is complex with many business rules.
+- Team is large and alignment is difficult.
+
+**BDD anti-patterns** (becomes overhead):
+- Devs writing Gherkin alone without BA involvement — just verbose unit tests.
+- Technical implementation details in scenarios ("When I click button with id='login-btn'").
+- Large step definition libraries that are hard to reuse.
+- Every test as BDD — unit tests don't need Gherkin.
+
+**Rule**: Use BDD for acceptance/integration tests of business flows. Keep unit tests in plain code.`,
+  },
+  {
+    id: "qa6", domain: "QA & Testing", type: "technical", difficulty: "Medium",
+    question: "How do you manage test data across environments (dev/staging/production)? What strategies prevent tests from polluting each other?",
+    hint: "Cover test data factories, database seeding, data isolation strategies, and the challenge of referential integrity in integration tests.",
+    keyPoints: ["Test data factories / builders", "Database seeding vs fixtures", "Test isolation (transactions rollback)", "TestContainers for integration tests", "Data masking for prod copies"],
+    modelAnswer: `**Test Data Strategies**:
+
+**1. Test Data Factories / Builders**:
+- Generate data programmatically per test with realistic values.
+- Libraries: FactoryBot (Ruby), Factory Boy (Python), Faker.js (JS).
+\`\`\`python
+# FactoryBoy example
+class UserFactory(factory.Factory):
+    class Meta: model = User
+    name = factory.Faker('name')
+    email = factory.Sequence(lambda n: f"user{n}@test.com")
+    role = "standard"
+\`\`\`
+- Each test creates its own data, owns its cleanup.
+
+**2. Database Seeding / Fixtures**:
+- Baseline dataset loaded before test suite (reference data: countries, product categories).
+- **Risk**: shared mutable state → tests interfere. Mitigate with read-only fixtures + per-test data.
+
+**3. Test Isolation Strategies**:
+- **Transaction Rollback**: wrap each test in a DB transaction, rollback after. Fast, no cleanup code. Works for single-DB tests.
+- **Separate Schema per test**: create/drop schema per test. Slower but fully isolated.
+- **TestContainers**: spin up a real database Docker container per test run. Fully isolated from other environments. Supports PostgreSQL, MySQL, MongoDB, Redis.
+
+**4. Environment-Specific Strategies**:
+- **Dev**: use Docker Compose with seeded databases. Developers can reset anytime.
+- **Staging**: deploy-time seeding scripts. Anonymised copy of prod data (GDPR compliance).
+- **Production**: never write test data to prod. Use feature flags to test new features with real users safely.
+
+**5. Data Masking** (for prod copies in staging):
+- Mask PII: names, emails, phone numbers replaced with generated values.
+- Preserve referential integrity and data distribution.
+- Tools: Faker, custom masking scripts, AWS DMS with transformation rules.
+
+**Key principle**: Each test should be independent, repeatable, and not leave state that affects other tests.`,
+  },
+  {
+    id: "qa7", domain: "QA & Testing", type: "technical", difficulty: "Medium",
+    question: "What causes flaky tests and how do you systematically diagnose and fix them?",
+    hint: "Cover the common root causes (async timing, shared state, test order dependency, environment differences) and systematic remediation strategies.",
+    keyPoints: ["Async timing issues", "Shared mutable state", "Test order dependency", "Network/infra flakiness", "Quarantine + track + fix workflow"],
+    modelAnswer: `**Flaky tests**: Tests that pass and fail non-deterministically without code changes. The #1 enemy of CI/CD — teams start ignoring failures, masking real bugs.
+
+**Root Causes**:
+
+**1. Async Timing** (most common in UI tests):
+- \`sleep(2000)\` hard-coded waits → fail on slow CI, pass on fast dev machine.
+- **Fix**: Use explicit waits that poll for conditions: Playwright auto-wait, Selenium \`WebDriverWait\`, retry assertions.
+
+**2. Shared Mutable State**:
+- Test A modifies global state (DB record, env variable) → Test B fails because it assumes initial state.
+- **Fix**: Proper setup/teardown, test data factories per test, database transactions rolled back after each test.
+
+**3. Test Order Dependency**:
+- Test B only passes if Test A ran first.
+- **Fix**: Each test must set up its own prerequisites (Arrange step). Run tests in random order periodically (\`jest --randomize\`).
+
+**4. External Service Flakiness**:
+- Tests hit real external APIs → rate limits, network timeouts, downtime.
+- **Fix**: Mock/stub external services (WireMock, MSW) in integration tests. Only call real services in dedicated contract tests.
+
+**5. Time-based Logic**:
+- Test assumes current date/time. Fails on midnight, end-of-month, or timezone changes.
+- **Fix**: Inject clock dependency, control time in tests (\`jest.useFakeTimers()\`, Python \`freezegun\`).
+
+**Remediation Workflow**:
+1. **Quarantine**: Tag flaky tests. Remove from required CI gates to stop blocking.
+2. **Track**: Log flakiness rate per test. Prioritise by frequency.
+3. **Reproduce locally**: Run test 10-50 times in a loop: \`for i in {1..50}; do pytest test_foo.py; done\`
+4. **Fix root cause** (see above). Never just add retry logic — that masks the problem.
+5. **Dequarantine**: Re-add to CI gates once stable across 100+ runs.`,
+  },
+  {
+    id: "qa8", domain: "QA & Testing", type: "technical", difficulty: "Medium",
+    question: "What is shift-left testing? How do you integrate quality gates into a CI/CD pipeline?",
+    hint: "Cover the shift-left philosophy, quality gates at each stage (commit, build, staging, prod), and how fast feedback loops reduce bug fix cost.",
+    keyPoints: ["Shift-left: test earlier", "Quality gates per CI stage", "Fast unit tests at commit", "SAST in build stage", "Performance gates in staging"],
+    modelAnswer: `**Shift-Left**: Move testing activities earlier in the development lifecycle. The earlier a bug is found, the cheaper it is to fix (10× cheaper in dev vs QA, 100× cheaper vs production).
+
+**Traditional (Shift-Right)**: Code → Long dev cycle → QA phase → Find bugs late → expensive fix.
+**Shift-Left**: TDD / unit tests → PR review → CI quality gates → catch bugs within minutes.
+
+**CI/CD Pipeline Quality Gates**:
+
+\`\`\`
+Commit → Pre-commit hooks (lint, format, secret scan)
+    ↓
+PR Created → Code review + unit test run (<5 min)
+    ↓
+Build Stage → Unit tests + SAST (SonarQube, Snyk)
+              → Code coverage gate (fail if < 80%)
+              → Dependency vulnerability scan
+    ↓
+Integration Stage → Integration tests with TestContainers
+                  → Contract tests (Pact)
+                  → API functional tests (Newman)
+    ↓
+Staging Deploy → Smoke tests (happy path)
+               → Performance baseline (k6 — fail if p95 > threshold)
+               → DAST scan (OWASP ZAP)
+    ↓
+Production → Canary health checks
+           → Synthetic monitoring (real-user-like probes every minute)
+           → Automatic rollback on error rate spike
+\`\`\`
+
+**Key Practices**:
+- **Fast feedback at commit**: Pre-commit hooks (Husky + lint-staged) catch style issues before pushing.
+- **Test categorisation**: Mark tests as fast (unit, <1s) vs slow (integration, >10s). Run fast tests always, slow tests on main branch or scheduled.
+- **Parallel test execution**: JUnit 5 parallel mode, Jest workers — cut integration suite from 20 min to 5 min.
+- **Flaky test quarantine**: Remove from required gates to maintain green pipeline discipline.
+- **Definition of Done**: Story only "done" when unit tests, integration tests, and security scan pass.`,
+  },
+  {
+    id: "qa9", domain: "QA & Testing", type: "technical", difficulty: "Medium",
+    question: "What is the OWASP Top 10? How do you test for the most common vulnerabilities like SQL Injection, XSS, and broken authentication as a QA engineer?",
+    hint: "Cover SAST vs DAST, automated scanning tools (ZAP, Burp Suite), and how to integrate security testing into the CI/CD pipeline.",
+    keyPoints: ["OWASP Top 10 categories", "SAST vs DAST", "SQL injection testing", "XSS testing", "OWASP ZAP in CI/CD"],
+    modelAnswer: `**OWASP Top 10** (2021):
+1. Broken Access Control (IDOR, privilege escalation)
+2. Cryptographic Failures (weak encryption, sensitive data in logs)
+3. **Injection** (SQL, NoSQL, OS command, LDAP)
+4. Insecure Design (security not designed in)
+5. Security Misconfiguration (default credentials, verbose errors)
+6. Vulnerable & Outdated Components (Snyk, Dependabot)
+7. Identification and Authentication Failures (broken auth, weak passwords)
+8. Software and Data Integrity Failures (CI/CD pipeline attacks)
+9. **Security Logging & Monitoring Failures**
+10. Server-Side Request Forgery (SSRF)
+
+**SAST (Static Analysis Security Testing)**:
+- Analyse source code without executing.
+- Tools: SonarQube, Semgrep, Checkmarx, Snyk Code.
+- Run in build stage. Catches SQL injection, hardcoded secrets, insecure random, XXE.
+
+**DAST (Dynamic Analysis Security Testing)**:
+- Test running application from outside (black-box).
+- Tools: **OWASP ZAP** (open source), Burp Suite, Nikto.
+- ZAP in CI/CD: \`zap-baseline.py\` scans for common vulnerabilities automatically.
+
+**SQL Injection Testing**:
+- Try payloads: \`' OR '1'='1\`, \`'; DROP TABLE users;--\`
+- Use sqlmap for automated detection.
+- **Fix**: Parameterised queries always. Never concatenate user input into SQL.
+
+**XSS Testing**:
+- Try payloads: \`<script>alert(1)</script>\`, \`javascript:alert(1)\` in URL params, form fields.
+- Check if input is reflected in HTML without encoding.
+- **Fix**: HTML encode all output, Content-Security-Policy header.
+
+**Broken Authentication Testing**:
+- Test: weak passwords, no lockout after N failed attempts, session tokens in URLs, JWT without expiry.
+- Check: HTTPS only for auth endpoints, httpOnly cookies, secure flag.
+
+**CI/CD Integration**: SAST in build (fast, <2 min). DAST against staging after deploy (10-15 min). Block deployment if high/critical findings.`,
+  },
+  {
+    id: "qa10", domain: "QA & Testing", type: "technical", difficulty: "Easy",
+    question: "What do test coverage metrics mean? Is 100% code coverage a good goal? How do you measure test quality beyond coverage?",
+    hint: "Distinguish line/branch/mutation coverage. Explain why 100% coverage doesn't mean bug-free code, and introduce mutation testing as a quality measure.",
+    keyPoints: ["Line vs branch vs path coverage", "Coverage doesn't equal quality", "Mutation testing (Pitest/Stryker)", "Testing behaviour not implementation", "Risk-based coverage targets"],
+    modelAnswer: `**Coverage Types**:
+- **Line Coverage**: % of lines executed by tests. Easiest to measure, easiest to game.
+- **Branch Coverage**: % of decision branches (if/else, switch) taken. More meaningful — tests both true/false paths.
+- **Path Coverage**: % of all possible execution paths. Exponential combinations — impractical for large functions.
+- **Mutation Coverage**: % of injected code mutations caught by tests. Best measure of test quality.
+
+**Why 100% Line Coverage is NOT the goal**:
+\`\`\`python
+def divide(a, b):
+    return a / b
+
+def test_divide():
+    assert divide(10, 2) == 5  # 100% line coverage!
+\`\`\`
+This achieves 100% coverage but doesn't test division by zero (ZeroDivisionError). Coverage tells you which code was executed, not whether the behaviour is correct.
+
+**Coverage ≠ Quality**: You can have 100% coverage with assertions that never fail (\`assert True\`), or tests that execute code but verify nothing meaningful.
+
+**Mutation Testing** (the real quality measure):
+- Automatically inject small bugs (mutations): flip \`>\` to \`>=\`, change \`+\` to \`-\`, negate conditions.
+- Run test suite against each mutated version. A mutation "survived" (tests still pass) = test gap.
+- Tools: **Pitest** (Java), **Stryker** (JavaScript/TypeScript/C#).
+- Mutation score = killed mutations / total mutations. Aim for >80%.
+
+**Better Metrics**:
+- Branch coverage >80% for critical paths.
+- Mutation score >75%.
+- Defect escape rate (bugs found in prod that tests should have caught).
+- Test execution time trends (slowdown = quality debt).
+
+**Risk-based targeting**: 90%+ coverage for payment, auth, data integrity logic. 60-70% acceptable for UI rendering, logging. Don't set a single % target for the whole codebase.`,
   },
 ];
 

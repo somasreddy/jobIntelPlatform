@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Navbar from "@/components/Navbar";
 import { loadProfile } from "@/lib/profile";
@@ -10,6 +10,7 @@ import {
   MessageSquare, Code2, Users, Lightbulb, Target,
   Star, UserCircle2, RefreshCw, ClipboardList, Trophy,
   BookOpen, Cpu, GitMerge, Database, Cloud, Globe2, TestTube2, BarChart2,
+  Timer, Zap,
 } from "lucide-react";
 
 // ─── Local interview question type (profile-personalised behavioral) ───────────
@@ -200,6 +201,12 @@ export default function InterviewPrepPage() {
   const [filterType, setFilterType] = useState<string>("all");
   const [generating, setGenerating] = useState(false);
   const [questionSeed, setQuestionSeed] = useState(0);
+  const [mockMode, setMockMode] = useState(false);
+  const [timerSeconds, setTimerSeconds] = useState<number | null>(null);
+  const [timerQuestionId, setTimerQuestionId] = useState<string | null>(null);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const MOCK_TIMER_SECS = 120; // 2 minutes per question
 
   useEffect(() => {
     const p = loadProfile();
@@ -207,6 +214,32 @@ export default function InterviewPrepPage() {
     setProfileChecked(true);
     if (p) setTargetRole(p.currentRole || "");
   }, []);
+
+  // Countdown tick
+  useEffect(() => {
+    if (timerSeconds === null) return;
+    if (timerSeconds <= 0) {
+      setTimerSeconds(null);
+      setTimerQuestionId(null);
+      return;
+    }
+    timerRef.current = setInterval(() => {
+      setTimerSeconds((s) => (s !== null && s > 0 ? s - 1 : null));
+    }, 1000);
+    return () => { if (timerRef.current) clearInterval(timerRef.current); };
+  }, [timerSeconds === null ? null : timerQuestionId]); // restart only when question changes
+
+  const startTimer = (id: string) => {
+    if (timerRef.current) clearInterval(timerRef.current);
+    setTimerQuestionId(id);
+    setTimerSeconds(MOCK_TIMER_SECS);
+  };
+
+  const stopTimer = () => {
+    if (timerRef.current) clearInterval(timerRef.current);
+    setTimerSeconds(null);
+    setTimerQuestionId(null);
+  };
 
   const handleGenerate = async (seedOverride?: number) => {
     if (!profile) return;
@@ -255,7 +288,14 @@ export default function InterviewPrepPage() {
     setScores(p => ({ ...p, [id]: Math.min(pts, 100) }));
   };
 
-  const toggle = (id: string) => setExpanded(p => ({ ...p, [id]: !p[id] }));
+  const toggle = (id: string) => {
+    const opening = !expanded[id];
+    setExpanded(p => ({ ...p, [id]: !p[id] }));
+    if (mockMode) {
+      if (opening) startTimer(id);
+      else stopTimer();
+    }
+  };
 
   const domains = questions
     ? ["all", ...Array.from(new Set(questions.map(q => q.domain)))]
@@ -353,17 +393,30 @@ export default function InterviewPrepPage() {
                   : <><Sparkles className="w-4 h-4" /> Generate Questions</>}
               </button>
               {questions && !generating && (
-                <button
-                  onClick={() => {
-                    const nextSeed = questionSeed + 1;
-                    setQuestionSeed(nextSeed);
-                    handleGenerate(nextSeed);
-                  }}
-                  title="Get a fresh set of questions"
-                  className="btn-secondary px-3 py-2.5 flex items-center gap-1.5 text-xs shrink-0"
-                >
-                  <RefreshCw className="w-3.5 h-3.5" /> New Set
-                </button>
+                <>
+                  <button
+                    onClick={() => {
+                      const nextSeed = questionSeed + 1;
+                      setQuestionSeed(nextSeed);
+                      handleGenerate(nextSeed);
+                    }}
+                    title="Get a fresh set of questions"
+                    className="btn-secondary px-3 py-2.5 flex items-center gap-1.5 text-xs shrink-0"
+                  >
+                    <RefreshCw className="w-3.5 h-3.5" /> New Set
+                  </button>
+                  <button
+                    onClick={() => { setMockMode(m => !m); stopTimer(); setExpanded({}); }}
+                    title={mockMode ? "Switch to Study Mode" : "Switch to Mock Interview Mode (2-min timer per question)"}
+                    className={`px-3 py-2.5 flex items-center gap-1.5 text-xs shrink-0 rounded-lg border transition-all ${
+                      mockMode
+                        ? "bg-rose-600/20 border-rose-500/50 text-rose-300 hover:bg-rose-600/30"
+                        : "btn-secondary"
+                    }`}
+                  >
+                    {mockMode ? <><Zap className="w-3.5 h-3.5" /> Mock On</> : <><Timer className="w-3.5 h-3.5" /> Mock</>}
+                  </button>
+                </>
               )}
             </div>
           </div>
@@ -414,6 +467,20 @@ export default function InterviewPrepPage() {
               Selecting DSA, System Design, {targetRole || "role-specific"}, and Behavioural questions
               tailored to your skills
             </p>
+          </div>
+        )}
+
+        {/* Mock Mode Banner */}
+        {mockMode && questions && !generating && (
+          <div className="mb-4 p-3 rounded-lg bg-rose-500/8 border border-rose-500/25 flex items-center gap-3">
+            <Timer className="w-4 h-4 text-rose-400 shrink-0" />
+            <div className="flex-1 min-w-0">
+              <p className="text-xs font-semibold text-rose-300">Mock Interview Mode — 2 min per question</p>
+              <p className="text-[11px] text-slate-400">Open a question to start its timer. Try to answer before time runs out.</p>
+            </div>
+            <button onClick={() => { setMockMode(false); stopTimer(); }} className="text-[11px] text-slate-500 hover:text-slate-300 shrink-0">
+              Exit
+            </button>
           </div>
         )}
 
@@ -480,7 +547,11 @@ export default function InterviewPrepPage() {
                 const myScore = scores[q.id];
 
                 return (
-                  <div key={q.id} className={`card border transition-all ${isOpen ? "border-indigo-500/30" : ""}`}>
+                  <div key={q.id} className={`card border transition-all ${
+                    isOpen && mockMode && timerQuestionId === q.id && timerSeconds !== null && timerSeconds <= 30
+                      ? "border-rose-500/40"
+                      : isOpen ? "border-indigo-500/30" : ""
+                  }`}>
                     {/* Question Header */}
                     <button onClick={() => toggle(q.id)} className="w-full text-left flex items-start gap-3">
                       <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 mt-0.5 border ${meta.bg}`}>
@@ -504,10 +575,20 @@ export default function InterviewPrepPage() {
                         </div>
                         <p className="text-sm font-medium text-white leading-relaxed pr-8">{q.question}</p>
                       </div>
-                      <div className="shrink-0 mt-1">
+                      <div className="shrink-0 mt-1 flex flex-col items-end gap-1">
                         {isOpen
                           ? <ChevronUp className="w-4 h-4 text-slate-400" />
                           : <ChevronDown className="w-4 h-4 text-slate-400" />}
+                        {mockMode && isOpen && timerQuestionId === q.id && timerSeconds !== null && (
+                          <span className={`text-[11px] font-mono font-bold tabular-nums ${
+                            timerSeconds <= 30 ? "text-rose-400" : timerSeconds <= 60 ? "text-amber-400" : "text-emerald-400"
+                          }`}>
+                            {String(Math.floor(timerSeconds / 60)).padStart(2, "0")}:{String(timerSeconds % 60).padStart(2, "0")}
+                          </span>
+                        )}
+                        {mockMode && isOpen && timerQuestionId === q.id && timerSeconds === 0 && (
+                          <span className="text-[11px] font-bold text-rose-400">Time up!</span>
+                        )}
                       </div>
                     </button>
 
