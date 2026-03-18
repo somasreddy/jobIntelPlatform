@@ -10,7 +10,7 @@ import {
   MessageSquare, Code2, Users, Lightbulb, Target,
   Star, UserCircle2, RefreshCw, ClipboardList, Trophy,
   BookOpen, Cpu, GitMerge, Database, Cloud, Globe2, TestTube2, BarChart2,
-  Timer, Zap,
+  Timer, Zap, Coffee, MousePointerClick,
 } from "lucide-react";
 
 // ─── Local interview question type (profile-personalised behavioral) ───────────
@@ -47,7 +47,9 @@ const DOMAIN_META: Record<string, { icon: React.ComponentType<{ className?: stri
   "API Management":    { icon: Cloud,      color: "text-sky-400" },
   "Databases":         { icon: Database,   color: "text-amber-400" },
   "Cloud":             { icon: Cloud,      color: "text-blue-400" },
-  "QA & Testing":      { icon: TestTube2,  color: "text-rose-400" },
+  "QA & Testing":        { icon: TestTube2,        color: "text-rose-400" },
+  "Java & OOP":          { icon: Coffee,           color: "text-orange-400" },
+  "Selenium & Testing":  { icon: MousePointerClick, color: "text-pink-400" },
 };
 
 // ─── Profile-personalised behavioral + situational questions ──────────────────

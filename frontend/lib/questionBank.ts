@@ -2081,6 +2081,1913 @@ This achieves 100% coverage but doesn't test division by zero (ZeroDivisionError
   },
 ];
 
+// ─── Java & OOP ───────────────────────────────────────────────────────────────
+// Sourced from real company interview questions (Accenture, TCS, Infosys, CTS,
+// HCL, Capgemini, IBM, Wipro, Cognizant and 60+ others in question bank)
+export const JAVA_OOP_QUESTIONS: QuestionBankItem[] = [
+  {
+    id: "java1", domain: "Java & OOP", type: "technical", difficulty: "Medium",
+    question: "What is the difference between an Interface and an Abstract Class in Java? When would you use each?",
+    hint: "This is the most commonly asked Java question across all companies. Focus on abstract methods, multiple inheritance, default methods (Java 8), and real design decisions.",
+    keyPoints: ["Abstract class: partial implementation, state (fields)", "Interface: contract, multiple inheritance", "Java 8 default/static methods blur the line", "Abstract class = IS-A, Interface = CAN-DO"],
+    modelAnswer: `**Abstract Class**:
+- Can have abstract methods (no body) AND concrete methods (with body).
+- Can have instance variables (state), constructors, access modifiers.
+- A class can extend only ONE abstract class (single inheritance).
+- Use when: classes share common state and behaviour (IS-A relationship). Example: \`Animal\` abstract class with concrete \`eat()\` and abstract \`makeSound()\`.
+
+**Interface**:
+- Pre-Java 8: only abstract methods and constants.
+- Java 8+: can have \`default\` methods (with body) and \`static\` methods.
+- Java 9+: can have \`private\` methods.
+- A class can implement MULTIPLE interfaces — solves the diamond problem.
+- No instance variables (only public static final constants).
+- Use when: defining a capability/contract unrelated to class hierarchy (CAN-DO). Example: \`Runnable\`, \`Comparable\`, \`Serializable\`.
+
+**Key Differences**:
+| Feature | Abstract Class | Interface |
+|---|---|---|
+| Multiple inheritance | No | Yes |
+| State (instance vars) | Yes | No |
+| Constructor | Yes | No |
+| Access modifiers | All | public (default) |
+
+**Design Rule**: Prefer interfaces for type definitions. Use abstract classes only when you need to share code (state + behaviour) among closely related classes. Often use both — abstract class implements interface, providing partial default behaviour.
+
+**Real example**: \`List\` is an interface. \`AbstractList\` is an abstract class implementing \`List\` with common logic. \`ArrayList\` extends \`AbstractList\`.`,
+  },
+  {
+    id: "java2", domain: "Java & OOP", type: "technical", difficulty: "Easy",
+    question: "Explain the four pillars of OOP (Encapsulation, Abstraction, Inheritance, Polymorphism) with real-world examples.",
+    hint: "Give a concrete real-world analogy for each. Interviewers want to know you can apply these concepts, not just define them.",
+    keyPoints: ["Encapsulation: data hiding + getters/setters", "Abstraction: hide complexity, show interface", "Inheritance: IS-A relationship, code reuse", "Polymorphism: same method, different behaviour (overloading vs overriding)"],
+    modelAnswer: `**1. Encapsulation** (Data hiding):
+- Bundle data (fields) and behaviour (methods) together. Hide internal state — expose only through methods.
+- Example: A \`BankAccount\` class with \`private double balance\`. Balance only changed via \`deposit()\` and \`withdraw()\` with validation — no direct access.
+- Achieved via \`private\` fields + \`public\` getters/setters. Lombok \`@Data\` generates these.
+
+**2. Abstraction** (Hide complexity):
+- Show only what's necessary. Hide implementation details.
+- Example: You drive a car using a steering wheel and pedals — you don't need to know how the engine works. Similarly, \`List.add()\` hides whether it's an array or linked-list behind the scenes.
+- Achieved via abstract classes and interfaces.
+
+**3. Inheritance** (IS-A relationship, code reuse):
+- Child class inherits fields and methods from parent. Promotes code reuse.
+- Example: \`Dog\` and \`Cat\` both extend \`Animal\`. They share \`eat()\` and \`breathe()\` from \`Animal\`, override \`makeSound()\`.
+- \`extends\` keyword. Java supports single class inheritance to avoid diamond problem.
+
+**4. Polymorphism** (Many forms):
+- Same method name, different behaviour.
+- **Compile-time (Overloading)**: same method name, different parameters. Resolved at compile time.
+  \`add(int a, int b)\` vs \`add(double a, double b)\`
+- **Runtime (Overriding)**: child class redefines parent method. Resolved at runtime (dynamic dispatch).
+  \`Animal a = new Dog(); a.makeSound()\` → calls \`Dog.makeSound()\` not \`Animal.makeSound()\`.
+
+**Interview tip**: Give practical examples from your own project — "In our webMethods project, we had an abstract \`IntegrationService\` class with concrete \`execute()\` but abstract \`validate()\` — each integration type overrode \`validate()\` differently."`,
+  },
+  {
+    id: "java3", domain: "Java & OOP", type: "technical", difficulty: "Easy",
+    question: "What is the difference between method overloading and method overriding? Give examples.",
+    hint: "Overloading = compile-time polymorphism (same class, different params). Overriding = runtime polymorphism (parent-child, same signature).",
+    keyPoints: ["Overloading: same class, different params, compile-time", "Overriding: parent-child, same signature, runtime", "@Override annotation", "Return type covariance in overriding", "Cannot override static/final/private methods"],
+    modelAnswer: `**Method Overloading** (Compile-time / Static polymorphism):
+- Same method name, different parameter list (type, count, or order) in the SAME class.
+- Return type alone cannot distinguish overloaded methods.
+- Resolved at compile time (static binding).
+
+\`\`\`java
+class Calculator {
+    int add(int a, int b) { return a + b; }
+    double add(double a, double b) { return a + b; }
+    int add(int a, int b, int c) { return a + b + c; }
+}
+\`\`\`
+
+**Method Overriding** (Runtime / Dynamic polymorphism):
+- Child class provides a specific implementation for a method already defined in the parent class.
+- Same method name, same parameter list, same or covariant return type.
+- Resolved at runtime (dynamic binding / virtual dispatch).
+- Use \`@Override\` annotation — helps compiler catch errors.
+
+\`\`\`java
+class Animal {
+    void makeSound() { System.out.println("Some sound"); }
+}
+class Dog extends Animal {
+    @Override
+    void makeSound() { System.out.println("Woof!"); }
+}
+Animal a = new Dog();
+a.makeSound(); // prints "Woof!" — runtime polymorphism
+\`\`\`
+
+**Rules for overriding**:
+- Cannot override \`static\`, \`final\`, or \`private\` methods.
+- Access modifier cannot be more restrictive (can widen: \`protected\` → \`public\`).
+- Can throw fewer or narrower checked exceptions.
+
+**Key difference**: Overloading = "what to call" decided at compile time. Overriding = "which version to call" decided at runtime based on actual object type.`,
+  },
+  {
+    id: "java4", domain: "Java & OOP", type: "technical", difficulty: "Medium",
+    question: "Explain String vs StringBuilder vs StringBuffer in Java. Why is String immutable and what are the performance implications?",
+    hint: "String immutability, String pool, + operator performance problem, StringBuilder for single-thread, StringBuffer for multi-thread.",
+    keyPoints: ["String: immutable, pool, safe to share", "StringBuilder: mutable, fast, not thread-safe", "StringBuffer: mutable, thread-safe, slower", "String concatenation in loop = O(n²)"],
+    modelAnswer: `**String (Immutable)**:
+- Once created, value cannot be changed. Every \`+\` or concat creates a NEW String object.
+- Stored in the **String Pool** (heap memory). Same string literals share one object: \`"hello" == "hello"\` → true.
+- **Thread-safe** (immutable by nature). Safe to use as HashMap keys.
+- Problem: \`String s = ""; for(i=0..n) s += i;\` creates n new String objects → O(n²) time and excessive GC pressure.
+
+**StringBuilder (Mutable, Not Thread-Safe)**:
+- Mutable character array. Append/insert/delete modify the SAME object.
+- \`StringBuilder sb = new StringBuilder(); for(i=0..n) sb.append(i);\` → O(n) total.
+- No synchronisation → faster than StringBuffer.
+- **Use for**: string building in single-threaded contexts (99% of cases).
+
+**StringBuffer (Mutable, Thread-Safe)**:
+- Same as StringBuilder but all methods are \`synchronized\`.
+- Slower due to locking. Use only when a mutable string is shared across multiple threads.
+- In practice: rarely needed — usually use immutable design or thread-local StringBuilder.
+
+**Performance comparison**:
+\`\`\`java
+// BAD: O(n²) — creates n intermediate String objects
+String s = "";
+for (int i = 0; i < 10000; i++) s += i;
+
+// GOOD: O(n) — single StringBuilder
+StringBuilder sb = new StringBuilder();
+for (int i = 0; i < 10000; i++) sb.append(i);
+String result = sb.toString();
+\`\`\`
+
+**Why immutable?** Security (HashKey safety, network param strings), caching (String pool), thread safety without sync, hashCode caching for HashMap performance.`,
+  },
+  {
+    id: "java5", domain: "Java & OOP", type: "technical", difficulty: "Medium",
+    question: "Explain Java Exception Handling. What is the difference between checked and unchecked exceptions? What is the exception hierarchy?",
+    hint: "Hierarchy: Throwable → Error / Exception → RuntimeException. Checked = must handle. Unchecked = RuntimeException subclasses.",
+    keyPoints: ["Throwable → Error vs Exception", "Checked: must catch or declare (IOException, SQLException)", "Unchecked: RuntimeException (NPE, ArrayIndexOutOfBounds)", "finally always runs", "Custom exceptions extend Exception or RuntimeException"],
+    modelAnswer: `**Exception Hierarchy**:
+\`\`\`
+Throwable
+├── Error (JVM errors, don't catch: OutOfMemoryError, StackOverflowError)
+└── Exception
+    ├── Checked Exceptions (must handle: IOException, SQLException, ClassNotFoundException)
+    └── RuntimeException (Unchecked: NullPointerException, ArrayIndexOutOfBoundsException,
+        IllegalArgumentException, ClassCastException, NumberFormatException)
+\`\`\`
+
+**Checked Exceptions**: Compiler enforces handling. Must either \`catch\` them or declare \`throws\` in method signature. Represent recoverable conditions: file not found, network timeout, SQL error.
+
+**Unchecked Exceptions (RuntimeException)**: Compiler doesn't require handling. Represent programming errors: null dereference, array out of bounds, bad cast. Should be prevented by code correctness, not caught (usually).
+
+**Exception Handling Mechanics**:
+\`\`\`java
+try {
+    riskyOperation();
+} catch (IOException e) {
+    logger.error("IO failed", e);
+    throw new ServiceException("Could not read file", e);  // wrap and rethrow
+} catch (SQLException e) {
+    // handle DB error
+} finally {
+    connection.close();  // always runs, even if exception thrown
+}
+\`\`\`
+
+**Best Practices**:
+- Don't catch \`Exception\` or \`Throwable\` broadly — masks bugs.
+- Always log the original exception (don't swallow it).
+- Use custom exceptions extending \`RuntimeException\` for business errors — avoids forcing callers to catch.
+- \`try-with-resources\` auto-closes \`AutoCloseable\` resources (files, streams, DB connections).
+- \`finally\` runs before method returns — use for cleanup.
+
+**Multi-catch** (Java 7+): \`catch (IOException | SQLException e) {}\``,
+  },
+  {
+    id: "java6", domain: "Java & OOP", type: "technical", difficulty: "Easy",
+    question: "What is the difference between final, finally, and finalize in Java?",
+    hint: "Three completely different things. final = keyword for immutability/sealing. finally = exception handling cleanup block. finalize = deprecated GC method.",
+    keyPoints: ["final: keyword — immutable var, no override, no extend", "finally: try-catch block — always executes", "finalize: Object method — called by GC (deprecated Java 9+)"],
+    modelAnswer: `**final** (keyword — 3 uses):
+1. **final variable**: value cannot be reassigned after initialisation. \`final int MAX = 100;\`
+2. **final method**: cannot be overridden by subclasses. \`public final void authenticate() {}\`
+3. **final class**: cannot be extended/subclassed. \`public final class String {}\` — String is final for security and immutability.
+
+**finally** (exception handling block):
+- Block that always executes after try/catch, regardless of whether an exception was thrown or caught.
+- Used for cleanup: closing files, releasing DB connections, releasing locks.
+- Exception: \`System.exit()\` or JVM crash prevents finally from running.
+
+\`\`\`java
+Connection conn = null;
+try {
+    conn = getConnection();
+    // ... work
+} catch (SQLException e) {
+    log.error("DB error", e);
+} finally {
+    if (conn != null) conn.close();  // ALWAYS closes
+}
+// Better: try-with-resources (Java 7+) — auto-closes
+try (Connection conn = getConnection()) {
+    // ... work
+}  // conn.close() called automatically
+\`\`\`
+
+**finalize** (deprecated):
+- Instance method in \`Object\` class. Called by the garbage collector before an object is collected.
+- **Deprecated in Java 9, removed in Java 18.** Unpredictable — GC timing is not deterministic.
+- Never rely on \`finalize()\` for resource cleanup. Use \`try-with-resources\` or explicit \`close()\` instead.
+- Replaced by: \`java.lang.ref.Cleaner\` (Java 9+) for post-GC cleanup.
+
+**Memory aid**: final = **keyword**, finally = **exception handling**, finalize = **garbage collection** (legacy).`,
+  },
+  {
+    id: "java7", domain: "Java & OOP", type: "technical", difficulty: "Medium",
+    question: "What are the key features introduced in Java 8? Explain Lambda expressions, Streams API, and Optional.",
+    hint: "Java 8 was the biggest Java release since Java 5. Focus on Lambda (functional programming), Streams (pipeline processing), Optional (null safety), and default methods.",
+    keyPoints: ["Lambda: anonymous function, functional interface", "Streams: pipeline, lazy, parallel", "Optional: null-safe container", "Default methods in interfaces", "Method references (::)"],
+    modelAnswer: `**1. Lambda Expressions**: Anonymous functions — concise syntax for implementing functional interfaces (interfaces with one abstract method).
+
+\`\`\`java
+// Before Java 8 (anonymous class)
+Comparator<String> comp = new Comparator<String>() {
+    public int compare(String a, String b) { return a.compareTo(b); }
+};
+// Java 8 Lambda
+Comparator<String> comp = (a, b) -> a.compareTo(b);
+// Method reference
+Comparator<String> comp = String::compareTo;
+\`\`\`
+
+**2. Streams API**: Functional-style operations on collections. Lazy evaluation + parallel processing.
+\`\`\`java
+List<String> names = employees.stream()
+    .filter(e -> e.getSalary() > 50000)    // intermediate (lazy)
+    .map(Employee::getName)                  // intermediate (lazy)
+    .sorted()                                // intermediate (lazy)
+    .collect(Collectors.toList());           // terminal (triggers execution)
+
+// Parallel stream for large datasets
+long count = bigList.parallelStream()
+    .filter(s -> s.startsWith("A"))
+    .count();
+\`\`\`
+
+**3. Optional**: Container that may or may not hold a non-null value. Forces explicit null handling.
+\`\`\`java
+Optional<User> user = userRepo.findById(id);
+// BAD: user.get() — throws NoSuchElementException if empty
+// GOOD:
+String name = user.map(User::getName).orElse("Unknown");
+user.ifPresent(u -> sendEmail(u.getEmail()));
+\`\`\`
+
+**4. Default Methods in Interfaces**: Interfaces can now have method implementations.
+\`\`\`java
+interface Collection {
+    default Stream<E> stream() { return StreamSupport.stream(spliterator(), false); }
+}
+\`\`\`
+Allows adding new methods to existing interfaces without breaking all implementations.
+
+**Other Java 8 features**: \`java.time\` (LocalDate, ZonedDateTime — replaces Calendar), CompletableFuture (async), new Date/Time API.`,
+  },
+  {
+    id: "java8", domain: "Java & OOP", type: "technical", difficulty: "Medium",
+    question: "Explain the Java Collections Framework. What is the difference between List, Set, and Map? When would you use ArrayList vs LinkedList vs HashMap vs TreeMap?",
+    hint: "Cover the hierarchy (Iterable → Collection → List/Set/Queue, Map separate), and the O(1) vs O(log n) vs O(n) complexity trade-offs for each implementation.",
+    keyPoints: ["List: ordered, duplicates", "Set: no duplicates (HashSet O(1), TreeSet O(log n))", "Map: key-value (HashMap O(1), TreeMap sorted)", "ArrayList vs LinkedList access patterns", "Fail-fast iterators, ConcurrentModificationException"],
+    modelAnswer: `**Collections Hierarchy**:
+- **List**: Ordered, allows duplicates, index-based access.
+  - \`ArrayList\`: Dynamic array. O(1) get/set, O(n) insert-middle. Best for read-heavy workloads.
+  - \`LinkedList\`: Doubly-linked list. O(1) add/remove at ends, O(n) random access. Best for frequent insertion/deletion at ends (e.g., queue/deque).
+
+- **Set**: No duplicates. No guaranteed order (except LinkedHashSet/TreeSet).
+  - \`HashSet\`: Backed by HashMap. O(1) add/contains/remove. No order.
+  - \`LinkedHashSet\`: Maintains insertion order. Slightly slower than HashSet.
+  - \`TreeSet\`: Sorted (natural order or Comparator). O(log n) operations. Use for sorted unique elements.
+
+- **Map**: Key-value pairs. Keys unique.
+  - \`HashMap\`: O(1) average get/put. No order. Allows one null key. Not thread-safe.
+  - \`LinkedHashMap\`: Maintains insertion order. Good for LRU caches (override \`removeEldestEntry\`).
+  - \`TreeMap\`: Sorted by key. O(log n). Use for range queries: \`subMap()\`, \`floorKey()\`, \`ceilingKey()\`.
+  - \`ConcurrentHashMap\`: Thread-safe HashMap. Segment locking (Java 7) / per-bucket CAS (Java 8).
+
+**Choosing the right collection**:
+\`\`\`
+Need fast lookup by key?       → HashMap / ConcurrentHashMap
+Need sorted key order?         → TreeMap
+Need unique elements?          → HashSet
+Need sorted unique elements?   → TreeSet
+Need order preserved?          → LinkedHashMap / LinkedHashSet
+Need fast add/remove at ends?  → ArrayDeque (faster than LinkedList)
+Thread-safe list?              → CopyOnWriteArrayList (read-heavy)
+                               → Collections.synchronizedList()
+\`\`\`
+
+**Initial capacity**: \`new HashMap<>(expectedSize / 0.75 + 1)\` prevents rehashing for known-size maps.`,
+  },
+  {
+    id: "java9", domain: "Java & OOP", type: "technical", difficulty: "Hard",
+    question: "How do you create threads in Java? Explain synchronisation, volatile, and how to avoid deadlocks.",
+    hint: "Cover Thread/Runnable/Callable, synchronized keyword, volatile, java.util.concurrent, and the four conditions needed for deadlock.",
+    keyPoints: ["Thread vs Runnable vs Callable/Future", "synchronized: method and block level", "volatile: visibility, not atomicity", "Deadlock: 4 conditions + prevention", "ExecutorService and thread pools"],
+    modelAnswer: `**Creating Threads**:
+\`\`\`java
+// 1. Extend Thread (poor design — ties to thread lifecycle)
+class MyThread extends Thread { public void run() { ... } }
+new MyThread().start();
+
+// 2. Implement Runnable (preferred — separates task from thread)
+Runnable task = () -> System.out.println("Task running");
+new Thread(task).start();
+
+// 3. Callable + Future (returns result, throws exception)
+ExecutorService pool = Executors.newFixedThreadPool(10);
+Future<Integer> future = pool.submit(() -> computeValue());
+Integer result = future.get(); // blocks until done
+pool.shutdown();
+\`\`\`
+
+**synchronised** (mutual exclusion):
+- \`synchronized(this)\` or \`synchronized method\` — only one thread at a time.
+- Ensures both **visibility** (flush to main memory) and **atomicity**.
+\`\`\`java
+private final Object lock = new Object();
+synchronized (lock) {
+    count++;  // atomic increment
+}
+\`\`\`
+
+**volatile** (visibility only, not atomicity):
+- Guarantees changes to a variable are visible across threads immediately (no CPU cache).
+- Does NOT make compound operations atomic (volatile \`count++\` is still 3 ops: read, increment, write).
+- Use for: flag variables, single-writer multi-reader scenarios.
+
+**Deadlock — 4 conditions (all must hold)**:
+1. Mutual Exclusion: resource held by one thread at a time.
+2. Hold and Wait: thread holds a resource while waiting for another.
+3. No Preemption: resources can't be forcibly taken.
+4. Circular Wait: Thread A → waits for B, Thread B → waits for A.
+
+**Prevention**: Always acquire locks in the same global order. Use \`tryLock(timeout)\` with \`java.util.concurrent.locks.ReentrantLock\` instead of \`synchronized\`.
+
+**Modern concurrency** (prefer over raw threads):
+- \`ExecutorService\`, \`CompletableFuture\`, \`ConcurrentHashMap\`, \`AtomicInteger\`, \`CountDownLatch\`, \`Semaphore\`.`,
+  },
+  {
+    id: "java11", domain: "Java & OOP", type: "technical", difficulty: "Easy",
+    question: "What is the difference between == and .equals() in Java? When does == give unexpected results with Strings?",
+    hint: "== compares references (memory address). .equals() compares content. String pool causes == to work for literals but fail for new String().",
+    keyPoints: ["== compares references", ".equals() compares content/value", "String pool: literals share object", "new String('hello') always creates new object", "Always use .equals() for String comparison"],
+    modelAnswer: `**== (Reference Equality)**:
+- Checks if two variables point to the SAME object in memory (same reference/address).
+- For primitives (\`int\`, \`char\`), == compares values — fine.
+- For objects, == is almost never what you want.
+
+**\`.equals()\` (Content Equality)**:
+- Compares the CONTENT/VALUE of objects.
+- \`String.equals()\` compares character by character.
+- \`Integer.equals()\` compares numeric value.
+
+**String Pool — the tricky part**:
+\`\`\`java
+String a = "hello";          // stored in String pool
+String b = "hello";          // reuses SAME pool object
+System.out.println(a == b);  // TRUE — same reference from pool
+
+String c = new String("hello");  // forces new object on heap
+String d = new String("hello");  // another new object
+System.out.println(c == d);      // FALSE — different objects
+System.out.println(c.equals(d)); // TRUE — same content
+
+// Safe comparison
+System.out.println("hello".equals(c));  // TRUE (null-safe style)
+\`\`\`
+
+**null-safe comparison**: \`Objects.equals(a, b)\` — handles null without NullPointerException.
+
+\`\`\`java
+// Wrong — can throw NPE if userInput is null
+if (userInput.equals("admin")) { ... }
+
+// Correct — literal on left, variable on right
+if ("admin".equals(userInput)) { ... }
+
+// Best — null-safe
+if (Objects.equals(userInput, "admin")) { ... }
+\`\`\`
+
+**Rule**: Never use == to compare String, Integer, or any object for value equality. Always use \`.equals()\`.
+Integer caching: \`Integer.valueOf(127) == Integer.valueOf(127)\` → true (cached). \`Integer.valueOf(200) == Integer.valueOf(200)\` → false. Another trap!`,
+  },
+  {
+    id: "java12", domain: "Java & OOP", type: "technical", difficulty: "Easy",
+    question: "What is the difference between throw and throws in Java? When do you use each?",
+    hint: "throw = actually throws an exception object (used inside method body). throws = declares that a method may throw a checked exception (used in method signature).",
+    keyPoints: ["throw: action — throws an exception instance", "throws: declaration — warns callers of checked exception", "throw used in method body, throws in method signature", "Can throw multiple with comma separation", "throw terminates method execution"],
+    modelAnswer: `**throw** (action — throws an exception):
+- Used INSIDE a method body to explicitly throw an exception object.
+- Immediately terminates the method and propagates the exception up the call stack.
+- Can throw any Throwable (Error, Exception, RuntimeException).
+
+\`\`\`java
+public void withdraw(double amount) {
+    if (amount < 0) {
+        throw new IllegalArgumentException("Amount cannot be negative: " + amount);
+    }
+    if (amount > balance) {
+        throw new InsufficientFundsException("Balance: " + balance + ", Requested: " + amount);
+    }
+    balance -= amount;
+}
+\`\`\`
+
+**throws** (declaration — warns callers):
+- Used in the METHOD SIGNATURE to declare that the method MAY throw a checked exception.
+- Forces callers to either catch the exception or declare it with their own \`throws\`.
+- Only needed for CHECKED exceptions (RuntimeExceptions don't need to be declared).
+
+\`\`\`java
+// throws in signature — must handle at call site
+public void readFile(String path) throws IOException, FileNotFoundException {
+    FileReader reader = new FileReader(path);  // throws FileNotFoundException
+    // ...
+}
+
+// Caller must handle or re-declare
+public void processFile() throws IOException {
+    readFile("data.txt");  // either catch or re-throw
+}
+
+// Or catch it
+public void processFile() {
+    try {
+        readFile("data.txt");
+    } catch (IOException e) {
+        log.error("File error", e);
+    }
+}
+\`\`\`
+
+**Summary**:
+| | throw | throws |
+|---|---|---|
+| Location | Method body | Method signature |
+| Purpose | Actually throw exception | Declare potential exception |
+| Syntax | \`throw new Exception()\` | \`void m() throws Exception\` |
+| Object needed | Yes (exception instance) | No |`,
+  },
+  {
+    id: "java13", domain: "Java & OOP", type: "technical", difficulty: "Easy",
+    question: "What are access modifiers in Java (private, default, protected, public)? Explain visibility with a package diagram.",
+    hint: "Four levels of visibility from most to least restrictive: private → default → protected → public. Key distinction: protected allows subclass access across packages.",
+    keyPoints: ["private: same class only", "default (package-private): same package", "protected: same package + subclasses", "public: everywhere", "Rule: use most restrictive access possible"],
+    modelAnswer: `**Access Modifiers** (from most to least restrictive):
+
+| Modifier | Same Class | Same Package | Subclass (other pkg) | Other Package |
+|---|---|---|---|---|
+| **private** | ✓ | ✗ | ✗ | ✗ |
+| **default** | ✓ | ✓ | ✗ | ✗ |
+| **protected** | ✓ | ✓ | ✓ | ✗ |
+| **public** | ✓ | ✓ | ✓ | ✓ |
+
+\`\`\`java
+package com.company.bank;
+
+public class Account {
+    private double balance;         // only Account methods can access
+    double interestRate;            // default: any class in com.company.bank
+    protected String accountType;  // Account + subclasses + same package
+    public String accountNumber;   // everyone
+
+    private void updateBalance() { ... }  // internal only
+    protected void applyInterest() { ... }  // subclasses can override
+    public double getBalance() { return balance; }  // public API
+}
+\`\`\`
+
+**Best Practices**:
+- Fields: always \`private\` with public getters/setters (encapsulation).
+- Internal helper methods: \`private\`.
+- Methods for subclass override: \`protected\`.
+- Public API: \`public\`.
+- Avoid \`default\` (package-private) — unclear intent.
+
+**Classes**: Top-level classes can only be \`public\` or default. Nested classes can use all modifiers.
+
+**Common mistake**: Making fields \`public\` for convenience. This breaks encapsulation — external code can set invalid values directly (e.g., \`account.balance = -1000\`). Always use \`private\` + validated setters.`,
+  },
+  {
+    id: "java14", domain: "Java & OOP", type: "technical", difficulty: "Easy",
+    question: "What is a Constructor in Java? What are the different types? Can constructors be overloaded?",
+    hint: "Constructor initialises objects. No return type. Types: default, parameterised, copy constructor. this() calls another constructor. super() calls parent constructor.",
+    keyPoints: ["No return type, same name as class", "Default (no-arg): provided if no constructor defined", "Parameterised: initialise with values", "this(): constructor chaining", "super(): call parent constructor (must be first statement)"],
+    modelAnswer: `**Constructor**: Special method to initialise a new object. Called automatically when \`new\` is used. Same name as class, no return type (not even void).
+
+**Types**:
+
+**1. Default Constructor** (no-arg):
+\`\`\`java
+public class Person {
+    String name;
+    // Compiler generates: public Person() {} if no constructor defined
+}
+Person p = new Person();  // works, fields get default values (null, 0, false)
+\`\`\`
+**Note**: If you define ANY constructor, compiler no longer generates the default one.
+
+**2. Parameterised Constructor**:
+\`\`\`java
+public class Person {
+    String name;
+    int age;
+    public Person(String name, int age) {
+        this.name = name;  // this = current instance
+        this.age = age;
+    }
+}
+Person p = new Person("Alice", 30);
+\`\`\`
+
+**3. Constructor Overloading** (yes, allowed):
+\`\`\`java
+public class Person {
+    String name;
+    int age;
+    Person(String name) { this(name, 0); }  // calls parameterised ↓
+    Person(String name, int age) { this.name = name; this.age = age; }
+}
+\`\`\`
+
+**4. Copy Constructor** (not built-in like C++, but can write manually):
+\`\`\`java
+Person(Person other) {
+    this.name = other.name;
+    this.age = other.age;
+}
+Person copy = new Person(original);
+\`\`\`
+
+**this() vs super()**:
+- \`this(args)\` — calls another constructor in SAME class. Must be first statement.
+- \`super(args)\` — calls parent class constructor. Must be first statement. Compiler inserts \`super()\` automatically if not specified.
+
+**Constructors are NOT inherited** — subclass doesn't inherit parent constructors, but can call them via \`super()\`.`,
+  },
+  {
+    id: "java15", domain: "Java & OOP", type: "technical", difficulty: "Medium",
+    question: "Write Java programs: (1) Check if a string is a Palindrome, (2) Reverse a string without using built-in reverse(), (3) Find duplicates in an array.",
+    hint: "For palindrome: compare from both ends. For reverse: loop from end to start. For duplicates: use HashSet to detect second occurrence.",
+    keyPoints: ["Palindrome: two-pointer or compare with reverse", "String reverse: char array loop / StringBuilder without reverse()", "Duplicates: HashSet contains() before add()", "Without built-in vs with built-in solutions"],
+    modelAnswer: `**1. Palindrome Check**:
+
+\`\`\`java
+// Without built-in (two-pointer approach)
+public static boolean isPalindrome(String s) {
+    s = s.toLowerCase().replaceAll("[^a-z0-9]", "");  // clean
+    int left = 0, right = s.length() - 1;
+    while (left < right) {
+        if (s.charAt(left) != s.charAt(right)) return false;
+        left++;
+        right--;
+    }
+    return true;
+}
+
+// With built-in
+public static boolean isPalindromeBuiltIn(String s) {
+    String cleaned = s.toLowerCase().replaceAll("[^a-z0-9]", "");
+    return cleaned.equals(new StringBuilder(cleaned).reverse().toString());
+}
+// isPalindrome("MADAM") → true, "racecar" → true, "hello" → false
+\`\`\`
+
+**2. Reverse a String Without reverse()**:
+
+\`\`\`java
+// Method 1: Character array loop (O(n), O(n) space)
+public static String reverseString(String s) {
+    char[] chars = s.toCharArray();
+    int left = 0, right = chars.length - 1;
+    while (left < right) {
+        char temp = chars[left];
+        chars[left] = chars[right];
+        chars[right] = temp;
+        left++;
+        right--;
+    }
+    return new String(chars);
+}
+
+// Method 2: Concatenation (simple but O(n²) due to String immutability)
+public static String reverseString2(String s) {
+    String result = "";
+    for (int i = s.length() - 1; i >= 0; i--) {
+        result += s.charAt(i);  // use StringBuilder for better performance
+    }
+    return result;
+}
+
+// With built-in (1 line)
+public static String reverseBuiltIn(String s) {
+    return new StringBuilder(s).reverse().toString();
+}
+// reverseString("Cognizant") → "tnazinoC"
+\`\`\`
+
+**3. Find Duplicates in an Array**:
+
+\`\`\`java
+// Without built-in (nested loop, O(n²))
+public static List<Integer> findDuplicatesManual(int[] arr) {
+    List<Integer> duplicates = new ArrayList<>();
+    for (int i = 0; i < arr.length; i++) {
+        for (int j = i + 1; j < arr.length; j++) {
+            if (arr[i] == arr[j] && !duplicates.contains(arr[i])) {
+                duplicates.add(arr[i]);
+            }
+        }
+    }
+    return duplicates;
+}
+
+// With HashSet (O(n) — preferred)
+public static List<Integer> findDuplicates(int[] arr) {
+    Set<Integer> seen = new HashSet<>();
+    List<Integer> duplicates = new ArrayList<>();
+    for (int num : arr) {
+        if (!seen.add(num)) {  // add() returns false if already present
+            if (!duplicates.contains(num)) duplicates.add(num);
+        }
+    }
+    return duplicates;
+}
+// Input: {1,2,2,3,4,4,5} → Output: [2, 4]
+// To get non-duplicates: seen.size() == 1 occurrence only → use frequency map
+\`\`\``,
+  },
+  {
+    id: "java16", domain: "Java & OOP", type: "technical", difficulty: "Medium",
+    question: "Write Java programs: (1) Check if a number is Prime, (2) Print Fibonacci series, (3) Find the factorial of a number — with and without recursion.",
+    hint: "Prime: check divisors up to √n (O(√n) not O(n)). Fibonacci: iterative O(n), recursive O(2^n). Factorial: iterative or recursive. Explain time complexity difference.",
+    keyPoints: ["Prime: O(√n) check", "Fibonacci: iterative preferred (recursion = exponential)", "Factorial: recursion risk of StackOverflow for large n", "Memoisation to speed up recursive Fibonacci"],
+    modelAnswer: `**1. Prime Number Check**:
+
+\`\`\`java
+// Optimised: O(√n) — only check up to square root
+public static boolean isPrime(int n) {
+    if (n < 2) return false;
+    if (n == 2) return true;
+    if (n % 2 == 0) return false;  // even numbers (except 2)
+    for (int i = 3; i * i <= n; i += 2) {  // only odd divisors up to √n
+        if (n % i == 0) return false;
+    }
+    return true;
+}
+// isPrime(7) → true, isPrime(12) → false, isPrime(97) → true
+// Why √n? If n has a factor > √n, it also has a factor < √n (they come in pairs)
+\`\`\`
+
+**2. Fibonacci Series**:
+
+\`\`\`java
+// Iterative (O(n) time, O(1) space) — PREFERRED
+public static void fibIterative(int n) {
+    int a = 0, b = 1;
+    System.out.print(a + " " + b);
+    for (int i = 2; i < n; i++) {
+        int c = a + b;
+        System.out.print(" " + c);
+        a = b;
+        b = c;
+    }
+}
+// Output for n=8: 0 1 1 2 3 5 8 13
+
+// Recursive (O(2^n) — exponential, BAD for large n)
+public static int fibRecursive(int n) {
+    if (n <= 1) return n;
+    return fibRecursive(n - 1) + fibRecursive(n - 2);  // recalculates subproblems!
+}
+
+// Memoised recursive (O(n) time, O(n) space)
+private static Map<Integer, Integer> memo = new HashMap<>();
+public static int fibMemo(int n) {
+    if (n <= 1) return n;
+    if (memo.containsKey(n)) return memo.get(n);
+    int result = fibMemo(n - 1) + fibMemo(n - 2);
+    memo.put(n, result);
+    return result;
+}
+\`\`\`
+
+**3. Factorial**:
+
+\`\`\`java
+// Iterative (O(n), preferred for large n)
+public static long factorialIterative(int n) {
+    if (n < 0) throw new IllegalArgumentException("n must be >= 0");
+    long result = 1;
+    for (int i = 2; i <= n; i++) result *= i;
+    return result;
+}
+
+// Recursive (O(n) time, O(n) stack space — StackOverflow risk for n > ~10000)
+public static long factorialRecursive(int n) {
+    if (n == 0 || n == 1) return 1;
+    return n * factorialRecursive(n - 1);
+}
+// factorial(5) → 120, factorial(10) → 3628800
+
+// Java 8 (elegant)
+public static long factorialStream(int n) {
+    return LongStream.rangeClosed(1, n).reduce(1, Math::multiplyExact);
+}
+\`\`\`
+
+**Interview insight**: Always explain O complexity. For Fibonacci, mention that naive recursion recomputes subproblems (2^n). Iterative or memoised DP is always better. For factorial, mention risk of overflow — use \`BigInteger\` for n > 20.`,
+  },
+  {
+    id: "java17", domain: "Java & OOP", type: "technical", difficulty: "Medium",
+    question: "Write Java programs: (1) Count character occurrences in a string, (2) Check if two strings are Anagrams, (3) Swap two numbers without a third variable.",
+    hint: "Character count: use HashMap<Character, Integer> or frequency array[256]. Anagram: same chars same frequency. Swap: XOR or arithmetic. Provide both manual and built-in solutions.",
+    keyPoints: ["Char frequency: HashMap or int[256]", "Anagram: sorted strings equal, or same frequency map", "Swap without temp: XOR trick or a=a+b; b=a-b; a=a-b", "Edge cases: null strings, different lengths"],
+    modelAnswer: `**1. Count Character Occurrences**:
+
+\`\`\`java
+// Without built-in (HashMap)
+public static Map<Character, Integer> charCount(String s) {
+    Map<Character, Integer> freq = new LinkedHashMap<>();
+    for (char c : s.toCharArray()) {
+        freq.put(c, freq.getOrDefault(c, 0) + 1);
+    }
+    return freq;
+}
+// "Cognizant" → {C=1, o=1, g=1, n=2, i=1, z=1, a=1, t=1}
+
+// Count specific character occurrences
+public static int countChar(String s, char target) {
+    int count = 0;
+    for (char c : s.toCharArray()) if (c == target) count++;
+    return count;
+}
+
+// With Java 8 streams
+long count = s.chars().filter(c -> c == 'n').count();
+\`\`\`
+
+**2. Anagram Check**:
+
+\`\`\`java
+// Method 1: Sort both strings and compare (O(n log n))
+public static boolean isAnagramSort(String s1, String s2) {
+    if (s1.length() != s2.length()) return false;
+    char[] a = s1.toLowerCase().toCharArray();
+    char[] b = s2.toLowerCase().toCharArray();
+    Arrays.sort(a);
+    Arrays.sort(b);
+    return Arrays.equals(a, b);
+}
+
+// Method 2: Frequency array (O(n), O(1) space for 256 ASCII chars) — OPTIMAL
+public static boolean isAnagram(String s1, String s2) {
+    if (s1.length() != s2.length()) return false;
+    int[] freq = new int[256];
+    for (int i = 0; i < s1.length(); i++) {
+        freq[s1.charAt(i)]++;
+        freq[s2.charAt(i)]--;
+    }
+    for (int f : freq) if (f != 0) return false;
+    return true;
+}
+// isAnagram("listen", "silent") → true
+// isAnagram("hello", "world") → false
+\`\`\`
+
+**3. Swap Without Third Variable**:
+
+\`\`\`java
+// Method 1: Arithmetic (works for integers, risk of overflow for large numbers)
+int a = 5, b = 10;
+a = a + b;  // a = 15
+b = a - b;  // b = 5
+a = a - b;  // a = 10
+// a=10, b=5 — swapped!
+
+// Method 2: XOR (safer, no overflow, works for any integer type)
+a = a ^ b;  // a = 5^10
+b = a ^ b;  // b = 5^10^10 = 5
+a = a ^ b;  // a = 5^10^5 = 10
+// a=10, b=5 — swapped!
+
+// Method 3: One-liner (Pythonic but works in Java too via temp conceptually)
+a = a + b - (b = a);  // NOT recommended in Java — evaluation order undefined
+
+// For Objects/Strings: MUST use temp variable (XOR only works for int)
+String x = "Hello", y = "World";
+String temp = x; x = y; y = temp;
+\`\`\``,
+  },
+  {
+    id: "java18", domain: "Java & OOP", type: "technical", difficulty: "Medium",
+    question: "What is the difference between JDK, JRE, and JVM? Why is Java platform-independent? What is the role of the ClassLoader?",
+    hint: "JVM = runtime engine (platform-specific). JRE = JVM + runtime libraries. JDK = JRE + development tools. Platform independence: .class bytecode runs on any JVM. ClassLoader loads classes dynamically.",
+    keyPoints: ["JVM: interprets bytecode, platform-specific", "JRE: JVM + standard libraries", "JDK: JRE + javac + tools", "Bytecode = WORA (Write Once Run Anywhere)", "ClassLoader: Bootstrap, Extension, Application"],
+    modelAnswer: `**JVM (Java Virtual Machine)**:
+- Runtime engine that executes Java bytecode (.class files).
+- JVM is platform-SPECIFIC — different for Windows, Linux, macOS.
+- Handles memory management (heap, stack), garbage collection, JIT compilation.
+- Provides JIT (Just-In-Time) compiler: compiles hot bytecode to native machine code at runtime for performance.
+
+**JRE (Java Runtime Environment)**:
+- JVM + Java Standard Library (rt.jar / java.base module): java.lang, java.util, java.io etc.
+- What you need to RUN Java programs (not compile).
+- End-users install JRE to run Java applications.
+
+**JDK (Java Development Kit)**:
+- JRE + development tools: \`javac\` (compiler), \`javap\` (disassembler), \`jdb\` (debugger), \`jconsole\`, \`jstack\`, \`keytool\`.
+- Developers install JDK to write and compile Java.
+
+**Platform Independence (WORA — Write Once Run Anywhere)**:
+\`\`\`
+Java Source (.java)
+  → javac compiles → Bytecode (.class) [platform-neutral]
+      → Any JVM (Windows/Linux/macOS) interprets/JIT-compiles → Native machine code
+\`\`\`
+The .class bytecode is the same on all platforms. The JVM is the "translator" — platform-specific but provided for each OS. You ship the .class, it runs everywhere with a JVM.
+
+**ClassLoader** (dynamic class loading):
+1. **Bootstrap ClassLoader**: Loads core Java classes (java.lang.*) from rt.jar / java.base.
+2. **Extension ClassLoader**: Loads ext/ directory classes.
+3. **Application ClassLoader**: Loads your application classes from classpath.
+
+**Delegation model**: Application ClassLoader delegates to Extension, which delegates to Bootstrap first. Prevents malicious replacement of core classes.
+
+\`\`\`java
+System.out.println(String.class.getClassLoader());   // null (Bootstrap)
+System.out.println(Main.class.getClassLoader());      // AppClassLoader
+\`\`\``,
+  },
+  {
+    id: "java19", domain: "Java & OOP", type: "technical", difficulty: "Medium",
+    question: "How do you create an Immutable class in Java? Why is String immutable? What are the benefits?",
+    hint: "Immutable class: final class, private final fields, no setters, deep copy in constructor and getters for mutable fields. String is immutable for security, caching, and thread safety.",
+    keyPoints: ["final class, private final fields", "No setters", "Deep copy mutable objects in constructor", "Return copies of mutable fields from getters", "String immutability: pool, HashKey safety, thread-safe"],
+    modelAnswer: `**Rules for an Immutable Class**:
+1. Declare class as \`final\` (prevent subclassing that could add mutability).
+2. All fields \`private final\` (can't be reassigned after construction).
+3. No setter methods.
+4. **Deep copy mutable objects** in constructor (don't store reference to passed mutable object).
+5. **Return copies** of mutable fields from getters.
+
+\`\`\`java
+public final class ImmutableEmployee {
+    private final String name;
+    private final int id;
+    private final List<String> skills;  // mutable field — needs care
+
+    public ImmutableEmployee(String name, int id, List<String> skills) {
+        this.name = name;
+        this.id = id;
+        // Deep copy — don't store reference to external mutable list
+        this.skills = new ArrayList<>(skills);
+    }
+
+    public String getName() { return name; }
+    public int getId() { return id; }
+    // Return defensive copy — caller can't modify internal list
+    public List<String> getSkills() { return new ArrayList<>(skills); }
+}
+\`\`\`
+
+**Why String is immutable**:
+1. **String Pool**: Multiple variables can share the same String object. If String were mutable, changing one variable would affect all others sharing the pool object.
+2. **Security**: String used for class names, network connections, file paths — immutability prevents tampering.
+3. **HashMap key safety**: String's hashCode is cached. If it were mutable, the hash could change after insertion, making the key unfindable.
+4. **Thread safety**: Immutable objects are naturally thread-safe — no synchronisation needed.
+
+**Benefits of Immutable Objects**:
+- Thread-safe without synchronisation.
+- Can be safely shared and cached (e.g., Integer.valueOf() cache).
+- Simpler to reason about — no hidden state changes.
+- Great for value objects in domain-driven design.
+
+**Examples**: String, Integer (and all Number wrappers), BigDecimal, BigInteger, java.time.LocalDate.`,
+  },
+  {
+    id: "java20", domain: "Java & OOP", type: "technical", difficulty: "Easy",
+    question: "What is the difference between ArrayList and Array in Java? What are the advantages of ArrayList over a plain array?",
+    hint: "Array: fixed size, primitive support, faster. ArrayList: dynamic size, generics, utility methods, objects only.",
+    keyPoints: ["Array: fixed size, primitives ok", "ArrayList: dynamic, autoboxing for primitives", "ArrayList methods: add, remove, contains, size", "Array: faster direct access", "2D arrays vs List<List<>>"],
+    modelAnswer: `**Array**:
+- Fixed size set at creation: \`int[] arr = new int[10];\` — cannot grow/shrink.
+- Can hold primitive types (\`int\`, \`double\`, \`char\`) without boxing overhead.
+- Direct index access: \`arr[0]\` — O(1), cache-friendly.
+- Part of the Java language (not a class).
+- Multi-dimensional: \`int[][] matrix = new int[3][4];\`
+- No built-in utility methods (sort via \`Arrays.sort()\`).
+
+**ArrayList (java.util)**:
+- Dynamic size — grows automatically (doubles capacity when full: 10 → 15 → 22...).
+- Can only store Objects — primitives autoboxed: \`ArrayList<Integer>\` (boxing overhead).
+- Rich API: \`add()\`, \`remove()\`, \`contains()\`, \`indexOf()\`, \`subList()\`, \`size()\`, \`isEmpty()\`.
+- Backed by an array internally — O(1) get/set, O(n) insert-in-middle, amortised O(1) add-at-end.
+
+\`\`\`java
+// Array (fixed)
+int[] arr = {1, 2, 3};
+arr[0] = 10;  // OK
+// arr[5] = 5;  // ArrayIndexOutOfBoundsException
+
+// ArrayList (dynamic)
+List<Integer> list = new ArrayList<>();
+list.add(1); list.add(2); list.add(3);
+list.add(4);       // grows automatically
+list.remove(0);    // removes first element
+System.out.println(list.contains(2));  // true
+Collections.sort(list);
+
+// Convert between them
+Integer[] arr2 = list.toArray(new Integer[0]);
+List<Integer> list2 = new ArrayList<>(Arrays.asList(arr2));
+\`\`\`
+
+**When to use which**:
+- **Array**: Fixed-size collection, primitive performance (int[], byte[] for byte buffers), multi-dimensional data (matrix).
+- **ArrayList**: Size unknown upfront, need add/remove, need utility methods, returning from API.
+- For thread-safe dynamic list: \`CopyOnWriteArrayList\` or \`Collections.synchronizedList(new ArrayList<>())\`.`,
+  },
+  {
+    id: "java10", domain: "Java & OOP", type: "technical", difficulty: "Easy",
+    question: "Explain the static keyword in Java. What are static variables, static methods, static blocks, and static nested classes?",
+    hint: "static = belongs to the class, not an instance. Cover memory, when static is called, why main() is static, and static import.",
+    keyPoints: ["Class-level (one copy shared)", "Static method: no access to instance vars", "Static block: class initialisation", "main() is static: JVM calls without instance", "Static nested class vs inner class"],
+    modelAnswer: `**Static** means the member belongs to the **class**, not to any particular instance. One copy shared across all instances.
+
+**Static Variable** (Class variable):
+\`\`\`java
+class Counter {
+    static int count = 0;  // shared across ALL Counter instances
+    Counter() { count++; }
+}
+new Counter(); new Counter(); // Counter.count == 2
+\`\`\`
+
+**Static Method**:
+- Called on the class: \`Math.sqrt()\`, \`Collections.sort()\`.
+- Cannot access instance variables or call instance methods (no \`this\`).
+- Cannot be overridden (only hidden by subclass — not polymorphic).
+- Use for utility/factory methods: \`Integer.parseInt()\`, \`Objects.requireNonNull()\`.
+
+**Static Block** (Class initialiser):
+\`\`\`java
+class DBConfig {
+    static final Properties config;
+    static {
+        config = new Properties();
+        config.load(new FileInputStream("db.properties")); // runs once when class loaded
+    }
+}
+\`\`\`
+Runs once when class is first loaded by the JVM. Used for complex static field initialisation.
+
+**Why \`main()\` is static**: JVM calls \`main\` without creating an instance of your class. If it weren't static, JVM would need to know which constructor to use — impossible for a general entry point.
+
+**Static Nested Class vs Inner Class**:
+- Static nested: doesn't hold reference to outer class. Can be instantiated independently.
+- Inner (non-static): holds implicit reference to outer class instance. Common in Builder/Iterator patterns.
+
+**Static Import**: \`import static java.lang.Math.*;  Math.sqrt(9)\` → just \`sqrt(9)\`.`,
+  },
+];
+
+// ─── Selenium & Test Automation ───────────────────────────────────────────────
+// Sourced from real company interviews: TCS, Infosys, HCL, CTS, Wipro, IBM,
+// Capgemini, Accenture, Paypal, Fidelity and 50+ others in question bank
+export const SELENIUM_QUESTIONS: QuestionBankItem[] = [
+  {
+    id: "sel1", domain: "Selenium & Testing", type: "technical", difficulty: "Medium",
+    question: "What is the difference between Implicit Wait, Explicit Wait, and Thread.sleep in Selenium? Which should you use and why?",
+    hint: "This is one of the top 5 Selenium interview questions. Thread.sleep is the worst option. Explain the polling interval and FluentWait.",
+    keyPoints: ["ImplicitWait: global, all elements", "ExplicitWait: specific condition, WebDriverWait", "Thread.sleep: hard wait, brittle, never use", "FluentWait: custom polling + ignore exceptions", "Best practice: ExplicitWait for specific elements"],
+    modelAnswer: `**Thread.sleep(milliseconds)**:
+- Pauses the thread unconditionally for fixed duration. Wastes time if element loads faster.
+- Makes tests slow and brittle (hard-coded timing assumptions). **Never use in production tests.**
+
+**Implicit Wait** (global, set-and-forget):
+\`\`\`java
+driver.manage().timeouts().implicitlyWait(Duration.ofSeconds(10));
+\`\`\`
+- Polls the DOM for up to 10 seconds for EVERY \`findElement()\` call before throwing \`NoSuchElementException\`.
+- Set once for the driver — applies to all element lookups.
+- Problem: doesn't wait for element to be clickable/visible, just present in DOM. Can interact with invisible elements → unexpected failures.
+- **Can conflict with Explicit Wait** — don't mix them.
+
+**Explicit Wait** (recommended, per-element condition):
+\`\`\`java
+WebDriverWait wait = new WebDriverWait(driver, Duration.ofSeconds(15));
+WebElement btn = wait.until(ExpectedConditions.elementToBeClickable(By.id("submit")));
+btn.click();
+// Other conditions:
+// visibilityOfElementLocated, presenceOfElementLocated,
+// textToBePresentInElement, alertIsPresent, invisibilityOf
+\`\`\`
+- Waits for a SPECIFIC condition. Polls every 500ms (default) until condition met or timeout.
+- Use for dynamic content, AJAX-loaded elements, animations.
+
+**FluentWait** (most flexible):
+\`\`\`java
+Wait<WebDriver> wait = new FluentWait<>(driver)
+    .withTimeout(Duration.ofSeconds(30))
+    .pollingEvery(Duration.ofSeconds(2))
+    .ignoring(NoSuchElementException.class);
+wait.until(d -> d.findElement(By.id("result")).isDisplayed());
+\`\`\`
+
+**Best practice**: Use Explicit Wait (WebDriverWait) per interaction. Avoid Implicit Wait and Thread.sleep.`,
+  },
+  {
+    id: "sel2", domain: "Selenium & Testing", type: "technical", difficulty: "Easy",
+    question: "What is the difference between findElement() and findElements() in Selenium? What exception does each throw?",
+    hint: "findElement returns one WebElement or throws NoSuchElementException. findElements returns a List (empty list if none found — never throws).",
+    keyPoints: ["findElement: single, throws NoSuchElementException", "findElements: List, empty list if none (never throws)", "StaleElementReferenceException", "Use findElements().size() > 0 for checking existence"],
+    modelAnswer: `**findElement(By locator)**:
+- Returns a single \`WebElement\`.
+- Throws \`NoSuchElementException\` immediately if no element matches.
+- Use when you expect exactly one matching element.
+
+\`\`\`java
+WebElement btn = driver.findElement(By.id("submit"));
+btn.click();  // NoSuchElementException if "submit" not found
+\`\`\`
+
+**findElements(By locator)**:
+- Returns \`List<WebElement>\` — all matching elements.
+- Returns an **empty list** (not null, not exception) if nothing matches.
+- Useful for:
+  - Counting elements: \`driver.findElements(By.tagName("a")).size()\` → count of all links
+  - Checking existence without try-catch: \`if (!driver.findElements(By.id("error")).isEmpty())\`
+  - Iterating all matching elements (table rows, list items)
+
+\`\`\`java
+List<WebElement> links = driver.findElements(By.tagName("a"));
+System.out.println("Total links: " + links.size());
+
+// Check if element exists
+boolean isPresent = !driver.findElements(By.id("popup")).isEmpty();
+
+// Iterate all rows
+List<WebElement> rows = driver.findElements(By.cssSelector("table tr"));
+for (WebElement row : rows) {
+    System.out.println(row.getText());
+}
+\`\`\`
+
+**StaleElementReferenceException**: Element was found, but the DOM was refreshed/modified — the reference is now stale (points to a detached element). Fix: re-find the element after DOM changes.
+
+\`\`\`java
+// Handle stale element with re-find
+try {
+    element.click();
+} catch (StaleElementReferenceException e) {
+    driver.findElement(locator).click();  // re-locate
+}
+\`\`\``,
+  },
+  {
+    id: "sel3", domain: "Selenium & Testing", type: "technical", difficulty: "Medium",
+    question: "Explain XPath in Selenium. What is the difference between absolute and relative XPath? How do you write a custom XPath when elements have no unique ID?",
+    hint: "Absolute XPath is brittle (breaks on UI changes). Relative XPath uses // and attributes. Cover text(), contains(), starts-with(), and axes (parent, following-sibling).",
+    keyPoints: ["Absolute: /html/body/... (brittle)", "Relative: //tag[@attr='val']", "contains(), starts-with(), text()", "XPath axes: parent, following-sibling, ancestor", "CSS Selector vs XPath trade-offs"],
+    modelAnswer: `**Absolute XPath**: Full path from root HTML element.
+\`\`\`
+/html/body/div[1]/form/input[2]
+\`\`\`
+Problem: Any DOM change breaks it. Never use in real automation.
+
+**Relative XPath**: Starts from anywhere in the DOM with \`//\`.
+\`\`\`
+//input[@id='username']                    // by ID
+//button[@type='submit']                   // by type attribute
+//a[text()='Login']                        // by exact text
+//button[contains(@class,'btn-primary')]   // class contains (partial match)
+//input[starts-with(@name,'user')]         // attribute starts with
+//label[text()='Email']/following-sibling::input  // sibling
+//div[@class='form']//input[@type='text'] // nested
+\`\`\`
+
+**When no unique identifier exists** — use structure/context:
+\`\`\`
+// 3rd input in a form
+(//form[@id='login']//input)[3]
+
+// Button with text "Submit" inside a specific div
+//div[@class='modal']//button[text()='Submit']
+
+// Parent of a known child
+//span[text()='Error']/parent::div
+
+// Find by multiple attributes
+//input[@type='text' and @placeholder='Search']
+
+// Dynamic ID (changes every load) — use contains
+//input[contains(@id,'user_')]
+\`\`\`
+
+**XPath axes** (navigate DOM relationships):
+- \`parent::\` — navigate to parent
+- \`following-sibling::\` — next sibling elements
+- \`preceding-sibling::\` — previous sibling elements
+- \`ancestor::\` — any ancestor element
+- \`descendant::\` — any descendant
+
+**XPath vs CSS Selector**:
+- CSS is faster (native browser API). XPath is more powerful (can traverse parent/preceding).
+- CSS: \`#id\`, \`.class\`, \`[attr='val']\`, \`div > p\`. Cannot traverse to parent.
+- XPath: can navigate to parent, use text content, more expressive. Slower.
+- **Prefer CSS Selector** for performance; use XPath when you need parent navigation or text-based matching.`,
+  },
+  {
+    id: "sel4", domain: "Selenium & Testing", type: "technical", difficulty: "Medium",
+    question: "What is the Page Object Model (POM) framework in Selenium? How do you design it and why is it the industry standard?",
+    hint: "POM = separate class per page, expose page actions not raw WebDriver calls, use @FindBy annotations with PageFactory. Explain how it reduces duplication and improves maintainability.",
+    keyPoints: ["One class per page/component", "@FindBy + PageFactory", "Page actions not raw WebDriver", "Separation of test logic from locators", "Locator change = fix in one place"],
+    modelAnswer: `**Page Object Model**: Design pattern where each web page (or reusable component) is represented as a class. The class encapsulates the page's elements and actions, hiding WebDriver details from tests.
+
+**Structure**:
+\`\`\`
+src/
+  pages/
+    LoginPage.java        ← Page Object
+    DashboardPage.java
+    BasePage.java         ← Shared driver + common actions
+  tests/
+    LoginTest.java        ← Test class uses Page Objects
+  utils/
+    DriverFactory.java
+\`\`\`
+
+**Page Object with PageFactory**:
+\`\`\`java
+public class LoginPage {
+    private WebDriver driver;
+
+    @FindBy(id = "username")
+    private WebElement usernameField;
+
+    @FindBy(id = "password")
+    private WebElement passwordField;
+
+    @FindBy(css = "button[type='submit']")
+    private WebElement loginButton;
+
+    @FindBy(className = "error-message")
+    private WebElement errorMessage;
+
+    public LoginPage(WebDriver driver) {
+        this.driver = driver;
+        PageFactory.initElements(driver, this);  // initialises @FindBy elements
+    }
+
+    public DashboardPage login(String user, String pass) {
+        usernameField.sendKeys(user);
+        passwordField.sendKeys(pass);
+        loginButton.click();
+        return new DashboardPage(driver);  // return next page
+    }
+
+    public String getErrorMessage() {
+        return errorMessage.getText();
+    }
+}
+\`\`\`
+
+**Test class (clean, readable)**:
+\`\`\`java
+@Test
+public void validLoginRedirectsToDashboard() {
+    LoginPage login = new LoginPage(driver);
+    DashboardPage dashboard = login.login("admin@test.com", "Password123");
+    Assert.assertTrue(dashboard.isLoaded());
+}
+\`\`\`
+
+**Benefits**:
+- Locator change (UI redesign) → fix in ONE place (page class), not 50 tests.
+- Tests are readable business steps, not WebDriver noise.
+- Page actions return the next page — fluent navigation.
+- Reusable across test scenarios.`,
+  },
+  {
+    id: "sel5", domain: "Selenium & Testing", type: "technical", difficulty: "Medium",
+    question: "Explain TestNG annotations. What is the difference between @BeforeTest and @BeforeMethod? How does @DataProvider work vs passing parameters via testng.xml?",
+    hint: "Cover the full annotation lifecycle hierarchy, @BeforeTest runs once per <test> tag, @BeforeMethod runs before every @Test method. DataProvider = programmatic, parameters = static config.",
+    keyPoints: ["Annotation hierarchy: Suite > Test > Class > Groups > Method", "@DataProvider: returns Object[][], enables parameterisation in code", "@Parameters: static values from testng.xml", "dependsOnMethods for test ordering", "groups for test categorisation"],
+    modelAnswer: `**TestNG Annotation Lifecycle** (outer → inner):
+\`\`\`
+@BeforeSuite → @AfterSuite          (once for entire suite)
+  @BeforeTest → @AfterTest          (once per <test> tag in XML)
+    @BeforeClass → @AfterClass      (once per test class)
+      @BeforeGroups → @AfterGroups  (when entering/leaving a group)
+        @BeforeMethod → @AfterMethod  (before/after EACH @Test method)
+          @Test                      (actual test)
+\`\`\`
+
+**@BeforeTest** — runs ONCE before all test methods in a \`<test>\` tag:
+- Good for: browser setup, test database setup.
+
+**@BeforeMethod** — runs before EVERY single \`@Test\` method:
+- Good for: navigating to start URL, resetting state, clearing cookies.
+- Use this for test isolation (each test starts from a clean state).
+
+**@DataProvider** (programmatic, code-based parameterisation):
+\`\`\`java
+@DataProvider(name = "loginData")
+public Object[][] provideLoginData() {
+    return new Object[][] {
+        {"admin@test.com", "Pass123", true},
+        {"wrong@test.com", "wrongpass", false},
+        {"", "", false},
+    };
+}
+
+@Test(dataProvider = "loginData")
+public void testLogin(String email, String pwd, boolean shouldSucceed) {
+    // runs 3 times with each dataset
+}
+\`\`\`
+
+**@Parameters** (from testng.xml — static config values):
+\`\`\`xml
+<parameter name="browser" value="chrome"/>
+\`\`\`
+\`\`\`java
+@BeforeMethod
+@Parameters("browser")
+public void setup(String browser) { /* init browser */ }
+\`\`\`
+
+**When to use which**:
+- \`@DataProvider\`: test data (multiple rows, loaded from Excel/DB), loop-based parameterisation.
+- \`@Parameters\`: environment config (browser, URL, credentials) — one value per run.
+
+**@Test(dependsOnMethods)**: \`@Test(dependsOnMethods = "testLogin")\` — run only if \`testLogin\` passed. Use sparingly — creates fragile test chains.`,
+  },
+  {
+    id: "sel6", domain: "Selenium & Testing", type: "technical", difficulty: "Medium",
+    question: "Explain the WebDriver architecture. What is WebDriver? What is the difference between ChromeDriver and RemoteWebDriver? How does Selenium Grid work?",
+    hint: "WebDriver is an interface. ChromeDriver/FirefoxDriver implement it via W3C WebDriver protocol. RemoteWebDriver communicates with a hub. Selenium Grid distributes tests across machines/browsers.",
+    keyPoints: ["WebDriver = interface (W3C spec)", "ChromeDriver: local, direct", "RemoteWebDriver: network JSON Wire → W3C", "Selenium Grid: Hub + Nodes", "Cloud grids: Selenium Grid 4, BrowserStack, Sauce Labs"],
+    modelAnswer: `**WebDriver Interface**:
+- \`WebDriver\` is a Java interface defined by the W3C WebDriver specification.
+- Classes that implement WebDriver: \`ChromeDriver\`, \`FirefoxDriver\`, \`EdgeDriver\`, \`SafariDriver\`, \`RemoteWebDriver\`.
+
+**How Selenium WebDriver works**:
+1. Your Java test calls \`driver.findElement()\`, \`driver.click()\` etc.
+2. WebDriver translates this to W3C WebDriver protocol (HTTP requests).
+3. ChromeDriver (a separate server process) receives the request and uses Chrome DevTools Protocol (CDP) to control the actual Chrome browser.
+4. Chrome executes the command and returns the response.
+
+**ChromeDriver (local execution)**:
+\`\`\`java
+WebDriver driver = new ChromeDriver();  // starts ChromeDriver process locally
+// Selenium 4: automatic driver management
+WebDriverManager.chromedriver().setup();  // downloads matching ChromeDriver
+\`\`\`
+
+**RemoteWebDriver (network/grid execution)**:
+\`\`\`java
+DesiredCapabilities caps = new DesiredCapabilities();
+caps.setBrowserName("chrome");
+WebDriver driver = new RemoteWebDriver(
+    new URL("http://hub:4444/wd/hub"), caps);
+\`\`\`
+Your test sends HTTP requests to a Selenium Hub, which routes to a Node running the actual browser.
+
+**Selenium Grid 4**:
+- **Hub**: central server receives test requests, routes to appropriate Node.
+- **Node**: machine with browsers installed, registers capabilities with Hub.
+- **Distributed mode**: Hub + Router + Distributor + Session Map (microservices).
+- Enables parallel execution across multiple OS/browser combinations.
+
+**Cloud Grids** (BrowserStack, Sauce Labs, LambdaTest):
+- Same RemoteWebDriver API, hosted infrastructure. No maintenance.
+- Provides real devices, browser versions, OS combinations, video recording.`,
+  },
+  {
+    id: "sel7", domain: "Selenium & Testing", type: "technical", difficulty: "Medium",
+    question: "How do you handle dynamic web elements in Selenium? What causes StaleElementReferenceException and how do you fix it?",
+    hint: "Dynamic elements change ID/XPath on each page load or after AJAX. StaleElement = DOM was refreshed. Fix by re-finding, using Explicit Wait, or catching and retrying.",
+    keyPoints: ["Dynamic locators: contains(), starts-with()", "StaleElement: DOM refreshed, old reference invalid", "Re-locate after AJAX/navigation", "Fluent Wait with retry", "JavaScript executor as fallback"],
+    modelAnswer: `**Dynamic Web Elements**: Elements whose attributes (ID, class, XPath) change on every page load or after AJAX calls.
+
+**Problem**: Many apps generate IDs dynamically: \`id="input_1234567"\` (timestamp). Locating by exact ID breaks every run.
+
+**Solutions for dynamic locators**:
+\`\`\`java
+// Avoid: exact dynamic ID
+driver.findElement(By.id("input_1234567"));  // breaks
+
+// Use: relative locator with stable attribute
+driver.findElement(By.xpath("//input[contains(@id,'input_')]"));
+driver.findElement(By.xpath("//input[@placeholder='Enter name']"));
+driver.findElement(By.cssSelector("input[name='username']"));
+
+// Use label context (stable text near element)
+driver.findElement(By.xpath("//label[text()='Email']/following-sibling::input"));
+\`\`\`
+
+**StaleElementReferenceException**: You found an element, then the DOM was refreshed (navigation, AJAX reload, React re-render) — the old WebElement reference points to a detached DOM node.
+
+**Fixes**:
+\`\`\`java
+// Fix 1: Re-find after action that triggers DOM change
+driver.findElement(By.id("refresh")).click();
+// DOM may refresh here...
+WebElement freshElement = driver.findElement(By.id("result"));  // re-find
+
+// Fix 2: Wrap in try-catch with retry
+public void clickWithRetry(By locator) {
+    int attempts = 0;
+    while (attempts < 3) {
+        try {
+            driver.findElement(locator).click();
+            return;
+        } catch (StaleElementReferenceException e) {
+            attempts++;
+        }
+    }
+}
+
+// Fix 3: Use Explicit Wait — re-finds internally
+WebDriverWait wait = new WebDriverWait(driver, Duration.ofSeconds(10));
+wait.until(ExpectedConditions.elementToBeClickable(By.id("btn"))).click();
+// WebDriverWait re-evaluates ExpectedConditions on each poll — handles stale
+
+// Fix 4: JavaScript Executor (bypass WebDriver interaction)
+JavascriptExecutor js = (JavascriptExecutor) driver;
+js.executeScript("arguments[0].click();", element);
+\`\`\`
+
+**Handling dynamic dropdowns** (auto-suggest, type-ahead):
+\`\`\`java
+driver.findElement(By.id("city")).sendKeys("Banga");
+wait.until(ExpectedConditions.visibilityOfElementLocated(By.className("suggestions")));
+driver.findElement(By.xpath("//li[text()='Bangalore']")).click();
+\`\`\``,
+  },
+  {
+    id: "sel9", domain: "Selenium & Testing", type: "technical", difficulty: "Medium",
+    question: "How do you handle Alerts, Frames/iFrames, and Multiple Windows in Selenium WebDriver?",
+    hint: "Alerts: driver.switchTo().alert(). Frames: switchTo().frame(id/index/element). Windows: getWindowHandles() set, iterate and switchTo(). Always switch back after.",
+    keyPoints: ["Alert: accept(), dismiss(), getText(), sendKeys()", "Frame: switchTo().frame() then switchTo().defaultContent()", "Windows: getWindowHandle() + getWindowHandles()", "Store parent handle before opening child", "Wait for new window to appear before switching"],
+    modelAnswer: `**Handling Alerts**:
+\`\`\`java
+// Simple alert (OK button)
+Alert alert = driver.switchTo().alert();
+System.out.println(alert.getText());  // read message
+alert.accept();   // click OK
+// alert.dismiss();  // click Cancel
+
+// Confirmation alert
+WebDriverWait wait = new WebDriverWait(driver, Duration.ofSeconds(10));
+Alert alert = wait.until(ExpectedConditions.alertIsPresent());
+alert.accept();  // or alert.dismiss();
+
+// Prompt alert (text input)
+Alert prompt = driver.switchTo().alert();
+prompt.sendKeys("My answer");
+prompt.accept();
+\`\`\`
+
+**Handling Frames/iFrames**:
+\`\`\`java
+// Switch by frame index (0-based)
+driver.switchTo().frame(0);
+
+// Switch by frame id or name attribute
+driver.switchTo().frame("loginFrame");
+
+// Switch by WebElement
+WebElement frameElement = driver.findElement(By.cssSelector("iframe#myFrame"));
+driver.switchTo().frame(frameElement);
+
+// Interact with elements inside frame
+driver.findElement(By.id("username")).sendKeys("admin");
+
+// Switch back to main document
+driver.switchTo().defaultContent();
+
+// Nested frames: switch frame by frame
+driver.switchTo().frame("outerFrame");
+driver.switchTo().frame("innerFrame");
+driver.switchTo().parentFrame();  // go up one level
+\`\`\`
+
+**Handling Multiple Windows/Tabs**:
+\`\`\`java
+// Save parent window handle
+String parentWindow = driver.getWindowHandle();
+
+// Click link that opens new window
+driver.findElement(By.linkText("Open New Window")).click();
+
+// Wait for new window to open
+WebDriverWait wait = new WebDriverWait(driver, Duration.ofSeconds(10));
+wait.until(d -> d.getWindowHandles().size() > 1);
+
+// Switch to new window
+for (String handle : driver.getWindowHandles()) {
+    if (!handle.equals(parentWindow)) {
+        driver.switchTo().window(handle);
+        break;
+    }
+}
+
+// Do work in new window
+System.out.println(driver.getTitle());
+driver.close();  // close child window
+
+// Switch back to parent
+driver.switchTo().window(parentWindow);
+\`\`\``,
+  },
+  {
+    id: "sel10", domain: "Selenium & Testing", type: "technical", difficulty: "Medium",
+    question: "How do you perform keyboard and mouse actions in Selenium? Explain the Actions class with examples.",
+    hint: "Actions class handles complex interactions: hover, right-click, double-click, drag-and-drop, keyboard combinations. Must call .perform() to execute the action chain.",
+    keyPoints: ["Actions class for complex interactions", "moveToElement: hover", "contextClick: right-click", "doubleClick", "dragAndDrop", "keyDown/keyUp for combinations", ".perform() executes the chain"],
+    modelAnswer: `**Actions class** (org.openqa.selenium.interactions) handles mouse and keyboard interactions that simple \`click()\`/\`sendKeys()\` can't handle.
+
+\`\`\`java
+Actions actions = new Actions(driver);
+
+// Hover (mouse-over) to reveal a dropdown
+WebElement menu = driver.findElement(By.id("navMenu"));
+actions.moveToElement(menu).perform();  // hover
+// Now the dropdown is visible
+driver.findElement(By.linkText("SubMenu Item")).click();
+
+// Right-click (context menu)
+WebElement element = driver.findElement(By.id("rightClickBtn"));
+actions.contextClick(element).perform();
+// Select from context menu
+driver.findElement(By.xpath("//li[text()='Copy']")).click();
+
+// Double-click
+actions.doubleClick(driver.findElement(By.id("editableField"))).perform();
+
+// Drag and Drop
+WebElement source = driver.findElement(By.id("draggable"));
+WebElement target = driver.findElement(By.id("droppable"));
+actions.dragAndDrop(source, target).perform();
+// Alternative: clickAndHold + moveToElement + release
+actions.clickAndHold(source)
+       .moveToElement(target)
+       .release()
+       .perform();
+
+// Keyboard combinations (Ctrl+A, Ctrl+C, etc.)
+actions.keyDown(Keys.CONTROL).sendKeys("a").keyUp(Keys.CONTROL).perform();  // Select All
+actions.keyDown(Keys.CONTROL).sendKeys("c").keyUp(Keys.CONTROL).perform();  // Copy
+actions.keyDown(Keys.CONTROL).sendKeys("v").keyUp(Keys.CONTROL).perform();  // Paste
+
+// Click at specific coordinates (x, y offset from element)
+actions.moveToElement(element, 10, 20).click().perform();
+
+// Chain multiple actions
+actions.moveToElement(firstElement)
+       .click()
+       .moveToElement(secondElement)
+       .doubleClick()
+       .perform();
+\`\`\`
+
+**When to use Actions vs JavascriptExecutor**:
+- Actions: most interactions. Simulates real user interaction.
+- JavascriptExecutor: when Actions doesn't work (hidden elements, elements outside viewport): \`((JavascriptExecutor) driver).executeScript("arguments[0].click();", element);\``,
+  },
+  {
+    id: "sel11", domain: "Selenium & Testing", type: "technical", difficulty: "Medium",
+    question: "How do you handle dropdowns in Selenium? Explain the Select class and how to handle custom (non-native) dropdowns.",
+    hint: "Select class works with native HTML <select> elements. Custom dropdowns (styled divs) need click + findElements approach. Cover selectByVisibleText, selectByValue, selectByIndex.",
+    keyPoints: ["Select class: only for HTML <select>", "selectByVisibleText, selectByValue, selectByIndex", "getOptions(), getFirstSelectedOption()", "Custom dropdown: click to open + findElement text", "Multi-select: isMultiple()"],
+    modelAnswer: `**Native HTML <select> Dropdown — Select class**:
+\`\`\`java
+// HTML: <select id="country">
+//   <option value="in">India</option>
+//   <option value="us">USA</option>
+// </select>
+
+WebElement dropdownElement = driver.findElement(By.id("country"));
+Select select = new Select(dropdownElement);
+
+// Select by visible text (what user sees)
+select.selectByVisibleText("India");
+
+// Select by value attribute
+select.selectByValue("us");
+
+// Select by index (0-based)
+select.selectByIndex(2);
+
+// Get all options
+List<WebElement> options = select.getOptions();
+for (WebElement opt : options) {
+    System.out.println(opt.getText() + " | value: " + opt.getAttribute("value"));
+}
+
+// Get first selected option
+System.out.println(select.getFirstSelectedOption().getText());
+
+// Multi-select dropdown
+if (select.isMultiple()) {
+    select.selectByVisibleText("Java");
+    select.selectByVisibleText("Python");
+    select.deselectAll();
+}
+\`\`\`
+
+**Custom (Non-Native) Dropdown** — styled div/ul/li dropdowns:
+\`\`\`java
+// HTML: <div class="custom-select">
+//   <div class="select-trigger">Select Country</div>
+//   <ul class="options">
+//     <li data-value="in">India</li>
+//     <li data-value="us">USA</li>
+//   </ul>
+// </div>
+
+// Step 1: Click to open
+driver.findElement(By.className("select-trigger")).click();
+
+// Step 2: Wait for options to appear
+WebDriverWait wait = new WebDriverWait(driver, Duration.ofSeconds(10));
+wait.until(ExpectedConditions.visibilityOfElementLocated(By.className("options")));
+
+// Step 3: Click desired option
+driver.findElement(By.xpath("//li[text()='India']")).click();
+
+// Handling auto-suggest / type-ahead
+WebElement search = driver.findElement(By.id("citySearch"));
+search.sendKeys("Bang");
+// Wait for suggestions
+List<WebElement> suggestions = wait.until(
+    ExpectedConditions.visibilityOfAllElementsLocatedBy(By.className("suggestion-item")));
+// Click first suggestion or find specific one
+suggestions.get(0).click();
+\`\`\``,
+  },
+  {
+    id: "sel12", domain: "Selenium & Testing", type: "technical", difficulty: "Medium",
+    question: "How do you take screenshots in Selenium? How do you capture screenshots on test failure in TestNG?",
+    hint: "TakesScreenshot interface. getScreenshotAs(OutputType.FILE). For failure capture: implement ITestListener or use @AfterMethod with ITestResult.",
+    keyPoints: ["TakesScreenshot interface", "getScreenshotAs(OutputType.FILE/BASE64/BYTES)", "FileUtils.copyFile to save", "ITestListener.onTestFailure() for automatic capture", "Attach to Extent Reports"],
+    modelAnswer: `**Taking Screenshots Manually**:
+\`\`\`java
+// WebDriver must implement TakesScreenshot (ChromeDriver, FirefoxDriver do)
+public static String takeScreenshot(WebDriver driver, String testName) {
+    TakesScreenshot ts = (TakesScreenshot) driver;
+    File src = ts.getScreenshotAs(OutputType.FILE);
+    String path = "screenshots/" + testName + "_" + System.currentTimeMillis() + ".png";
+    File dest = new File(path);
+    FileUtils.copyFile(src, dest);  // Apache Commons IO
+    return path;
+}
+
+// As Base64 (useful for embedding in HTML reports)
+String base64 = ts.getScreenshotAs(OutputType.BASE64);
+// Embed: "<img src='data:image/png;base64," + base64 + "'/>"
+
+// Screenshot of specific element (Selenium 4+)
+WebElement element = driver.findElement(By.id("chart"));
+File elementShot = element.getScreenshotAs(OutputType.FILE);
+\`\`\`
+
+**Automatic Screenshot on Failure — ITestListener**:
+\`\`\`java
+public class ScreenshotListener implements ITestListener {
+
+    @Override
+    public void onTestFailure(ITestResult result) {
+        // Get driver from test class via reflection or ThreadLocal
+        WebDriver driver = ((BaseTest) result.getInstance()).getDriver();
+        String screenshotPath = takeScreenshot(driver, result.getName());
+        System.out.println("Screenshot saved: " + screenshotPath);
+
+        // Attach to Extent Reports (if using ExtentReports)
+        ExtentTest extentTest = ExtentManager.getTest();
+        extentTest.addScreenCaptureFromPath(screenshotPath);
+    }
+}
+// Register in testng.xml:
+// <listeners><listener class-name="com.tests.ScreenshotListener"/></listeners>
+\`\`\`
+
+**Using @AfterMethod (simpler approach)**:
+\`\`\`java
+@AfterMethod
+public void tearDown(ITestResult result) {
+    if (result.getStatus() == ITestResult.FAILURE) {
+        String path = takeScreenshot(driver, result.getName());
+        // Attach to report
+    }
+    driver.quit();
+}
+\`\`\`
+
+**Thread-safe screenshots** (parallel execution): Use \`ThreadLocal<WebDriver>\` so each thread has its own driver instance — screenshots don't mix up between parallel tests.`,
+  },
+  {
+    id: "sel13", domain: "Selenium & Testing", type: "technical", difficulty: "Medium",
+    question: "How do you read test data from Excel in Selenium? Explain Apache POI integration and the Data-Driven framework.",
+    hint: "Apache POI reads .xlsx (XSSFWorkbook) and .xls (HSSFWorkbook). DataProvider feeds data from Excel to TestNG @Test. Explain Workbook → Sheet → Row → Cell hierarchy.",
+    keyPoints: ["Apache POI: XSSF (.xlsx), HSSF (.xls)", "Workbook → Sheet → Row → Cell hierarchy", "@DataProvider returns Object[][] from Excel", "getCell().getStringCellValue() etc.", "Close workbook after reading"],
+    modelAnswer: `**Apache POI Setup** (pom.xml):
+\`\`\`xml
+<dependency>
+    <groupId>org.apache.poi</groupId>
+    <artifactId>poi-ooxml</artifactId>
+    <version>5.2.3</version>
+</dependency>
+\`\`\`
+
+**Reading Excel Data**:
+\`\`\`java
+public class ExcelUtils {
+    private XSSFWorkbook workbook;
+    private XSSFSheet sheet;
+
+    public ExcelUtils(String filePath, String sheetName) throws Exception {
+        FileInputStream fis = new FileInputStream(filePath);
+        workbook = new XSSFWorkbook(fis);
+        sheet = workbook.getSheet(sheetName);
+        fis.close();
+    }
+
+    public String getCellData(int rowNum, int colNum) {
+        XSSFRow row = sheet.getRow(rowNum);
+        if (row == null) return "";
+        XSSFCell cell = row.getCell(colNum);
+        if (cell == null) return "";
+        // Handle different cell types
+        switch (cell.getCellType()) {
+            case STRING:  return cell.getStringCellValue();
+            case NUMERIC:
+                if (DateUtil.isCellDateFormatted(cell))
+                    return cell.getDateCellValue().toString();
+                return String.valueOf((int) cell.getNumericCellValue());
+            case BOOLEAN: return String.valueOf(cell.getBooleanCellValue());
+            default: return "";
+        }
+    }
+
+    public int getRowCount() { return sheet.getLastRowNum(); }
+    public int getColCount(int rowNum) { return sheet.getRow(rowNum).getLastCellNum(); }
+    public void close() throws Exception { workbook.close(); }
+}
+\`\`\`
+
+**TestNG @DataProvider with Excel**:
+\`\`\`java
+@DataProvider(name = "loginData")
+public Object[][] getLoginData() throws Exception {
+    ExcelUtils excel = new ExcelUtils("testdata/login.xlsx", "LoginData");
+    int rows = excel.getRowCount();
+    Object[][] data = new Object[rows][2];  // rows x columns
+    for (int i = 1; i <= rows; i++) {  // skip header row (i=0)
+        data[i-1][0] = excel.getCellData(i, 0);  // username column
+        data[i-1][1] = excel.getCellData(i, 1);  // password column
+    }
+    excel.close();
+    return data;
+}
+
+@Test(dataProvider = "loginData")
+public void testLogin(String username, String password) {
+    loginPage.login(username, password);
+    // assertions...
+}
+\`\`\`
+
+**Excel Structure** (login.xlsx, "LoginData" sheet):
+\`\`\`
+| Username      | Password   | ExpectedResult |
+|---------------|------------|----------------|
+| admin@test.com| Pass123    | success        |
+| wrong@test.com| wrongpass  | failure        |
+\`\`\`
+
+**Write Back Results to Excel**:
+\`\`\`java
+public void setCellData(int rowNum, int colNum, String value) {
+    sheet.getRow(rowNum).getCell(colNum).setCellValue(value);
+    FileOutputStream fos = new FileOutputStream(filePath);
+    workbook.write(fos);
+    fos.close();
+}
+\`\`\``,
+  },
+  {
+    id: "sel14", domain: "Selenium & Testing", type: "technical", difficulty: "Medium",
+    question: "How do you generate test reports in Selenium? Explain Extent Reports and how to integrate them with TestNG.",
+    hint: "ExtentReports: initialise once, create ExtentTest per test, log steps pass/fail/info, flush at end. Integrate via ITestListener or @AfterMethod. Attach screenshots on failure.",
+    keyPoints: ["ExtentReports: SparkReporter for HTML", "ExtentTest per @Test method", "test.log(Status.PASS/FAIL/INFO)", "Attach screenshots on failure", "ThreadLocal for parallel execution"],
+    modelAnswer: `**Extent Reports Setup** (pom.xml):
+\`\`\`xml
+<dependency>
+    <groupId>com.aventstack</groupId>
+    <artifactId>extentreports</artifactId>
+    <version>5.1.1</version>
+</dependency>
+\`\`\`
+
+**ExtentReports Manager (Singleton pattern)**:
+\`\`\`java
+public class ExtentManager {
+    private static ExtentReports extent;
+    private static ThreadLocal<ExtentTest> test = new ThreadLocal<>();
+
+    public static ExtentReports getInstance() {
+        if (extent == null) {
+            ExtentSparkReporter reporter = new ExtentSparkReporter("reports/ExtentReport.html");
+            reporter.config().setReportName("Automation Test Report");
+            reporter.config().setDocumentTitle("Test Results");
+            extent = new ExtentReports();
+            extent.attachReporter(reporter);
+            extent.setSystemInfo("Environment", "Staging");
+            extent.setSystemInfo("Browser", "Chrome");
+        }
+        return extent;
+    }
+
+    public static void setTest(ExtentTest extentTest) { test.set(extentTest); }
+    public static ExtentTest getTest() { return test.get(); }
+}
+\`\`\`
+
+**TestNG Listener Integration**:
+\`\`\`java
+public class ExtentReportListener implements ITestListener {
+
+    @Override
+    public void onStart(ITestContext context) {
+        ExtentManager.getInstance();  // initialise report
+    }
+
+    @Override
+    public void onTestStart(ITestResult result) {
+        ExtentTest test = ExtentManager.getInstance()
+            .createTest(result.getMethod().getMethodName());
+        test.assignCategory(result.getTestClass().getName());
+        ExtentManager.setTest(test);
+    }
+
+    @Override
+    public void onTestSuccess(ITestResult result) {
+        ExtentManager.getTest().log(Status.PASS, "Test PASSED");
+    }
+
+    @Override
+    public void onTestFailure(ITestResult result) {
+        ExtentManager.getTest().log(Status.FAIL, result.getThrowable());
+        // Attach screenshot
+        String screenshotBase64 = ((TakesScreenshot) getDriver()).getScreenshotAs(OutputType.BASE64);
+        ExtentManager.getTest().addScreenCaptureFromBase64String(screenshotBase64, "Failure Screenshot");
+    }
+
+    @Override
+    public void onTestSkipped(ITestResult result) {
+        ExtentManager.getTest().log(Status.SKIP, "Test SKIPPED");
+    }
+
+    @Override
+    public void onFinish(ITestContext context) {
+        ExtentManager.getInstance().flush();  // writes HTML report to disk
+    }
+}
+\`\`\`
+
+**Logging steps in test**:
+\`\`\`java
+ExtentManager.getTest().log(Status.INFO, "Navigating to login page");
+ExtentManager.getTest().log(Status.INFO, "Entering credentials");
+ExtentManager.getTest().log(Status.PASS, "Login successful. URL: " + driver.getCurrentUrl());
+\`\`\`
+
+**Register listener in testng.xml**:
+\`\`\`xml
+<listeners>
+    <listener class-name="com.framework.listeners.ExtentReportListener"/>
+</listeners>
+\`\`\``,
+  },
+  {
+    id: "sel15", domain: "Selenium & Testing", type: "technical", difficulty: "Medium",
+    question: "How do you handle JavaScript-based interactions in Selenium? Explain JavascriptExecutor with common use cases.",
+    hint: "JavascriptExecutor executes JavaScript in the browser. Use for: scroll, click hidden elements, set input values, get element text/attributes, highlight elements for debugging.",
+    keyPoints: ["executeScript and executeAsyncScript", "Scroll to element / to coordinates", "Click via JS when WebDriver click fails", "Set value in JS for read-only fields", "Highlight element for debugging"],
+    modelAnswer: `**JavascriptExecutor** — execute JavaScript directly in the browser. Useful when WebDriver's native methods fail (hidden elements, read-only fields, scroll needed).
+
+\`\`\`java
+JavascriptExecutor js = (JavascriptExecutor) driver;
+
+// --- Scrolling ---
+// Scroll to bottom of page
+js.executeScript("window.scrollTo(0, document.body.scrollHeight);");
+
+// Scroll to top
+js.executeScript("window.scrollTo(0, 0);");
+
+// Scroll to specific element (bring into view)
+WebElement element = driver.findElement(By.id("submitBtn"));
+js.executeScript("arguments[0].scrollIntoView(true);", element);
+// With smooth behavior
+js.executeScript("arguments[0].scrollIntoView({behavior:'smooth', block:'center'});", element);
+
+// --- Clicking when .click() doesn't work ---
+// Useful for: hidden elements, elements covered by overlay, animations in progress
+js.executeScript("arguments[0].click();", element);
+
+// --- Setting value in read-only / disabled fields ---
+js.executeScript("arguments[0].value = arguments[1];", element, "new value");
+
+// --- Getting element properties ---
+String text = (String) js.executeScript("return arguments[0].innerText;", element);
+String value = (String) js.executeScript("return arguments[0].value;", element);
+Boolean isVisible = (Boolean) js.executeScript(
+    "return window.getComputedStyle(arguments[0]).display !== 'none';", element);
+
+// --- Highlighting element for debugging ---
+js.executeScript("arguments[0].style.border='3px solid red';", element);
+
+// --- Opening new tab ---
+js.executeScript("window.open('https://google.com', '_blank');");
+// Switch to new tab
+List<String> tabs = new ArrayList<>(driver.getWindowHandles());
+driver.switchTo().window(tabs.get(1));
+
+// --- Async script (useful for AJAX wait) ---
+js.executeAsyncScript(
+    "var callback = arguments[arguments.length - 1];" +
+    "setTimeout(callback, 2000);");  // wait 2 seconds asynchronously
+\`\`\`
+
+**When to use JavascriptExecutor vs Actions vs WebDriver native**:
+- **WebDriver native** (findElement, click, sendKeys): Always prefer — most reliable, simulates real user.
+- **Actions**: Complex mouse/keyboard interactions (hover, drag, right-click).
+- **JavascriptExecutor**: Last resort — hidden elements, read-only fields, scroll, when native methods fail. Bypasses browser event model — may not trigger event listeners correctly.`,
+  },
+  {
+    id: "sel8", domain: "Selenium & Testing", type: "technical", difficulty: "Medium",
+    question: "What is the difference between Assert and Verify in Selenium? What are Soft Assertions and when do you use them?",
+    hint: "Assert: test stops on failure (hard assert). Verify: continues after failure (soft). TestNG has SoftAssert class. Explain when to use each.",
+    keyPoints: ["Hard Assert: stops test immediately", "Soft Assert: collects failures, reports all", "TestNG SoftAssert.assertAll()", "Assert for critical blockers, Soft for field validations", "Types of assertions (assertEquals, assertTrue, assertNull)"],
+    modelAnswer: `**Hard Assertions (Assert)** — Test stops immediately on failure:
+\`\`\`java
+// TestNG Assert
+Assert.assertEquals(actual, expected, "Login should succeed");
+Assert.assertTrue(page.isDisplayed(), "Page should be visible");
+Assert.assertNotNull(response, "Response should not be null");
+Assert.assertEquals(list.size(), 5, "Should have 5 items");
+\`\`\`
+If \`assertEquals\` fails → throws \`AssertionError\` → test stops. Remaining assertions NOT executed.
+
+**Use hard assert when**: The failure is a blocker — no point continuing if login failed, login page not loaded, or API returned null.
+
+**Soft Assertions** — Continue test after failure, report all failures at end:
+\`\`\`java
+// TestNG SoftAssert
+SoftAssert softAssert = new SoftAssert();
+
+softAssert.assertEquals(nameField.getText(), "John", "Name mismatch");
+softAssert.assertEquals(emailField.getText(), "john@test.com", "Email mismatch");
+softAssert.assertTrue(saveBtn.isEnabled(), "Save button should be enabled");
+softAssert.assertEquals(statusField.getText(), "Active", "Status mismatch");
+
+softAssert.assertAll();  // MUST call this! Collects and throws all failures
+\`\`\`
+All 4 assertions run even if the first fails. \`assertAll()\` throws one combined failure with ALL assertion errors.
+
+**Use soft assert when**: Validating multiple fields on a form, verifying all columns in a table row, checking all elements on a page — you want to see ALL failures in one test run.
+
+**Assertion Types (TestNG)**:
+- \`assertEquals(actual, expected)\` — equality
+- \`assertTrue(condition)\` / \`assertFalse(condition)\`
+- \`assertNull(obj)\` / \`assertNotNull(obj)\`
+- \`assertSame(obj1, obj2)\` — same object reference (==)
+- \`assertEquals(list1, list2)\` — collection equality
+- \`assertThrows()\` — verify exception thrown
+
+**vs Verify** (Selenium IDE legacy term): In old Selenium RC, \`verify\` was soft (continues on failure), \`assert\` was hard. In modern Selenium + TestNG, use Hard Assert vs SoftAssert explicitly.`,
+  },
+];
+
 // ─── Role-based question selector ─────────────────────────────────────────────
 
 const ALL_BANK_QUESTIONS: QuestionBankItem[] = [
@@ -2092,6 +3999,8 @@ const ALL_BANK_QUESTIONS: QuestionBankItem[] = [
   ...DATABASE_QUESTIONS,
   ...CLOUD_QUESTIONS,
   ...QA_TESTING_QUESTIONS,
+  ...JAVA_OOP_QUESTIONS,
+  ...SELENIUM_QUESTIONS,
 ];
 
 /** Deterministic seeded shuffle — same seed → same order, different seed → different order */
@@ -2117,14 +4026,16 @@ export function getQuestionsForRole(
   const context = `${r} ${s}`;
 
   const domainScores: Record<string, number> = {
-    "DSA":              0,
-    "System Design":    0,
-    "CI/CD & DevOps":   0,
-    "B2B Integration":  0,
-    "API Management":   0,
-    "Databases":        0,
-    "Cloud":            0,
-    "QA & Testing":     0,
+    "DSA":                  0,
+    "System Design":        0,
+    "CI/CD & DevOps":       0,
+    "B2B Integration":      0,
+    "API Management":       0,
+    "Databases":            0,
+    "Cloud":                0,
+    "QA & Testing":         0,
+    "Java & OOP":           0,
+    "Selenium & Testing":   0,
   };
 
   // Score domains by role/skill relevance
@@ -2135,11 +4046,15 @@ export function getQuestionsForRole(
   if (/api management|api gateway|kong|apigee|apim|api manager/i.test(context)) domainScores["API Management"] += 10;
   if (/database|dba|sql|nosql|postgres|oracle|mongodb|cassandra|redis|snowflake/i.test(context)) domainScores["Databases"] += 10;
   if (/aws|azure|gcp|cloud|lambda|s3|ec2|eks|aks|iam/i.test(context)) domainScores["Cloud"] += 10;
-  if (/qa|quality|test|sdet|playwright|selenium|cypress|automation|postman|jmeter/i.test(context)) domainScores["QA & Testing"] += 10;
+  if (/qa|quality|test engineer|sdet|playwright|cypress|automation|postman|jmeter|appium/i.test(context)) domainScores["QA & Testing"] += 10;
+  if (/java|spring|hibernate|maven|gradle|jvm|j2ee|microservice.*java|backend.*java/i.test(context)) domainScores["Java & OOP"] += 10;
+  if (/selenium|webdriver|testng|junit|cucumber|bdd|page object|pom|automation.*test/i.test(context)) domainScores["Selenium & Testing"] += 10;
 
   // Always include DSA and System Design at a base level
   domainScores["DSA"] = Math.max(domainScores["DSA"], 3);
   domainScores["System Design"] = Math.max(domainScores["System Design"], 3);
+  // Include Java & OOP at base level (universally relevant)
+  domainScores["Java & OOP"] = Math.max(domainScores["Java & OOP"], 2);
 
   const sorted = Object.entries(domainScores)
     .filter(([, score]) => score > 0)
@@ -2167,4 +4082,5 @@ export function getAllQuestionsForDomain(domain: string): QuestionBankItem[] {
 export const ALL_DOMAINS = [
   "DSA", "System Design", "CI/CD & DevOps", "B2B Integration",
   "API Management", "Databases", "Cloud", "QA & Testing",
+  "Java & OOP", "Selenium & Testing",
 ];
