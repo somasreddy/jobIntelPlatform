@@ -4,13 +4,13 @@ import { useRouter } from "next/navigation";
 import Navbar from "@/components/Navbar";
 import { loadProfile } from "@/lib/profile";
 import { CandidateProfile } from "@/lib/types";
-import { getQuestionsForRole, QuestionBankItem } from "@/lib/questionBank";
+import { getQuestionsForRole, getAllQuestionsForDomain, QuestionBankItem, ALL_DOMAINS } from "@/lib/questionBank";
 import {
   Brain, Sparkles, ChevronDown, ChevronUp,
   MessageSquare, Code2, Users, Lightbulb, Target,
   Star, UserCircle2, RefreshCw, ClipboardList, Trophy,
   BookOpen, Cpu, GitMerge, Database, Cloud, Globe2, TestTube2, BarChart2,
-  Timer, Zap, Coffee, MousePointerClick,
+  Timer, Zap, Coffee, MousePointerClick, Shield,
 } from "lucide-react";
 
 // ─── Local interview question type (profile-personalised behavioral) ───────────
@@ -50,6 +50,8 @@ const DOMAIN_META: Record<string, { icon: React.ComponentType<{ className?: stri
   "QA & Testing":        { icon: TestTube2,        color: "text-rose-400" },
   "Java & OOP":          { icon: Coffee,           color: "text-orange-400" },
   "Selenium & Testing":  { icon: MousePointerClick, color: "text-pink-400" },
+  "Manual Testing":      { icon: ClipboardList,      color: "text-teal-400" },
+  "Security Testing":    { icon: Shield,             color: "text-red-400" },
 };
 
 // ─── Profile-personalised behavioral + situational questions ──────────────────
@@ -207,6 +209,7 @@ export default function InterviewPrepPage() {
   const [timerSeconds, setTimerSeconds] = useState<number | null>(null);
   const [timerQuestionId, setTimerQuestionId] = useState<string | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [browseMode, setBrowseMode] = useState(false);
 
   const MOCK_TIMER_SECS = 120; // 2 minutes per question
 
@@ -243,6 +246,34 @@ export default function InterviewPrepPage() {
     setTimerQuestionId(null);
   };
 
+  const browseDomain = (domain: string) => {
+    const qs = getAllQuestionsForDomain(domain);
+    setQuestions(qs);
+    setFilterDomain(domain);
+    setFilterType("all");
+    setExpanded({});
+    setAnswers({});
+    setScores({});
+    setBrowseMode(true);
+    stopTimer();
+    setMockMode(false);
+    // Scroll to questions section smoothly
+    setTimeout(() => window.scrollTo({ top: 300, behavior: "smooth" }), 100);
+  };
+
+  const clearAll = () => {
+    setQuestions(null);
+    setFilterDomain("all");
+    setFilterType("all");
+    setExpanded({});
+    setAnswers({});
+    setScores({});
+    setBrowseMode(false);
+    stopTimer();
+    setMockMode(false);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
   const handleGenerate = async (seedOverride?: number) => {
     if (!profile) return;
     setGenerating(true);
@@ -250,6 +281,9 @@ export default function InterviewPrepPage() {
     setExpanded({});
     setAnswers({});
     setScores({});
+    setBrowseMode(false);
+    setFilterDomain("all");
+    setFilterType("all");
     const activeSeed = seedOverride ?? questionSeed;
 
     const apiUrl = process.env.NEXT_PUBLIC_API_URL;
@@ -345,22 +379,43 @@ export default function InterviewPrepPage() {
             Interview <span className="gradient-text">Preparation</span>
           </h1>
           <p className="text-slate-400 text-sm max-w-2xl">
-            Covers Behavioural, System Design, DSA, CI/CD & DevOps, B2B Integration (webMethods, MuleSoft, EDI),
-            API Management, Databases, Cloud — with model answers, STAR templates, and self-scoring.
+            Click any domain below to instantly browse all questions for that topic — or enter your role and generate a personalised set.
           </p>
         </div>
 
-        {/* Coverage chips */}
-        <div className="flex flex-wrap gap-2 mb-6">
-          {Object.entries(DOMAIN_META).map(([d, meta]) => {
-            const Icon = meta.icon;
-            return (
-              <span key={d} className={`flex items-center gap-1.5 text-[11px] font-medium px-2.5 py-1 rounded-full border border-slate-700/60 ${meta.color}`}
-                style={{ background: "rgba(255,255,255,0.03)" }}>
-                <Icon className="w-3 h-3" />{d}
-              </span>
-            );
-          })}
+        {/* Clickable Domain Filter Chips */}
+        <div className="mb-6">
+          <div className="flex items-center gap-2 mb-2">
+            <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Practice by Domain</p>
+            {(browseMode || filterDomain !== "all") && (
+              <button
+                onClick={clearAll}
+                className="flex items-center gap-1 text-[10px] font-semibold text-slate-400 hover:text-white border border-slate-600 hover:border-slate-400 rounded-full px-2 py-0.5 transition-all"
+              >
+                ✕ Clear
+              </button>
+            )}
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {ALL_DOMAINS.filter(d => DOMAIN_META[d]).map((d) => {
+              const meta = DOMAIN_META[d];
+              const Icon = meta.icon;
+              const isActive = filterDomain === d && browseMode;
+              return (
+                <button
+                  key={d}
+                  onClick={() => isActive ? clearAll() : browseDomain(d)}
+                  className={`flex items-center gap-1.5 text-[11px] font-medium px-2.5 py-1.5 rounded-full border transition-all cursor-pointer ${
+                    isActive
+                      ? `border-current bg-white/10 ${meta.color}`
+                      : `border-slate-700/60 ${meta.color} hover:border-current hover:bg-white/5`
+                  }`}
+                >
+                  <Icon className="w-3 h-3" />{d}
+                </button>
+              );
+            })}
+          </div>
         </div>
 
         {/* Setup Card */}
@@ -472,6 +527,23 @@ export default function InterviewPrepPage() {
           </div>
         )}
 
+        {/* Browse Mode Banner */}
+        {browseMode && questions && !generating && (
+          <div className="mb-4 p-3 rounded-lg bg-indigo-500/8 border border-indigo-500/25 flex items-center gap-3">
+            <BookOpen className="w-4 h-4 text-indigo-400 shrink-0" />
+            <div className="flex-1 min-w-0">
+              <p className="text-xs font-semibold text-indigo-300">
+                Browsing: <span className={DOMAIN_META[filterDomain]?.color ?? "text-white"}>{filterDomain}</span>
+                <span className="text-slate-400 font-normal ml-1">— {questions.length} questions</span>
+              </p>
+              <p className="text-[11px] text-slate-400">Showing all questions for this domain regardless of role. Click another chip to switch domain.</p>
+            </div>
+            <button onClick={clearAll} className="text-[11px] text-slate-500 hover:text-slate-300 border border-slate-600 hover:border-slate-400 rounded px-2 py-0.5 shrink-0 transition-all">
+              ✕ Clear
+            </button>
+          </div>
+        )}
+
         {/* Mock Mode Banner */}
         {mockMode && questions && !generating && (
           <div className="mb-4 p-3 rounded-lg bg-rose-500/8 border border-rose-500/25 flex items-center gap-3">
@@ -489,6 +561,23 @@ export default function InterviewPrepPage() {
         {/* Filters */}
         {questions && !generating && (
           <>
+            {/* Filter header with clear button */}
+            {(filterDomain !== "all" || filterType !== "all") && (
+              <div className="flex items-center justify-between mb-3">
+                <p className="text-[10px] font-semibold text-indigo-400 uppercase tracking-wider">
+                  Filters active
+                  {filterDomain !== "all" && <span className="ml-1 normal-case font-normal text-slate-400">· {filterDomain}</span>}
+                  {filterType !== "all" && <span className="ml-1 normal-case font-normal text-slate-400">· {filterType}</span>}
+                </p>
+                <button
+                  onClick={() => { setFilterDomain("all"); setFilterType("all"); }}
+                  className="flex items-center gap-1 text-[10px] font-semibold text-rose-400 hover:text-rose-300 border border-rose-500/40 hover:border-rose-400 rounded-full px-2 py-0.5 transition-all"
+                >
+                  ✕ Clear Filters
+                </button>
+              </div>
+            )}
+
             {/* Domain filter */}
             <div className="mb-2">
               <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-2">Filter by Domain</p>
@@ -700,24 +789,31 @@ export default function InterviewPrepPage() {
 
         {/* Pre-generate empty state */}
         {!questions && !generating && (
-          <div className="card text-center py-16 border-dashed border-slate-700">
+          <div className="card text-center py-12 border-dashed border-slate-700">
             <div className="w-14 h-14 rounded-full bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center mx-auto mb-4">
               <Brain className="w-7 h-7 text-indigo-400" />
             </div>
             <p className="text-white font-semibold mb-2">One-stop interview destination</p>
+            <p className="text-slate-400 text-sm max-w-md mx-auto mb-4">
+              <strong className="text-white">Option 1</strong> — Click a domain chip above to instantly browse all questions for that topic.
+            </p>
             <p className="text-slate-400 text-sm max-w-md mx-auto mb-6">
-              Enter your target role and company above, then click{" "}
-              <strong className="text-white">Generate Questions</strong> to get a personalised question set covering all domains below.
+              <strong className="text-white">Option 2</strong> — Enter your role and click <strong className="text-white">Generate Questions</strong> for a personalised set.
             </p>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 max-w-2xl mx-auto text-xs text-slate-400">
-              {Object.entries(DOMAIN_META).map(([d, meta]) => {
+              {ALL_DOMAINS.filter(d => DOMAIN_META[d]).map((d) => {
+                const meta = DOMAIN_META[d];
                 const Icon = meta.icon;
                 return (
-                  <div key={d} className={`flex items-center gap-2 p-2 rounded-lg border border-slate-700/50 ${meta.color}`}
-                    style={{ background: "rgba(255,255,255,0.02)" }}>
+                  <button
+                    key={d}
+                    onClick={() => browseDomain(d)}
+                    className={`flex items-center gap-2 p-2.5 rounded-lg border border-slate-700/50 hover:border-current transition-all cursor-pointer ${meta.color}`}
+                    style={{ background: "rgba(255,255,255,0.02)" }}
+                  >
                     <Icon className="w-3.5 h-3.5 shrink-0" />
                     <span className="text-[11px]">{d}</span>
-                  </div>
+                  </button>
                 );
               })}
             </div>
