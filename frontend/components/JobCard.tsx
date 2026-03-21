@@ -18,6 +18,8 @@ const PORTAL_STYLE: Record<JobPortal, { bg: string; text: string; label: string 
   Remotive:  { bg: "bg-violet-500/15", text: "text-violet-400", label: "remotive" },
   Arbeitnow: { bg: "bg-cyan-500/15",   text: "text-cyan-400",   label: "arbeitnow" },
   TheMuse:   { bg: "bg-pink-500/15",   text: "text-pink-400",   label: "the muse" },
+  RemoteOK:  { bg: "bg-green-500/15",  text: "text-green-400",  label: "remoteok" },
+  Jobicy:    { bg: "bg-amber-500/15",  text: "text-amber-400",  label: "jobicy" },
   Direct:    { bg: "bg-emerald-500/15",text: "text-emerald-400",label: "direct" },
   Other:     { bg: "bg-slate-700/40",  text: "text-slate-400",  label: "other" },
 };

@@ -5,18 +5,21 @@ Free / no-auth:
   1. Remotive.com API      — remote roles
   2. Arbeitnow.com API     — global roles
   3. The Muse API          — engineering / tech roles
+  4. RemoteOK API          — remote tech roles (no auth)
+  5. Jobicy API            — remote jobs worldwide (no auth)
 
 Free with registration:
-  4. Adzuna API            — India / UK / USA / AU (needs ADZUNA_APP_ID + ADZUNA_APP_KEY)
+  6. Adzuna API            — India / UK / USA / AU (needs ADZUNA_APP_ID + ADZUNA_APP_KEY)
 
 Optional paid key:
-  5. JSearch (RapidAPI)    — aggregates LinkedIn / Indeed / Glassdoor (needs RAPID_API_KEY)
+  7. JSearch (RapidAPI)    — aggregates LinkedIn / Indeed / Glassdoor / Naukri (needs RAPID_API_KEY)
 
 Verification:
   - HEAD-pings every application_link; marks VERIFIED if response < 400.
 
 Role-aware:
   - Search terms are derived from the candidate role so results are not QA-biased.
+  - Uses multiple search terms per role for broader coverage.
 """
 import logging
 import re
@@ -249,6 +252,89 @@ async def _fetch_the_muse(query: str) -> list[dict]:
     return jobs
 
 
+async def _fetch_remoteok(query: str) -> list[dict]:
+    jobs: list[dict] = []
+    try:
+        async with httpx.AsyncClient(
+            timeout=_TIMEOUT,
+            headers={"User-Agent": "Mozilla/5.0", "Accept": "application/json"},
+        ) as c:
+            r = await c.get("https://remoteok.com/api")
+            r.raise_for_status()
+            data = r.json()
+            q_words = [w for w in query.lower().split() if len(w) > 2]
+            for item in data:
+                if not isinstance(item, dict) or not item.get("position"):
+                    continue
+                title = item.get("position", "")
+                desc = _strip_html(item.get("description", ""))
+                tags = item.get("tags") or []
+                combined = (title + " " + desc + " " + " ".join(tags)).lower()
+                if q_words and not any(w in combined for w in q_words):
+                    continue
+                jobs.append({
+                    "title": title,
+                    "organization": item.get("company", ""),
+                    "location": "Remote",
+                    "work_mode": "Remote",
+                    "salary_min": None, "salary_max": None, "currency": "USD",
+                    "description": desc[:2000],
+                    "technologies": _extract_technologies(desc + " " + " ".join(tags)),
+                    "application_link": item.get("apply_url") or item.get("url", ""),
+                    "career_page_link": item.get("url", ""),
+                    "posted_date": (item.get("date") or "")[:10],
+                    "verification_status": "UNVERIFIED",
+                    "source": "RemoteOK",
+                    "experience_required": 0,
+                })
+            jobs = jobs[:25]
+    except Exception as e:
+        logger.warning(f"RemoteOK: {e}")
+    return jobs
+
+
+async def _fetch_jobicy(query: str) -> list[dict]:
+    jobs: list[dict] = []
+    industry_map = {
+        "frontend": "design-ux", "backend": "engineering", "fullstack": "engineering",
+        "data": "data-science", "devops": "engineering", "cloud": "engineering",
+        "qa": "engineering", "mobile": "engineering", "ml": "data-science",
+        "sre": "engineering", "security": "engineering",
+    }
+    industry = next((v for k, v in industry_map.items() if k in query.lower()), "engineering")
+    tag = query.split()[0] if query else "software"
+    try:
+        async with httpx.AsyncClient(timeout=_TIMEOUT) as c:
+            r = await c.get(
+                "https://jobicy.com/api/v2/remote-jobs",
+                params={"count": 25, "geo": "worldwide", "industry": industry, "tag": tag},
+            )
+            r.raise_for_status()
+            for item in r.json().get("jobs", []):
+                desc = _strip_html(item.get("jobDescription", ""))
+                industries = item.get("jobIndustry") or []
+                if isinstance(industries, str):
+                    industries = [industries]
+                jobs.append({
+                    "title": item.get("jobTitle", ""),
+                    "organization": item.get("companyName", ""),
+                    "location": item.get("jobGeo") or "Remote",
+                    "work_mode": "Remote",
+                    "salary_min": None, "salary_max": None, "currency": "USD",
+                    "description": desc[:2000],
+                    "technologies": _extract_technologies(desc + " " + " ".join(industries)),
+                    "application_link": item.get("url", ""),
+                    "career_page_link": item.get("url", ""),
+                    "posted_date": (item.get("pubDate") or "")[:10],
+                    "verification_status": "UNVERIFIED",
+                    "source": "Jobicy",
+                    "experience_required": 0,
+                })
+    except Exception as e:
+        logger.warning(f"Jobicy: {e}")
+    return jobs
+
+
 async def _fetch_adzuna(query: str, location: str, app_id: str, app_key: str) -> list[dict]:
     if not app_id or not app_key:
         return []
@@ -404,7 +490,7 @@ class JobDiscoveryService:
 
     async def discover_jobs(
         self,
-        query: str = "",
+        role: str = "",
         location: str = "Remote",
         profile_skills: Optional[list[str]] = None,
         exp_years: int = 0,
@@ -416,23 +502,32 @@ class JobDiscoveryService:
         Returns jobs sorted: verified first, then by match score.
 
         Args:
-            query            — candidate role / keyword
+            role             — candidate role / keyword
             location         — preferred location for Adzuna/JSearch
             profile_skills   — flat list of candidate's skills (for match scoring)
             exp_years        — years of experience
             min_match_score  — 0 = all; 60 = only 60%+ matches (strict mode)
             run_verification — HEAD-ping each URL to verify it's still active
         """
-        search_terms = _get_search_terms(query) if query else _DEFAULT_TERMS
-        primary = search_terms[0]
-        logger.info(f"Discovering '{primary}' in '{location}'")
+        search_terms = _get_search_terms(role) if role else _DEFAULT_TERMS
+        # Use up to 3 search terms for broader coverage
+        terms_to_use = search_terms[:3]
+        primary = terms_to_use[0]
+        secondary = terms_to_use[1] if len(terms_to_use) > 1 else primary
+        logger.info(f"Discovering '{primary}' (+ {len(terms_to_use)-1} variants) in '{location}'")
 
+        # Fan out across all portals with multiple search terms
         results = await asyncio.gather(
             _fetch_remotive(primary),
             _fetch_arbeitnow(primary),
+            _fetch_arbeitnow(secondary),
             _fetch_the_muse(primary),
+            _fetch_remoteok(primary),
+            _fetch_remoteok(secondary),
+            _fetch_jobicy(primary),
             _fetch_adzuna(primary, location, self.adzuna_app_id, self.adzuna_app_key),
             _fetch_jsearch(primary, location, self.jsearch_api_key),
+            _fetch_jsearch(secondary, location, self.jsearch_api_key),
             return_exceptions=True,
         )
 

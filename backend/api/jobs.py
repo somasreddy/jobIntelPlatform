@@ -1,5 +1,6 @@
 import uuid
 import logging
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, Body
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -52,8 +53,9 @@ async def get_jobs(
     limit: int = Query(50, ge=1, le=200),
     db: AsyncSession = Depends(get_db),
 ):
-    """Get all discovered jobs with optional filters."""
-    stmt = select(VerifiedJob)
+    """Get all discovered jobs with optional filters. Only returns jobs from the last 7 days."""
+    cutoff = datetime.now(timezone.utc) - timedelta(days=7)
+    stmt = select(VerifiedJob).where(VerifiedJob.created_at >= cutoff)
     if verified_only:
         stmt = stmt.where(VerifiedJob.verification_status == "VERIFIED")
     if work_mode and work_mode != "All":

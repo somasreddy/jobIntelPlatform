@@ -31,7 +31,8 @@ export type ApplicationStatus =
 
 export type JobPortal =
   | "LinkedIn" | "Indeed" | "Glassdoor" | "Naukri" | "Adzuna"
-  | "Remotive" | "Arbeitnow" | "TheMuse" | "Direct" | "Other";
+  | "Remotive" | "Arbeitnow" | "TheMuse" | "RemoteOK" | "Jobicy"
+  | "Direct" | "Other";
 
 export interface Job {
   id: string;

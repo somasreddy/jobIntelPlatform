@@ -32,7 +32,7 @@ const TECH_FILTERS = [
   // Databases
   "PostgreSQL", "Oracle DB", "MongoDB", "Snowflake",
 ];
-const PORTAL_FILTERS: Array<"All" | JobPortal> = ["All", "LinkedIn", "Indeed", "Glassdoor", "Naukri", "Adzuna", "Remotive", "Arbeitnow", "TheMuse", "Direct"];
+const PORTAL_FILTERS: Array<"All" | JobPortal> = ["All", "LinkedIn", "Indeed", "Glassdoor", "Naukri", "Adzuna", "Remotive", "Arbeitnow", "TheMuse", "RemoteOK", "Jobicy", "Direct"];
 const AUTO_REFRESH_MS = 10 * 60 * 1000; // 10 minutes
 
 export default function JobsPage() {
@@ -53,7 +53,7 @@ export default function JobsPage() {
   const [discoverError, setDiscoverError] = useState<string | null>(null);
   const profileRef = useRef<CandidateProfile | null>(null);
 
-  const loadJobs = async (currentProfile: CandidateProfile) => {
+  const loadJobs = async (currentProfile: CandidateProfile, autoDiscover = false) => {
     setLoading(true);
     try {
       const apiUrl = process.env.NEXT_PUBLIC_API_URL;
@@ -66,14 +66,60 @@ export default function JobsPage() {
             setJobs(data);
             setLastRefresh(new Date());
             setLoading(false);
+            // Auto-discover in background if data looks stale (oldest job > 24h)
+            if (autoDiscover) {
+              const newest = data.reduce((a, b) =>
+                new Date(b.postedDate) > new Date(a.postedDate) ? b : a, data[0]);
+              const ageHours = (Date.now() - new Date(newest.postedDate).getTime()) / 3600000;
+              if (ageHours > 24) findBestMatchesSilent(currentProfile);
+            }
             return;
           }
+        }
+        // No cached jobs — trigger live discovery immediately
+        if (autoDiscover) {
+          setLoading(false);
+          findBestMatchesSilent(currentProfile);
+          return;
         }
       }
     } catch { /* fall through to mock */ }
     setJobs([...mockJobs]);
     setLastRefresh(new Date());
     setLoading(false);
+  };
+
+  const findBestMatchesSilent = (currentProfile: CandidateProfile) => {
+    const p = currentProfile;
+    setDiscovering(true);
+    setDiscoverError(null);
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL;
+    if (!apiUrl) { setDiscovering(false); return; }
+    fetch(`${apiUrl}/api/jobs/discover`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        role: p.currentRole,
+        skills: p.skills,
+        frameworks: p.frameworks,
+        cicd_tools: p.cicdTools,
+        languages: p.languages,
+        experience_years: p.experienceYears,
+        location: p.preferredLocations?.[0] || p.currentLocation || "",
+        work_mode: p.workMode,
+        min_match_score: 0,
+        run_verification: true,
+      }),
+    })
+      .then((r) => r.ok ? r.json() : Promise.reject(r.status))
+      .then((discovered: Job[]) => {
+        if (discovered.length > 0) {
+          setJobs(discovered);
+          setLastRefresh(new Date());
+        }
+      })
+      .catch(() => {/* silent — user already sees cached or mock data */})
+      .finally(() => setDiscovering(false));
   };
 
   const findBestMatches = async () => {
@@ -124,10 +170,10 @@ export default function JobsPage() {
 
     if (p.workMode && p.workMode !== "Any") setWorkMode(p.workMode);
 
-    loadJobs(p);
+    loadJobs(p, true);
 
     const interval = setInterval(() => {
-      if (profileRef.current) loadJobs(profileRef.current);
+      if (profileRef.current) loadJobs(profileRef.current, true);
     }, AUTO_REFRESH_MS);
 
     return () => clearInterval(interval);
