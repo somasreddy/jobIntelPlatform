@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from core.config import settings
-from api import jobs, resume, applications, skill_gap, salary, recruiter
+from api import jobs, resume, applications, skill_gap, salary, recruiter, interview
 
 app = FastAPI(
     title="AI Job Intelligence API",
@@ -25,6 +25,7 @@ app.include_router(applications.router, prefix="/api/applications", tags=["Appli
 app.include_router(skill_gap.router, prefix="/api/skill-gap", tags=["Skill Gap"])
 app.include_router(salary.router, prefix="/api/salary", tags=["Salary & Insights"])
 app.include_router(recruiter.router, prefix="/api/recruiter", tags=["Recruiter Outreach"])
+app.include_router(interview.router, prefix="/api/interview", tags=["Interview Coach"])
 
 @app.get("/health")
 async def health_check():
