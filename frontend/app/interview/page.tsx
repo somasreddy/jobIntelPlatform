@@ -228,6 +228,7 @@ export default function InterviewPrepPage() {
       setTimerSeconds((s) => (s !== null && s > 0 ? s - 1 : null));
     }, 1000);
     return () => { if (timerRef.current) clearInterval(timerRef.current); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [timerSeconds === null ? null : timerQuestionId]); // restart only when question changes
 
   const startTimer = (id: string) => {

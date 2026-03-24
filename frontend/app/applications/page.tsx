@@ -1,7 +1,7 @@
 "use client";
 import { mockApplications, mockJobs } from "@/lib/mockData";
 import { ApplicationStatus, Application } from "@/lib/types";
-import { Building2, Calendar, ArrowUpRight, Bell, BellOff, AlertCircle } from "lucide-react";
+import { Building2, ArrowUpRight, Bell, BellOff, AlertCircle } from "lucide-react";
 import Link from "next/link";
 import { useState, useEffect } from "react";
 import { getSavedJobIds } from "@/lib/profile";

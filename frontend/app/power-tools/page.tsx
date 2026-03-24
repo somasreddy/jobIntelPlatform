@@ -1,5 +1,6 @@
 "use client";
 import { useState, useEffect } from "react";
+import Link from "next/link";
 import {
   Search, FileText, Linkedin, AlertTriangle, Mail,
   DollarSign, Clock, Crosshair, ChevronDown, ChevronUp,
@@ -445,7 +446,7 @@ function ProfileBanner({ profile, globalResume, onResumeChange }: {
               <p className="font-semibold text-slate-400 text-sm">No profile loaded</p>
               <p className="text-xs text-slate-500 mt-0.5">
                 Save your profile on the{" "}
-                <a href="/" className="underline" style={{ color: "var(--accent-bright)" }}>Profile page</a>{" "}
+                <Link href="/" className="underline" style={{ color: "var(--accent-bright)" }}>Profile page</Link>{" "}
                 to auto-fill tool inputs
               </p>
             </>

@@ -1,10 +1,10 @@
 "use client";
 import { useState } from "react";
-import { usePathname, useRouter } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { useProfile } from "@/lib/ProfileContext";
 import {
   User, Briefcase, Clock, MapPin, Award, Zap, TrendingUp,
-  ChevronRight, ChevronDown, Brain, Cpu
+  ChevronRight, ChevronDown, Cpu
 } from "lucide-react";
 
 type Profile = {
@@ -100,7 +100,6 @@ function SectionHeader({
 
 export default function ProfileSidebar() {
   const { profile } = useProfile();
-  const pathname = usePathname();
   const router = useRouter();
 
   // Per-section collapse state

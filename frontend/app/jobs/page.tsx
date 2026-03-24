@@ -175,6 +175,7 @@ export default function JobsPage() {
     }, AUTO_REFRESH_MS);
 
     return () => clearInterval(interval);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [profileLoading, profile]);
 
   const refresh = () => { if (profile) loadJobs(profile); };

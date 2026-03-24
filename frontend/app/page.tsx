@@ -5,7 +5,7 @@ import { useProfile } from "@/lib/ProfileContext";
 import {
   User, Briefcase, DollarSign, MapPin, Clock,
   Plus, X, Upload, ChevronRight, ChevronDown, Sparkles, CheckCircle,
-  TrendingUp, Award, Zap, Brain, Edit3, Cpu
+  TrendingUp, Award, Zap, Edit3, Cpu
 } from "lucide-react";
 import LocationAutocomplete from "@/components/LocationAutocomplete";
 
