@@ -7,20 +7,6 @@ import {
   ChevronRight, ChevronDown, Cpu
 } from "lucide-react";
 
-type Profile = {
-  name?: string;
-  currentRole?: string;
-  experienceYears?: number;
-  currentLocation?: string;
-  skills?: string[];
-  frameworks?: string[];
-  languages?: string[];
-  cicdTools?: string[];
-  aiTools?: string[];
-  certifications?: string[];
-  workMode?: string;
-};
-
 const AI_TOOL_KEYWORDS = [
   // AI Developer / Engineering
   "langchain", "langgraph", "llamaindex", "openai api", "anthropic api",
@@ -394,7 +380,7 @@ export default function ProfileSidebar() {
             border: "1px solid var(--border)",
           }}
         >
-          <Brain className="w-3.5 h-3.5" />
+          <User className="w-3.5 h-3.5" />
           Edit Profile
         </button>
       </div>

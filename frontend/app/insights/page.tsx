@@ -6,6 +6,7 @@ import {
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { useProfile } from "@/lib/ProfileContext";
+import { CandidateProfile } from "@/lib/types";
 
 type SalaryResult = {
   min_salary: number; max_salary: number; currency: string;
