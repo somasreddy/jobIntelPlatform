@@ -10,7 +10,7 @@ from core.database import get_db
 from core.config import settings
 from models.database import VerifiedJob
 from models.schemas import JobCreate
-from job_discovery.service import JobDiscoveryService
+from job_discovery.service_v2 import JobDiscoveryService
 
 logger = logging.getLogger(__name__)
 router = APIRouter()

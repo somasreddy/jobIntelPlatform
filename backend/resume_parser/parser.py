@@ -1,7 +1,9 @@
 import io
 import re
 import logging
+import json
 from typing import Optional
+from core.llm import smart_chat
 
 logger = logging.getLogger(__name__)
 
@@ -110,6 +112,25 @@ def _estimate_experience(text: str) -> int:
     return 0
 
 
+async def _extract_llm_data(text: str) -> dict:
+    """Use LLM to extract structured skills and experience from raw text."""
+    system_prompt = """You are a Specialized AI Resume Parsing Engine.
+Extract the following from the resume text as a JSON object:
+- skills: All technical skills (languages, tools, frameworks, concepts).
+- experience_years: Total years of professional experience (integer).
+- current_role: Most recent job title.
+
+Return ONLY JSON."""
+    try:
+        raw = await smart_chat(system_prompt, f"Resume Text:\n{text[:6000]}", temperature=0.1)
+        clean = raw.strip().lstrip("```json").lstrip("```").rstrip("```").strip()
+        data = json.loads(clean)
+        return data if isinstance(data, dict) else {}
+    except Exception as e:
+        logger.warning(f"LLM resume parsing failed: {e}")
+        return {}
+
+
 class ResumeParser:
     def __init__(self):
         pass
@@ -134,17 +155,34 @@ class ResumeParser:
 
         matched = _match_skills(raw_text)
         experience_years = _estimate_experience(raw_text)
+        
+        # Merge with LLM data for accuracy
+        llm_data = await _extract_llm_data(raw_text)
+        
+        all_skills = set(
+            matched["ui_automation"]
+            + matched["api_testing"]
+            + matched["performance"]
+            + matched["tools"]
+            + matched["frameworks"]
+            + matched["languages"]
+            + matched["cicd"]
+            + matched["cloud"]
+        )
+        # Add LLM discovered skills
+        for s in llm_data.get("skills", []):
+            if isinstance(s, str): all_skills.add(s.title())
+        
+        # Prioritize LLM estimate if valid
+        final_exp = llm_data.get("experience_years", experience_years)
+        if not isinstance(final_exp, (int, float)): final_exp = experience_years
 
         return {
-            "skills": (
-                matched["ui_automation"]
-                + matched["api_testing"]
-                + matched["performance"]
-                + matched["tools"]
-            ),
-            "frameworks": matched["frameworks"],
+            "skills": sorted(list(all_skills)),
+            "frameworks": matched["frameworks"], # Keep for granular UI
             "languages": matched["languages"],
             "cicd_tools": matched["cicd"] + matched["cloud"],
-            "experience_years": experience_years,
-            "raw_text": raw_text[:5000],  # Store a truncated copy
+            "experience_years": int(final_exp),
+            "current_role": llm_data.get("current_role", "Software Engineer"),
+            "raw_text": raw_text[:5000],
         }

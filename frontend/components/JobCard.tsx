@@ -8,6 +8,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { getSavedJobIds, toggleSavedJob, loadProfile } from "@/lib/profile";
+import JobPowerToolsModal from "@/components/JobPowerToolsModal";
 
 const PORTAL_STYLE: Record<JobPortal, { bg: string; text: string; label: string }> = {
   LinkedIn:  { bg: "bg-[#0a66c2]/15", text: "text-[#5ba4f5]",  label: "in" },
@@ -99,6 +100,7 @@ export default function JobCard({ job, onSelect }: JobCardProps) {
   const [saved, setSaved] = useState(false);
   const [showBreakdown, setShowBreakdown] = useState(false);
   const [breakdown, setBreakdown] = useState<{ skills: number; experience: number; location: number; salary: number } | null>(null);
+  const [showAnalysis, setShowAnalysis] = useState(false);
 
   useEffect(() => {
     setSaved(getSavedJobIds().includes(job.id));
@@ -251,6 +253,14 @@ export default function JobCard({ job, onSelect }: JobCardProps) {
         >
           View & Generate <ArrowUpRight className="w-4 h-4" />
         </Link>
+        <button
+          onClick={(e) => { e.stopPropagation(); setShowAnalysis(true); }}
+          title="AI Analysis — Hiring Decoder, Resume Surgeon, Interview Prep"
+          className="btn-secondary flex items-center gap-1.5 text-sm font-semibold"
+          style={{ color: "var(--accent-bright)", borderColor: "rgba(99,102,241,0.3)" }}
+        >
+          <Zap className="w-3.5 h-3.5" /> AI
+        </button>
         <a
           href={job.applicationLink}
           target="_blank"
@@ -268,6 +278,11 @@ export default function JobCard({ job, onSelect }: JobCardProps) {
           {saved ? <BookmarkCheck className="w-4 h-4" /> : <Bookmark className="w-4 h-4" />}
         </button>
       </div>
+
+      {/* AI Analysis Modal */}
+      {showAnalysis && (
+        <JobPowerToolsModal job={job} onClose={() => setShowAnalysis(false)} />
+      )}
     </div>
   );
 }

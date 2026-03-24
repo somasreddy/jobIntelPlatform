@@ -1,8 +1,7 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
-import Navbar from "@/components/Navbar";
-import { loadProfile } from "@/lib/profile";
+import { useProfile } from "@/lib/ProfileContext";
 import { CandidateProfile } from "@/lib/types";
 import {
   Linkedin, Sparkles, CheckCircle, AlertCircle,
@@ -126,18 +125,11 @@ const priorityColors = {
 
 export default function LinkedInEnhancerPage() {
   const router = useRouter();
-  const [profile, setProfile] = useState<CandidateProfile | null>(null);
-  const [profileChecked, setProfileChecked] = useState(false);
+  const { profile, loading } = useProfile();
   const [linkedinUrl, setLinkedinUrl] = useState("");
   const [analyzing, setAnalyzing] = useState(false);
   const [suggestions, setSuggestions] = useState<Suggestion[] | null>(null);
   const [apiSuggestions, setApiSuggestions] = useState<Suggestion[] | null>(null);
-
-  useEffect(() => {
-    const p = loadProfile();
-    setProfile(p);
-    setProfileChecked(true);
-  }, []);
 
   const handleAnalyze = async () => {
     if (!profile) return;
@@ -175,11 +167,10 @@ export default function LinkedInEnhancerPage() {
     setAnalyzing(false);
   };
 
-  if (profileChecked && !profile) {
+  if (!loading && !profile) {
     return (
       <div className="flex min-h-screen bg-transparent">
-        <Navbar />
-        <main className="md:ml-64 flex-1 px-4 md:px-8 pt-20 md:pt-8 pb-8 flex items-center justify-center">
+        <main className="md:ml-64 xl:mr-72 flex-1 px-4 md:px-8 pt-20 md:pt-8 pb-8 flex items-center justify-center">
           <div className="text-center max-w-sm">
             <div className="w-16 h-16 rounded-full bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center mx-auto mb-4">
               <UserCircle2 className="w-8 h-8 text-indigo-400" />
@@ -202,8 +193,7 @@ export default function LinkedInEnhancerPage() {
 
   return (
     <div className="flex min-h-screen bg-transparent">
-      <Navbar />
-      <main className="md:ml-64 flex-1 px-4 md:px-8 pt-20 md:pt-8 pb-8 max-w-5xl">
+      <main className="md:ml-64 xl:mr-72 flex-1 px-4 md:px-8 pt-20 md:pt-8 pb-8 max-w-5xl">
         {/* Header */}
         <div className="mb-8">
           <div className="flex items-center gap-2 text-indigo-400 text-sm font-medium mb-2">

@@ -13,6 +13,7 @@ export interface CandidateProfile {
   frameworks: string[];
   languages: string[];
   cicdTools: string[];
+  aiTools: string[];
   certifications: string[];
   resumeText?: string;
 }

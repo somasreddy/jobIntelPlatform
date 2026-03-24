@@ -1,14 +1,34 @@
 "use client";
 import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
-import Navbar from "@/components/Navbar";
-import { saveProfile, loadProfile } from "@/lib/profile";
+import { loadProfile } from "@/lib/profile";
+import { useProfile } from "@/lib/ProfileContext";
 import {
   User, Briefcase, DollarSign, MapPin, Clock,
-  Plus, X, Upload, ChevronRight, Sparkles, CheckCircle,
-  TrendingUp, Award, Zap
+  Plus, X, Upload, ChevronRight, ChevronDown, Sparkles, CheckCircle,
+  TrendingUp, Award, Zap, Brain, Edit3, Cpu
 } from "lucide-react";
 import LocationAutocomplete from "@/components/LocationAutocomplete";
+
+// ─── AI User & Developer Skills ───────────────────────────────────────────────
+const AI_USER_SKILLS = [
+  "ChatGPT", "Claude (Anthropic)", "Gemini", "Copilot", "Perplexity AI",
+  "Midjourney", "DALL-E", "Stable Diffusion", "Runway ML", "ElevenLabs",
+  "Vibe Coding", "AI Prompting", "Prompt Engineering", "AI-Assisted Development",
+  "AI Generalist", "AI Application Development", "No-Code AI", "Low-Code AI",
+  "AI Automation", "Cursor IDE", "Windsurf IDE", "GitHub Copilot",
+  "AI Workflow Automation", "Make (Integromat) + AI", "Zapier AI",
+  "n8n AI Automation", "Notion AI", "Grammarly AI", "AI Research",
+  "AI Content Generation", "AI Image Generation", "AI Video Generation",
+];
+
+const AI_DEV_SKILLS = [
+  "LangChain", "LangGraph", "LlamaIndex", "OpenAI API", "Anthropic API",
+  "Hugging Face", "Groq", "Mistral AI", "Google AI / Gemini API", "Vertex AI",
+  "AWS Bedrock", "Azure OpenAI", "RAG (Retrieval Augmented Generation)",
+  "Vector Databases", "Fine-Tuning LLMs", "CrewAI", "AutoGen",
+  "Semantic Kernel", "LangSmith", "Ollama", "Pinecone", "Weaviate",
+  "Chroma", "pgvector", "Embeddings", "AI Agents", "Multimodal AI",
+];
 
 const SKILL_CATEGORIES: Record<string, string[]> = {
   "Frontend": [
@@ -259,17 +279,91 @@ const DEFAULT_FORM = {
   frameworks: [] as string[],
   languages: [] as string[],
   cicdTools: [] as string[],
+  aiTools: [] as string[],
   certifications: [] as string[],
   resumeText: "",  // saved to profile — extracted from file or pasted
   resumeFile: null as File | null, // transient — not saved to profile
 };
 
+const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+
 export default function ProfilePage() {
-  const router = useRouter();
+  const { saveProfile } = useProfile();
   const [form, setForm] = useState(DEFAULT_FORM);
   const [dragging, setDragging] = useState(false);
-  const [submitted, setSubmitted] = useState(false);
+  const [viewMode, setViewMode] = useState(false);
   const [skillSearch, setSkillSearch] = useState("");
+  const [aiSkillSearch, setAiSkillSearch] = useState("");
+  const [collapsedCategories, setCollapsedCategories] = useState<Record<string, boolean>>({});
+  const [aiTab, setAiTab] = useState<"user" | "dev">("user");
+  const [parsing, setParsing] = useState(false);
+  const [parseMessage, setParseMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+
+  const toggleCategory = (cat: string) =>
+    setCollapsedCategories((p) => ({ ...p, [cat]: !p[cat] }));
+
+  const applyParsedData = (d: Record<string, unknown>) => {
+    setForm(p => ({
+      ...p,
+      name: (d.name as string) || p.name,
+      currentRole: (d.current_role as string) || p.currentRole,
+      experienceYears: d.experience_years ? String(d.experience_years) : p.experienceYears,
+      currentLocation: (d.current_location as string) || p.currentLocation,
+      workMode: d.work_mode && d.work_mode !== "Any" ? (d.work_mode as string) : p.workMode,
+      resumeText: (d.resume_text as string) || p.resumeText,
+      skills: [...new Set([...p.skills, ...((d.skills as string[]) || [])])],
+      frameworks: [...new Set([...p.frameworks, ...((d.frameworks as string[]) || [])])],
+      languages: [...new Set([...p.languages, ...((d.languages as string[]) || [])])],
+      cicdTools: [...new Set([...p.cicdTools, ...((d.cicd_tools as string[]) || [])])],
+      aiTools: [...new Set([...p.aiTools, ...((d.ai_tools as string[]) || [])])],
+      certifications: [...new Set([...p.certifications, ...((d.certifications as string[]) || [])])],
+    }));
+    const count = ((d.skills as string[])?.length || 0) + ((d.frameworks as string[])?.length || 0) +
+      ((d.languages as string[])?.length || 0) + ((d.cicd_tools as string[])?.length || 0) + ((d.ai_tools as string[])?.length || 0);
+    setParseMessage({ type: "success", text: `✓ Auto-filled: ${d.name ? "name, " : ""}${d.current_role ? "role, " : ""}${count} skills detected. Review and adjust below.` });
+  };
+
+  const parseResumeAndFill = async () => {
+    setParsing(true);
+    setParseMessage(null);
+    try {
+      // If a PDF/DOCX file is uploaded, send the file for server-side extraction
+      if (form.resumeFile && (form.resumeFile.name.endsWith(".pdf") || form.resumeFile.name.endsWith(".docx") || form.resumeFile.name.endsWith(".doc"))) {
+        const fd = new FormData();
+        fd.append("file", form.resumeFile);
+        const res = await fetch(`${API}/api/profile/parse-resume-file`, { method: "POST", body: fd });
+        if (!res.ok) throw new Error(await res.text());
+        applyParsedData(await res.json());
+      } else {
+        // Text path — use pasted resume text
+        const text = form.resumeText.trim();
+        if (!text || text.startsWith("[Resume file:")) {
+          setParseMessage({ type: "error", text: "Upload a PDF/DOCX or paste resume text below first." });
+          setParsing(false);
+          return;
+        }
+        const res = await fetch(`${API}/api/profile/parse-resume`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ resume_text: text }),
+        });
+        if (!res.ok) throw new Error(await res.text());
+        applyParsedData(await res.json());
+      }
+    } catch (err: unknown) {
+      const raw = err instanceof Error ? err.message : String(err);
+      // Try to extract detail from FastAPI error JSON
+      let detail = raw;
+      try { detail = JSON.parse(raw)?.detail || raw; } catch { /* ignore */ }
+      if (raw.includes("fetch") || raw.includes("Failed to fetch") || raw.includes("NetworkError")) {
+        setParseMessage({ type: "error", text: "⚠ Backend not reachable — make sure the backend server is running on port 8000." });
+      } else {
+        setParseMessage({ type: "error", text: `⚠ ${detail.slice(0, 150)}` });
+      }
+    } finally {
+      setParsing(false);
+    }
+  };
 
   // Load persisted profile on mount (useEffect, not useState)
   useEffect(() => {
@@ -289,9 +383,12 @@ export default function ProfilePage() {
         frameworks: saved.frameworks ?? [],
         languages: saved.languages ?? [],
         cicdTools: saved.cicdTools ?? [],
+        aiTools: saved.aiTools ?? [],
         certifications: saved.certifications ?? [],
         resumeText: saved.resumeText ?? "",
       }));
+      // If profile already exists, show view mode by default
+      setViewMode(true);
     }
   }, []);
 
@@ -315,16 +412,46 @@ export default function ProfilePage() {
 
   const extractAndSetFile = (f: File) => {
     setForm((p) => ({ ...p, resumeFile: f }));
-    // Extract text for .txt files; for PDF/DOCX store a marker until server parses it
+    setParseMessage(null);
     if (f.type === "text/plain" || f.name.endsWith(".txt")) {
       const reader = new FileReader();
       reader.onload = (ev) => {
         const text = ev.target?.result as string;
-        if (text) setForm((p) => ({ ...p, resumeText: text.slice(0, 8000) }));
+        if (text) {
+          setForm((p) => ({ ...p, resumeText: text.slice(0, 8000) }));
+          // Slight delay then auto-parse
+          setTimeout(() => {
+            setForm(p => {
+              // Trigger parse using the extracted text
+              if (p.resumeText && p.resumeText.length > 50) {
+                fetch(`${API}/api/profile/parse-resume`, {
+                  method: "POST", headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ resume_text: p.resumeText }),
+                }).then(r => r.json()).then(d => {
+                  setForm(prev => ({
+                    ...prev,
+                    name: d.name || prev.name,
+                    currentRole: d.current_role || prev.currentRole,
+                    experienceYears: d.experience_years ? String(d.experience_years) : prev.experienceYears,
+                    currentLocation: d.current_location || prev.currentLocation,
+                    workMode: d.work_mode && d.work_mode !== "Any" ? d.work_mode : prev.workMode,
+                    skills: [...new Set([...prev.skills, ...(d.skills || [])])],
+                    frameworks: [...new Set([...prev.frameworks, ...(d.frameworks || [])])],
+                    languages: [...new Set([...prev.languages, ...(d.languages || [])])],
+                    cicdTools: [...new Set([...prev.cicdTools, ...(d.cicd_tools || [])])],
+                    aiTools: [...new Set([...prev.aiTools, ...(d.ai_tools || [])])],
+                    certifications: [...new Set([...prev.certifications, ...(d.certifications || [])])],
+                  }));
+                  setParseMessage({ type: "success", text: `✓ Profile auto-filled from ${f.name}. Review and adjust below.` });
+                }).catch(() => {/* silent — user can still click the button */});
+              }
+              return p;
+            });
+          }, 300);
+        }
       };
       reader.readAsText(f);
     } else {
-      // For PDF/DOCX mark it as uploaded; text extraction happens server-side
       setForm((p) => ({ ...p, resumeText: p.resumeText || `[Resume file: ${f.name}]` }));
     }
   };
@@ -336,15 +463,14 @@ export default function ProfilePage() {
     if (f) extractAndSetFile(f);
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    // Validate resume is provided
     if (!form.resumeFile && !form.resumeText.trim()) {
       document.getElementById("resume-section")?.scrollIntoView({ behavior: "smooth" });
       return;
     }
-    // Save only typed profile fields — strip transient UI state
-    saveProfile({
+    // saveProfile writes to DB + localStorage and updates all consumers instantly
+    await saveProfile({
       name: form.name,
       currentRole: form.currentRole,
       currentSalary: Number(form.currentSalary) || 0,
@@ -357,11 +483,12 @@ export default function ProfilePage() {
       frameworks: form.frameworks,
       languages: form.languages,
       cicdTools: form.cicdTools,
+      aiTools: form.aiTools,
       certifications: form.certifications,
       resumeText: form.resumeText,
     });
-    setSubmitted(true);
-    setTimeout(() => router.push("/jobs"), 1200);
+    setViewMode(true);
+    window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
   const filteredSkills = ALL_SKILLS.filter(
@@ -372,32 +499,117 @@ export default function ProfilePage() {
 
   return (
     <div className="flex min-h-screen bg-transparent">
-      <Navbar />
-      <main className="md:ml-64 flex-1 px-4 md:px-8 pt-20 md:pt-8 pb-8 max-w-5xl">
+      <main className="md:ml-64 xl:mr-72 flex-1 px-4 md:px-8 pt-20 md:pt-8 pb-8 max-w-5xl">
         {/* Hero header */}
-        <div className="mb-8">
+        <div className="mb-6">
           <div className="flex items-center gap-2 text-cyan-400 text-sm font-medium mb-2">
             <Sparkles className="w-4 h-4" /> AI-Powered Career Uplift Engine
           </div>
           <h1 className="text-3xl font-bold text-white mb-2">
             Tell us about your <span className="gradient-text">career profile</span>
           </h1>
-          <p className="text-slate-400 text-base">
+          <p className="text-slate-400 text-base mb-4">
             We&apos;ll find verified jobs at the{" "}
             <span className="text-indigo-300 font-medium">same level with higher salary</span>{" "}
             or{" "}
             <span className="text-emerald-300 font-medium">next career level</span>{" "}
-            you&apos;re ready for — and generate tailored ATS resumes, cover letters, and recruiter emails for each.
+            you&apos;re ready for.
           </p>
+
+          {/* Resume-first hint banner */}
+          {!viewMode && (
+            <div className="rounded-xl px-4 py-3 flex items-center gap-3 animate-slide-up"
+              style={{ background: "linear-gradient(135deg, rgba(99,102,241,0.12), rgba(6,182,212,0.08))", border: "1px solid rgba(99,102,241,0.25)" }}>
+              <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0"
+                style={{ background: "rgba(99,102,241,0.2)" }}>
+                <Upload className="w-4 h-4 text-indigo-400" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-semibold text-white">💡 Start with your Resume for the fastest setup</p>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  Paste or upload your resume below → click <span className="text-indigo-300 font-medium">✨ Auto-fill Profile</span> → AI extracts your name, role, skills, and tools instantly.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => document.getElementById("resume-section")?.scrollIntoView({ behavior: "smooth" })}
+                className="shrink-0 text-xs px-3 py-1.5 rounded-lg font-medium mac-press"
+                style={{ background: "rgba(99,102,241,0.2)", color: "#818cf8", border: "1px solid rgba(99,102,241,0.3)" }}
+              >
+                Go to Resume ↓
+              </button>
+            </div>
+          )}
         </div>
 
-        {submitted ? (
-          <div className="card flex flex-col items-center justify-center py-16 text-center animate-fade-in">
-            <div className="w-16 h-16 rounded-full bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center mb-4">
-              <CheckCircle className="w-8 h-8 text-emerald-400" />
+        {viewMode ? (
+          /* ── Profile View Mode ─────────────────────────────────────────── */
+          <div className="space-y-4 animate-spring-in">
+            {/* Saved banner */}
+            <div className="card py-3 px-4 flex items-center gap-3 border-emerald-500/20">
+              <CheckCircle className="w-5 h-5 text-emerald-400 shrink-0" />
+              <div className="flex-1">
+                <p className="text-sm font-semibold text-white">Profile saved successfully</p>
+                <p className="text-xs text-slate-400">Your AI-powered job matching is active</p>
+              </div>
+              <button
+                onClick={() => setViewMode(false)}
+                className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg font-medium mac-press"
+                style={{ background: "color-mix(in srgb, var(--accent) 12%, transparent)", color: "var(--accent-bright)", border: "1px solid var(--border-hover)" }}
+              >
+                <Edit3 className="w-3.5 h-3.5" /> Edit Profile
+              </button>
             </div>
-            <h2 className="text-xl font-bold text-white mb-1">Profile Saved!</h2>
-            <p className="text-slate-400">Finding your best job matches…</p>
+
+            {/* Identity card */}
+            <div className="card py-4 px-5 mac-hover">
+              <div className="flex items-start gap-4">
+                <div className="w-14 h-14 rounded-2xl flex items-center justify-center text-xl font-bold text-white shrink-0"
+                  style={{ background: "color-mix(in srgb, var(--accent) 20%, transparent)", border: "1px solid var(--border-hover)" }}>
+                  {form.name.trim().split(/\s+/).map(w => w[0]).slice(0, 2).join("").toUpperCase() || "?"}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <h2 className="text-lg font-bold text-white">{form.name}</h2>
+                  <p className="text-sm text-slate-400">{form.currentRole}</p>
+                  <div className="flex flex-wrap gap-2 mt-2">
+                    {form.experienceYears && <span className="badge badge-tech"><Clock className="w-3 h-3" /> {form.experienceYears} yrs exp</span>}
+                    {form.currentLocation && <span className="badge badge-tech"><MapPin className="w-3 h-3" /> {form.currentLocation}</span>}
+                    {form.workMode && form.workMode !== "Any" && <span className="badge badge-new">{form.workMode}</span>}
+                    {form.currentSalary && <span className="badge badge-tech">{form.currency} {Number(form.currentSalary).toLocaleString()}</span>}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Skills grid */}
+            {[
+              { label: "Skills", items: form.skills, color: "#6366f1" },
+              { label: "AI Tools & Skills", items: form.aiTools, color: "#a78bfa" },
+              { label: "Frameworks", items: form.frameworks, color: "#22d3ee" },
+              { label: "Languages", items: form.languages, color: "#34d399" },
+              { label: "CI/CD & DevOps", items: form.cicdTools, color: "#fb923c" },
+              { label: "Certifications", items: form.certifications, color: "#fbbf24" },
+            ].filter(s => s.items.length > 0).map(({ label, items, color }) => (
+              <div key={label} className="card py-3 px-5">
+                <p className="text-xs font-semibold mb-2" style={{ color }}>{label} <span className="text-slate-500 font-normal">({items.length})</span></p>
+                <div className="flex flex-wrap gap-1.5">
+                  {items.map(s => (
+                    <span key={s} className="text-[11px] px-2 py-0.5 rounded-full border font-medium"
+                      style={{ background: `${color}12`, color, borderColor: `${color}30` }}>
+                      {s}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            ))}
+
+            {/* Resume snippet */}
+            {form.resumeText && !form.resumeText.startsWith("[Resume file:") && (
+              <div className="card py-3 px-5">
+                <p className="text-xs font-semibold text-slate-400 mb-2">Resume Text <span className="text-slate-500">({form.resumeText.length} chars)</span></p>
+                <p className="text-xs text-slate-400 line-clamp-4 leading-relaxed font-mono">{form.resumeText}</p>
+              </div>
+            )}
           </div>
         ) : (
           <>
@@ -662,20 +874,43 @@ export default function ProfilePage() {
                 </div>
               )}
               {!skillSearch && (
-                <div className="space-y-3 mb-3">
+                <div className="space-y-1.5 mb-3">
                   {getOrderedCategories(form.currentRole).map(([category, skills]) => {
                     const available = skills.filter((s) => !form.skills.includes(s));
                     if (available.length === 0) return null;
+                    // First 3 categories are open by default, rest collapsed
+                    const idx = getOrderedCategories(form.currentRole).findIndex(([c]) => c === category);
+                    const defaultOpen = idx < 3;
+                    const open = collapsedCategories[category] !== undefined ? collapsedCategories[category] : defaultOpen;
                     return (
-                      <div key={category}>
-                        <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1.5">{category}</p>
-                        <div className="flex flex-wrap gap-1.5">
-                          {available.map((s) => (
-                            <button key={s} type="button" onClick={() => addSkill(s)}
-                              className="tag cursor-pointer hover:bg-indigo-500/20 transition-colors text-[11px]">
-                              + {s}
-                            </button>
-                          ))}
+                      <div key={category} className="rounded-lg overflow-hidden" style={{ border: "1px solid var(--border)" }}>
+                        <button
+                          type="button"
+                          onClick={() => toggleCategory(category)}
+                          className="w-full flex items-center justify-between px-3 py-2 text-left hover:bg-white/5 transition-colors"
+                        >
+                          <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">{category}</span>
+                          <div className="flex items-center gap-2">
+                            <span className="text-[10px] text-slate-500">{available.length}</span>
+                            <ChevronDown
+                              className="w-3.5 h-3.5 text-slate-500 collapse-chevron"
+                              data-open={open ? "true" : "false"}
+                            />
+                          </div>
+                        </button>
+                        <div
+                          className="collapsible-content"
+                          data-open={open ? "true" : "false"}
+                          style={{ maxHeight: open ? "600px" : "0px" }}
+                        >
+                          <div className="flex flex-wrap gap-1.5 px-3 pb-3 pt-1">
+                            {available.map((s) => (
+                              <button key={s} type="button" onClick={() => addSkill(s)}
+                                className="tag cursor-pointer text-[11px]">
+                                + {s}
+                              </button>
+                            ))}
+                          </div>
                         </div>
                       </div>
                     );
@@ -699,17 +934,146 @@ export default function ProfilePage() {
               )}
             </div>
 
+            {/* Section 4b: AI Tools & Skills */}
+            <div className="card">
+              <div className="flex items-center justify-between mb-3">
+                <h2 className="text-base font-semibold text-white flex items-center gap-2">
+                  <Cpu className="w-4 h-4 text-violet-400" /> AI Tools & Skills
+                </h2>
+                <span className="text-[10px] text-violet-400 bg-violet-500/10 border border-violet-500/20 px-2 py-0.5 rounded font-medium">
+                  {form.aiTools.length} selected
+                </span>
+              </div>
+              <p className="text-xs text-slate-500 mb-3">Add AI tools you use daily — as a user, creator, or developer. This boosts your match score for AI-forward roles.</p>
+
+              {/* Tab: AI User vs AI Dev */}
+              <div className="flex gap-1 mb-3 p-1 rounded-lg" style={{ background: "var(--bg-elevated)" }}>
+                {(["user", "dev"] as const).map((tab) => (
+                  <button
+                    key={tab}
+                    type="button"
+                    onClick={() => setAiTab(tab)}
+                    className="flex-1 text-xs py-1.5 rounded-md font-medium transition-all mac-press"
+                    style={aiTab === tab
+                      ? { background: "color-mix(in srgb, var(--accent) 20%, transparent)", color: "var(--accent-bright)", border: "1px solid var(--border-hover)" }
+                      : { color: "var(--text-muted)" }
+                    }
+                  >
+                    {tab === "user" ? "🤖 AI User Skills" : "⚡ AI Dev / Engineering"}
+                  </button>
+                ))}
+              </div>
+
+              {/* Search */}
+              <input
+                className="input mb-3 text-sm"
+                placeholder={aiTab === "user" ? "Search: ChatGPT, Midjourney, Vibe Coding…" : "Search: LangChain, OpenAI API, RAG…"}
+                value={aiSkillSearch}
+                onChange={(e) => setAiSkillSearch(e.target.value)}
+              />
+
+              {/* Suggestions */}
+              <div className="flex flex-wrap gap-1.5 mb-3">
+                {(aiTab === "user" ? AI_USER_SKILLS : AI_DEV_SKILLS)
+                  .filter(s => !form.aiTools.includes(s) && (aiSkillSearch === "" || s.toLowerCase().includes(aiSkillSearch.toLowerCase())))
+                  .slice(0, 20)
+                  .map(s => (
+                    <button key={s} type="button"
+                      onClick={() => setForm(p => ({ ...p, aiTools: [...p.aiTools, s] }))}
+                      className="tag cursor-pointer text-[11px]"
+                      style={{ borderColor: "rgba(139,92,246,0.3)", color: "#c4b5fd" }}
+                    >
+                      + {s}
+                    </button>
+                  ))}
+              </div>
+
+              {/* Custom add */}
+              <div className="flex gap-2 mb-3">
+                <input
+                  className="input text-sm flex-1"
+                  placeholder="Type any AI tool not listed and press +"
+                  id="ai-tool-custom"
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      const val = (e.target as HTMLInputElement).value.trim();
+                      if (val && !form.aiTools.includes(val)) {
+                        setForm(p => ({ ...p, aiTools: [...p.aiTools, val] }));
+                        (e.target as HTMLInputElement).value = "";
+                      }
+                    }
+                  }}
+                />
+                <button type="button" className="btn-secondary px-3 shrink-0"
+                  onClick={() => {
+                    const el = document.getElementById("ai-tool-custom") as HTMLInputElement;
+                    const val = el?.value.trim();
+                    if (val && !form.aiTools.includes(val)) {
+                      setForm(p => ({ ...p, aiTools: [...p.aiTools, val] }));
+                      el.value = "";
+                    }
+                  }}>
+                  <Plus className="w-4 h-4" />
+                </button>
+              </div>
+
+              {/* Selected AI tools */}
+              {form.aiTools.length > 0 && (
+                <div>
+                  <p className="text-xs text-slate-400 mb-2">Selected ({form.aiTools.length}):</p>
+                  <div className="flex flex-wrap gap-2">
+                    {form.aiTools.map(s => (
+                      <span key={s} className="flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full border font-medium"
+                        style={{ background: "rgba(139,92,246,0.12)", color: "#c4b5fd", borderColor: "rgba(139,92,246,0.3)" }}>
+                        {s}
+                        <button type="button" onClick={() => setForm(p => ({ ...p, aiTools: p.aiTools.filter(t => t !== s) }))}>
+                          <X className="w-3 h-3" />
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
             {/* Section 5: Resume Upload — REQUIRED */}
             <div id="resume-section" className={`card ${!form.resumeFile && !form.resumeText.trim() ? "border-rose-500/30" : "border-emerald-500/20"}`}>
-              <h2 className="text-base font-semibold text-white mb-1 flex items-center gap-2">
-                <Upload className="w-4 h-4 text-indigo-400" />
-                Resume / CV
-                <span className="text-rose-400 text-xs font-bold ml-1">* Required</span>
-                {(form.resumeFile || form.resumeText.trim()) && <CheckCircle className="w-4 h-4 text-emerald-400 ml-auto" />}
-              </h2>
-              <p className="text-xs text-slate-500 mb-4">
-                Your resume is used to enrich ATS output, cover letters, skill gap analysis, and LinkedIn suggestions.
-              </p>
+              <div className="flex items-start justify-between gap-3 mb-3">
+                <div>
+                  <h2 className="text-base font-semibold text-white flex items-center gap-2">
+                    <Upload className="w-4 h-4 text-indigo-400" />
+                    Resume / CV
+                    <span className="text-rose-400 text-xs font-bold">* Required</span>
+                    {(form.resumeFile || form.resumeText.trim()) && <CheckCircle className="w-4 h-4 text-emerald-400" />}
+                  </h2>
+                  <p className="text-xs text-slate-500 mt-1">
+                    Upload or paste → click <span className="text-violet-400 font-semibold">✨ Auto-fill</span> to extract your profile automatically
+                  </p>
+                </div>
+                {/* Always-visible Auto-fill button */}
+                <button
+                  type="button"
+                  onClick={parseResumeAndFill}
+                  disabled={parsing || (!form.resumeFile && (!form.resumeText.trim() || form.resumeText.startsWith("[Resume file:")))}
+                  className="shrink-0 flex items-center gap-1.5 text-sm px-4 py-2 rounded-xl font-semibold mac-press disabled:opacity-40 disabled:cursor-not-allowed"
+                  style={{ background: "linear-gradient(135deg, rgba(99,102,241,0.3), rgba(139,92,246,0.3))", color: "#c4b5fd", border: "1px solid rgba(139,92,246,0.5)" }}
+                >
+                  {parsing ? (
+                    <><span className="inline-block animate-spin">⏳</span> Parsing…</>
+                  ) : (
+                    <><Sparkles className="w-4 h-4" /> ✨ Auto-fill Profile</>
+                  )}
+                </button>
+              </div>
+
+              {/* Parse result message */}
+              {parseMessage && (
+                <div className={`mb-3 text-xs px-3 py-2 rounded-lg flex items-center gap-2 ${parseMessage.type === "success" ? "text-emerald-300 bg-emerald-500/10 border border-emerald-500/20" : "text-rose-300 bg-rose-500/10 border border-rose-500/20"}`}>
+                  {parseMessage.type === "success" ? <CheckCircle className="w-3.5 h-3.5 shrink-0" /> : <span>⚠</span>}
+                  {parseMessage.text}
+                </div>
+              )}
 
               {/* File Drop Zone */}
               <div
@@ -757,8 +1121,8 @@ export default function ProfilePage() {
                   onChange={(e) => setForm((p) => ({ ...p, resumeText: e.target.value }))}
                 />
                 {form.resumeText && !form.resumeText.startsWith("[Resume file:") && (
-                  <p className="text-xs text-emerald-400 mt-1 flex items-center gap-1">
-                    <CheckCircle className="w-3 h-3" /> {form.resumeText.length} characters saved — AI will use this for all generations
+                  <p className="text-xs text-emerald-400 mt-1.5 flex items-center gap-1">
+                    <CheckCircle className="w-3 h-3" /> {form.resumeText.length} chars — ready to auto-fill
                   </p>
                 )}
               </div>
@@ -773,10 +1137,10 @@ export default function ProfilePage() {
             <button
               type="submit"
               disabled={!form.resumeFile && !form.resumeText.trim()}
-              className="btn-primary w-full py-3.5 text-base flex items-center justify-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"
+              className="btn-primary w-full py-3.5 text-base flex items-center justify-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed mac-press"
             >
               <Sparkles className="w-5 h-5" />
-              Find My Best Job Matches
+              Save Profile & Find Matches
               <ChevronRight className="w-5 h-5" />
             </button>
           </form>

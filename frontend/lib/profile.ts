@@ -23,6 +23,7 @@ export function loadProfile(): CandidateProfile | null {
       frameworks: Array.isArray(p.frameworks) ? p.frameworks : [],
       languages: Array.isArray(p.languages) ? p.languages : [],
       cicdTools: Array.isArray(p.cicdTools) ? p.cicdTools : [],
+      aiTools: Array.isArray(p.aiTools) ? p.aiTools : [],
       certifications: Array.isArray(p.certifications) ? p.certifications : [],
     } as CandidateProfile;
   } catch {

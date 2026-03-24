@@ -1,9 +1,8 @@
 "use client";
 import { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
-import Navbar from "@/components/Navbar";
 import { mockJobs } from "@/lib/mockData";
-import { loadProfile } from "@/lib/profile";
+import { useProfile } from "@/lib/ProfileContext";
 import { Job, CandidateProfile } from "@/lib/types";
 import {
   ArrowLeft, Building2, MapPin, Clock, DollarSign,
@@ -23,14 +22,15 @@ const emptyProfile: CandidateProfile = {
   name: "", currentRole: "", currentSalary: 0, currency: "USD",
   experienceYears: 0, workMode: "Any", currentLocation: "",
   preferredLocations: [], skills: [], frameworks: [],
-  languages: [], cicdTools: [], certifications: [],
+  languages: [], cicdTools: [], aiTools: [], certifications: [],
 };
 
 export default function JobDetailPage() {
   const params = useParams();
   const router = useRouter();
   const [job, setJob] = useState<Job | null>(null);
-  const [profile, setProfile] = useState<CandidateProfile>(emptyProfile);
+  const { profile: ctxProfile } = useProfile();
+  const profile = ctxProfile ?? emptyProfile;
   const [activeTab, setActiveTab] = useState<"resume" | "cover" | "recruiter" | "company">("resume");
   const [generating, setGenerating] = useState(false);
   const [generated, setGenerated] = useState(false);
@@ -66,8 +66,6 @@ export default function JobDetailPage() {
     };
 
     loadJob();
-    const saved = loadProfile();
-    if (saved) setProfile(saved);
   }, [params.id]);
 
   const handleGenerate = async () => {
@@ -268,8 +266,7 @@ export default function JobDetailPage() {
 
   return (
     <div className="flex min-h-screen bg-transparent">
-      <Navbar />
-      <main className="md:ml-64 flex-1 px-4 md:px-8 pt-20 md:pt-8 pb-8 max-w-6xl">
+      <main className="md:ml-64 xl:mr-72 flex-1 px-4 md:px-8 pt-20 md:pt-8 pb-8 max-w-6xl">
         <button
           onClick={() => router.push("/jobs")}
           className="flex items-center gap-2 text-slate-400 hover:text-white mb-6 transition-colors text-sm"

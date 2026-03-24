@@ -3,9 +3,14 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "npm run dev --prefix frontend",
+    "dev": "concurrently --names \"BACKEND,FRONTEND\" --prefix-colors \"cyan,magenta\" \"npm run backend\" \"npm run frontend\"",
+    "start": "concurrently --names \"BACKEND,FRONTEND\" --prefix-colors \"cyan,magenta\" \"npm run backend\" \"npm run frontend\"",
+    "backend": "cd backend && python -m uvicorn main:app --reload --port 8000",
+    "frontend": "npm run dev --prefix frontend",
     "build": "npm run build --prefix frontend",
-    "start": "npm run start --prefix frontend",
     "lint": "npm run lint --prefix frontend"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.1"
   }
 }

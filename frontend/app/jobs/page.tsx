@@ -1,10 +1,9 @@
 "use client";
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
-import Navbar from "@/components/Navbar";
 import JobCard from "@/components/JobCard";
 import { mockJobs } from "@/lib/mockData";
-import { loadProfile } from "@/lib/profile";
+import { useProfile } from "@/lib/ProfileContext";
 import { Job, CandidateProfile, JobPortal } from "@/lib/types";
 import {
   Search, Filter, MapPin, Sliders, TrendingUp,
@@ -37,8 +36,7 @@ const AUTO_REFRESH_MS = 10 * 60 * 1000; // 10 minutes
 
 export default function JobsPage() {
   const router = useRouter();
-  const [profile, setProfile] = useState<CandidateProfile | null>(null);
-  const [profileChecked, setProfileChecked] = useState(false);
+  const { profile, loading: profileLoading } = useProfile();
   const [searchQuery, setSearchQuery] = useState("");
   const [workMode, setWorkMode] = useState("All");
   const [techFilter, setTechFilter] = useState("All");
@@ -56,8 +54,8 @@ export default function JobsPage() {
   const loadJobs = async (currentProfile: CandidateProfile, autoDiscover = false) => {
     setLoading(true);
     try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL;
-      if (apiUrl) {
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+      {
         const searchParam = currentProfile.currentRole ? `&search=${encodeURIComponent(currentProfile.currentRole)}` : "";
         const res = await fetch(`${apiUrl}/api/jobs/?limit=100${searchParam}`);
         if (res.ok) {
@@ -93,8 +91,7 @@ export default function JobsPage() {
     const p = currentProfile;
     setDiscovering(true);
     setDiscoverError(null);
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL;
-    if (!apiUrl) { setDiscovering(false); return; }
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
     fetch(`${apiUrl}/api/jobs/discover`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -127,8 +124,7 @@ export default function JobsPage() {
     setDiscovering(true);
     setDiscoverError(null);
     try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL;
-      if (!apiUrl) throw new Error("API not configured");
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
       const res = await fetch(`${apiUrl}/api/jobs/discover`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -154,30 +150,32 @@ export default function JobsPage() {
         setDiscoverError("No matches found from live portals. Showing local data.");
       }
     } catch (err) {
-      setDiscoverError(err instanceof Error ? err.message : "Discovery unavailable — showing cached jobs.");
+      const msg = err instanceof Error ? err.message : String(err);
+      if (msg.includes("API not configured") || msg.includes("Failed to fetch") || msg.includes("NetworkError")) {
+        setDiscoverError("Backend not reachable. Make sure the backend server is running on http://localhost:8000 — showing mock data instead.");
+      } else {
+        setDiscoverError(`Discovery unavailable (${msg}) — showing cached/mock jobs.`);
+      }
     } finally {
       setDiscovering(false);
     }
   };
 
   useEffect(() => {
-    const p = loadProfile();
-    setProfile(p);
-    profileRef.current = p;
-    setProfileChecked(true);
+    if (profileLoading || !profile) return;
 
-    if (!p) return;
+    profileRef.current = profile;
 
-    if (p.workMode && p.workMode !== "Any") setWorkMode(p.workMode);
+    if (profile.workMode && profile.workMode !== "Any") setWorkMode(profile.workMode);
 
-    loadJobs(p, true);
+    loadJobs(profile, true);
 
     const interval = setInterval(() => {
       if (profileRef.current) loadJobs(profileRef.current, true);
     }, AUTO_REFRESH_MS);
 
     return () => clearInterval(interval);
-  }, []);
+  }, [profileLoading, profile]);
 
   const refresh = () => { if (profile) loadJobs(profile); };
 
@@ -202,11 +200,10 @@ export default function JobsPage() {
   const verifiedCount = jobs.filter((j) => j.verificationStatus === "VERIFIED").length;
   const unverifiedCount = jobs.filter((j) => j.verificationStatus !== "VERIFIED").length;
 
-  if (profileChecked && !profile) {
+  if (!profileLoading && !profile) {
     return (
       <div className="flex min-h-screen bg-transparent">
-        <Navbar />
-        <main className="md:ml-64 flex-1 px-4 md:px-8 pt-20 md:pt-8 pb-8 flex items-center justify-center">
+        <main className="md:ml-64 xl:mr-72 flex-1 px-4 md:px-8 pt-20 md:pt-8 pb-8 flex items-center justify-center">
           <div className="text-center max-w-sm">
             <div className="w-16 h-16 rounded-full bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center mx-auto mb-4">
               <UserCircle2 className="w-8 h-8 text-indigo-400" />
@@ -226,8 +223,7 @@ export default function JobsPage() {
 
   return (
     <div className="flex min-h-screen bg-transparent">
-      <Navbar />
-      <main className="md:ml-64 flex-1 px-4 md:px-8 pt-20 md:pt-8 pb-8">
+      <main className="md:ml-64 xl:mr-72 flex-1 px-4 md:px-8 pt-20 md:pt-8 pb-8">
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 mb-6">
           <div>

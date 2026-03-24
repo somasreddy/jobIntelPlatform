@@ -1,18 +1,18 @@
 """
-Job Discovery Service — aggregates jobs from multiple portals:
+Job Discovery Service - Version 2.1 (Fixed Arbeitnow Parsing)
 
 Free / no-auth:
-  1. Remotive.com API      — remote roles
-  2. Arbeitnow.com API     — global roles
-  3. The Muse API          — engineering / tech roles
-  4. RemoteOK API          — remote tech roles (no auth)
-  5. Jobicy API            — remote jobs worldwide (no auth)
+  1. Remotive.com API      - remote roles
+  2. Arbeitnow.com API     - global roles
+  3. The Muse API          - engineering / tech roles
+  4. RemoteOK API          - remote tech roles (no auth)
+  5. Jobicy API            - remote jobs worldwide (no auth)
 
 Free with registration:
-  6. Adzuna API            — India / UK / USA / AU (needs ADZUNA_APP_ID + ADZUNA_APP_KEY)
+  6. Adzuna API            - India / UK / USA / AU (needs ADZUNA_APP_ID + ADZUNA_APP_KEY)
 
 Optional paid key:
-  7. JSearch (RapidAPI)    — aggregates LinkedIn / Indeed / Glassdoor / Naukri (needs RAPID_API_KEY)
+  7. JSearch (RapidAPI)    - aggregates LinkedIn / Indeed / Glassdoor / Naukri (needs RAPID_API_KEY)
 
 Verification:
   - HEAD-pings every application_link; marks VERIFIED if response < 400.
@@ -24,15 +24,22 @@ Role-aware:
 import logging
 import re
 import asyncio
+import os
+import sys
+# Add current directory to path for imports (priority)
+project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, project_root)
 from typing import Optional
 import httpx
 
 logger = logging.getLogger(__name__)
+print("--- [DEBUG] JobDiscoveryService Module Loaded from:", __file__)
 
 _TIMEOUT = 15.0
 _VERIFY_TIMEOUT = 8.0
+_GOOGLE_MODEL = "gemini-1.5-flash"
 
-# ─── Role → search keywords ───────────────────────────────────────────────────
+# --- Role -> search keywords ---------------------------------------------------
 _ROLE_SEARCH_TERMS: dict[str, list[str]] = {
     "frontend":     ["frontend engineer", "react developer", "ui engineer"],
     "backend":      ["backend engineer", "python developer", "java developer"],
@@ -54,6 +61,13 @@ _ROLE_SEARCH_TERMS: dict[str, list[str]] = {
     "sre":          ["site reliability engineer", "sre", "infrastructure engineer"],
     "embedded":     ["embedded engineer", "firmware engineer", "iot developer"],
     "blockchain":   ["blockchain developer", "web3 engineer", "smart contract developer"],
+    "design":       ["ui ux designer", "product designer", "visual designer", "creative director"],
+    "creative":     ["graphic designer", "art director", "behance", "dribbble"],
+    "marketing":    ["digital marketing manager", "content strategist", "seo specialist"],
+    "writer":       ["technical writer", "content writer", "journalist", "copywriter"],
+    "freelance":    ["freelance developer", "contract engineer", "independent consultant"],
+    "gig":          ["project based work", "freelance gig", "upwork", "fiverr"],
+    "nonprofit":    ["nonprofit manager", "social impact", "program coordinator"],
 }
 _DEFAULT_TERMS = ["software engineer"]
 
@@ -67,7 +81,70 @@ def _get_search_terms(role: str) -> list[str]:
     return [clean] if clean else _DEFAULT_TERMS
 
 
-# ─── Tech extraction ──────────────────────────────────────────────────────────
+async def _fetch_upwork(query: str) -> list[dict]:
+    """
+    Upwork RSS Fetcher for Freelance/Gig work.
+    """
+    jobs: list[dict] = []
+    try:
+        from bs4 import BeautifulSoup
+        # Targeting the 'Web, Mobile & Software Dev' category RSS
+        rss_url = "https://www.upwork.com/ab/feed/jobs/rss?category2_combined=Web%2C%20Mobile%20%26%20Software%20Dev"
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            "Accept": "application/rss+xml, application/xml;q=0.9, */*;q=0.8"
+        }
+        async with httpx.AsyncClient(timeout=_TIMEOUT, headers=headers) as c:
+            r = await c.get(rss_url)
+            r.raise_for_status()
+            soup = BeautifulSoup(r.text, "xml")
+            items = soup.find_all("item")
+            q_words = [w for w in query.lower().split() if len(w) > 2]
+            for item in items:
+                title = item.find("title").text if item.find("title") else ""
+                desc_html = item.find("description").text if item.find("description") else ""
+                desc = _strip_html(desc_html)
+                link = item.find("link").text if item.find("link") else ""
+                if q_words and not any(w in (title + " " + desc).lower() for w in q_words):
+                    continue
+                jobs.append({
+                    "title": title,
+                    "organization": "Upwork (Freelance)",
+                    "location": "Remote / Worldwide",
+                    "work_mode": "Remote",
+                    "salary_min": None, "salary_max": None, "currency": "USD",
+                    "description": desc[:2000],
+                    "technologies": _extract_technologies(desc),
+                    "application_link": link,
+                    "career_page_link": link,
+                    "posted_date": (item.find("pubDate").text if item.find("pubDate") else "")[:16],
+                    "verification_status": "UNVERIFIED",
+                    "source": "Upwork",
+                    "experience_required": 0,
+                })
+    except Exception as e:
+        logger.warning(f"Upwork RSS: {e}")
+    return jobs
+
+async def _fetch_behance(query: str) -> list[dict]:
+    """
+    Behance Creative Jobs Fetcher.
+    """
+    jobs: list[dict] = []
+    try:
+        async with httpx.AsyncClient(timeout=_TIMEOUT) as c:
+            # Behance has a job board at behance.net/joblist
+            # We'll use a simple keyword search if available, otherwise just general tech/design
+            r = await c.get("https://www.behance.net/joblist")
+            # Note: Behance usually requires more complex scraping or API for full deep access,
+            # but we can capture the initial set if they have a public API endpoint.
+            # For now, we'll mark this as a placeholder or use a similar creative source like Dribbble
+            pass 
+    except Exception:
+        pass
+    return jobs
+
+# --- Tech extraction ----------------------------------------------------------
 _TECH_TOKENS = {
     "python", "java", "javascript", "typescript", "go", "golang", "rust", "kotlin",
     "swift", "c++", "c#", "scala", "ruby", "php", "elixir", "dart",
@@ -147,6 +224,65 @@ async def _verify_batch(jobs: list[dict]) -> list[dict]:
 
 # ─── Portal fetchers ──────────────────────────────────────────────────────────
 
+async def _fetch_weworkremotely(query: str) -> list[dict]:
+    """
+    We Work Remotely RSS Feed Fetcher.
+    Feed: https://weworkremotely.com/remote-jobs.rss
+    """
+    jobs: list[dict] = []
+    try:
+        from bs4 import BeautifulSoup
+        async with httpx.AsyncClient(timeout=_TIMEOUT) as c:
+            r = await c.get("https://weworkremotely.com/remote-jobs.rss")
+            r.raise_for_status()
+            soup = BeautifulSoup(r.text, "xml")
+            items = soup.find_all("item")
+            
+            q_words = [w for w in query.lower().split() if len(w) > 2]
+            
+            for item in items:
+                title = item.find("title").text if item.find("title") else ""
+                desc_html = item.find("description").text if item.find("description") else ""
+                desc = _strip_html(desc_html)
+                link = item.find("link").text if item.find("link") else ""
+                pub_date = item.find("pubDate").text if item.find("pubDate") else ""
+                
+                # Simple keyword filtering on the RSS feed
+                combined = (title + " " + desc).lower()
+                if q_words and not any(w in combined for w in q_words):
+                    continue
+                
+                company = "We Work Remotely"
+                # Often titles are formatted as "Company: Job Title"
+                if " : " in title:
+                    parts = title.split(" : ", 1)
+                    company = parts[0]
+                    title = parts[1]
+                elif ": " in title:
+                    parts = title.split(": ", 1)
+                    company = parts[0]
+                    title = parts[1]
+
+                jobs.append({
+                    "title": title,
+                    "organization": company,
+                    "location": "Remote",
+                    "work_mode": "Remote",
+                    "salary_min": None, "salary_max": None, "currency": "USD",
+                    "description": desc[:2000],
+                    "technologies": _extract_technologies(desc),
+                    "application_link": link,
+                    "career_page_link": link,
+                    "posted_date": pub_date[:16],
+                    "verification_status": "UNVERIFIED",
+                    "source": "WeWorkRemotely",
+                    "experience_required": 0,
+                })
+    except Exception as e:
+        logger.warning(f"WeWorkRemotely: {e}")
+    return jobs
+
+
 async def _fetch_remotive(query: str) -> list[dict]:
     cat_map = {
         "frontend": "software-dev", "backend": "software-dev", "fullstack": "software-dev",
@@ -190,7 +326,15 @@ async def _fetch_arbeitnow(query: str) -> list[dict]:
                 params={"search": query, "remote": "true"},
             )
             r.raise_for_status()
-            for item in r.json().get("data", []):
+            resp_json = r.json()
+            if not isinstance(resp_json, dict):
+                return []
+            data = resp_json.get("data", [])
+            if not isinstance(data, list):
+                return []
+            for item in data:
+                if not isinstance(item, dict):
+                    continue
                 desc = _strip_html(item.get("description", ""))
                 jobs.append({
                     "title": item.get("title", ""),
@@ -252,6 +396,59 @@ async def _fetch_the_muse(query: str) -> list[dict]:
     return jobs
 
 
+async def _fetch_hn_hiring(query: str) -> list[dict]:
+    """
+    Hacker News Who is Hiring Fetcher via Algolia API.
+    Searches for hiring in the current month posts.
+    """
+    jobs: list[dict] = []
+    try:
+        async with httpx.AsyncClient(timeout=_TIMEOUT) as c:
+            # First, find the latest 'Who is hiring' thread
+            r_thread = await c.get(
+                "https://hn.algolia.com/api/v1/search",
+                params={"query": "Who is hiring", "tags": "story", "hitsPerPage": 1}
+            )
+            r_thread.raise_for_status()
+            hits = r_thread.json().get("hits", [])
+            if not hits:
+                return []
+            
+            thread_id = hits[0].get("objectID")
+            
+            # Now search for keywords within that thread's comments
+            r_jobs = await c.get(
+                "https://hn.algolia.com/api/v1/search",
+                params={
+                    "tags": f"comment,story_{thread_id}",
+                    "query": query,
+                    "hitsPerPage": 20
+                }
+            )
+            r_jobs.raise_for_status()
+            for item in r_jobs.json().get("hits", []):
+                comment_text = _strip_html(item.get("comment_text", ""))
+                title_line = comment_text.split("\n")[0][:100]
+                jobs.append({
+                    "title": title_line,
+                    "organization": "HN Startup/Company",
+                    "location": "Remote / Mixed",
+                    "work_mode": _detect_work_mode(comment_text),
+                    "salary_min": None, "salary_max": None, "currency": "USD",
+                    "description": comment_text[:2000],
+                    "technologies": _extract_technologies(comment_text),
+                    "application_link": f"https://news.ycombinator.com/item?id={item.get('objectID')}",
+                    "career_page_link": f"https://news.ycombinator.com/item?id={item.get('objectID')}",
+                    "posted_date": (item.get("created_at") or "")[:10],
+                    "verification_status": "UNVERIFIED",
+                    "source": "HackerNews",
+                    "experience_required": 0,
+                })
+    except Exception as e:
+        logger.warning(f"HackerNews: {e}")
+    return jobs
+
+
 async def _fetch_remoteok(query: str) -> list[dict]:
     jobs: list[dict] = []
     try:
@@ -307,7 +504,7 @@ async def _fetch_jobicy(query: str) -> list[dict]:
         async with httpx.AsyncClient(timeout=_TIMEOUT) as c:
             r = await c.get(
                 "https://jobicy.com/api/v2/remote-jobs",
-                params={"count": 25, "geo": "worldwide", "industry": industry, "tag": tag},
+                params={"count": 25, "industry": industry, "tag": tag},
             )
             r.raise_for_status()
             for item in r.json().get("jobs", []):
@@ -400,7 +597,8 @@ async def _fetch_adzuna(query: str, location: str, app_id: str, app_key: str) ->
 
 async def _fetch_jsearch(query: str, location: str, rapid_key: str) -> list[dict]:
     """
-    JSearch via RapidAPI — pulls from LinkedIn, Indeed, Glassdoor, Naukri.
+    JSearch via RapidAPI  - 
+ pulls from LinkedIn, Indeed, Glassdoor, Naukri.
     Free tier: 200 req/month at rapidapi.com (search 'jsearch').
     """
     if not rapid_key:
@@ -502,12 +700,12 @@ class JobDiscoveryService:
         Returns jobs sorted: verified first, then by match score.
 
         Args:
-            role             — candidate role / keyword
-            location         — preferred location for Adzuna/JSearch
-            profile_skills   — flat list of candidate's skills (for match scoring)
-            exp_years        — years of experience
-            min_match_score  — 0 = all; 60 = only 60%+ matches (strict mode)
-            run_verification — HEAD-ping each URL to verify it's still active
+            role             - candidate role / keyword
+            location         - preferred location for Adzuna/JSearch
+            profile_skills   - flat list of candidate's skills (for match scoring)
+            exp_years        - years of experience
+            min_match_score  - 0 = all; 60 = only 60%+ matches (strict mode)
+            run_verification - HEAD-ping each URL to verify it's still active
         """
         search_terms = _get_search_terms(role) if role else _DEFAULT_TERMS
         # Use up to 3 search terms for broader coverage
@@ -518,12 +716,13 @@ class JobDiscoveryService:
 
         # Fan out across all portals with multiple search terms
         results = await asyncio.gather(
+            _fetch_weworkremotely(primary),
+            _fetch_hn_hiring(primary),
+            _fetch_upwork(primary),
             _fetch_remotive(primary),
             _fetch_arbeitnow(primary),
-            _fetch_arbeitnow(secondary),
             _fetch_the_muse(primary),
             _fetch_remoteok(primary),
-            _fetch_remoteok(secondary),
             _fetch_jobicy(primary),
             _fetch_adzuna(primary, location, self.adzuna_app_id, self.adzuna_app_key),
             _fetch_jsearch(primary, location, self.jsearch_api_key),

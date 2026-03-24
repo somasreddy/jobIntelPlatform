@@ -54,3 +54,28 @@ CREATE TABLE applications (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
+
+-- Indexes for common query patterns
+CREATE INDEX idx_applications_user_id ON applications(user_id);
+CREATE INDEX idx_applications_status ON applications(status);
+CREATE INDEX idx_verified_jobs_status ON verified_jobs(verification_status);
+CREATE INDEX idx_verified_jobs_created_at ON verified_jobs(created_at DESC);
+
+-- Resume generation history
+CREATE TABLE resume_history (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id UUID NOT NULL,
+    job_id UUID REFERENCES verified_jobs(id) ON DELETE SET NULL,
+    job_title VARCHAR(255),
+    organization VARCHAR(255),
+    ats_score INTEGER,
+    summary TEXT,
+    bullets JSONB,
+    skills_grouped JSONB,
+    pdf_base64 TEXT,
+    docx_base64 TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX idx_resume_history_user_id ON resume_history(user_id);
+CREATE INDEX idx_resume_history_created_at ON resume_history(created_at DESC);

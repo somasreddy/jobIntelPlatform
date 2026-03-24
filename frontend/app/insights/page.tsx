@@ -1,13 +1,11 @@
 "use client";
-import Navbar from "@/components/Navbar";
 import {
   BarChart3, TrendingUp, DollarSign, MapPin, Briefcase,
   UserCircle2, Target, Copy, CheckCircle, Sparkles, ArrowUp
 } from "lucide-react";
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { loadProfile } from "@/lib/profile";
-import { CandidateProfile } from "@/lib/types";
+import { useProfile } from "@/lib/ProfileContext";
 
 type SalaryResult = {
   min_salary: number; max_salary: number; currency: string;
@@ -109,8 +107,7 @@ const TOP_SKILLS_BY_ROLE = (role: string) => {
 
 export default function InsightsPage() {
   const router = useRouter();
-  const [profile, setProfile] = useState<CandidateProfile | null>(null);
-  const [profileChecked, setProfileChecked] = useState(false);
+  const { profile, loading } = useProfile();
   const [role, setRole] = useState("");
   const [exp, setExp] = useState(0);
   const [loc, setLoc] = useState("United States (Remote)");
@@ -120,15 +117,11 @@ export default function InsightsPage() {
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
-    const prof = loadProfile();
-    setProfile(prof);
-    setProfileChecked(true);
-    if (prof) {
-      setRole(prof.currentRole || "");
-      setExp(typeof prof.experienceYears === "number" ? prof.experienceYears : parseInt(String(prof.experienceYears)) || 0);
-      setLoc(inferMarketLocation(prof));
-    }
-  }, []);
+    if (loading || !profile) return;
+    setRole(profile.currentRole || "");
+    setExp(typeof profile.experienceYears === "number" ? profile.experienceYears : parseInt(String(profile.experienceYears)) || 0);
+    setLoc(inferMarketLocation(profile));
+  }, [loading, profile]);
 
   const fetchSalary = useCallback(async () => {
     if (!role) return;
@@ -146,11 +139,10 @@ export default function InsightsPage() {
 
   useEffect(() => { fetchSalary(); }, [fetchSalary]);
 
-  if (profileChecked && !profile) {
+  if (!loading && !profile) {
     return (
       <div className="flex min-h-screen bg-transparent">
-        <Navbar />
-        <main className="md:ml-64 flex-1 px-4 md:px-8 pt-20 md:pt-8 pb-8 flex items-center justify-center">
+        <main className="md:ml-64 xl:mr-72 flex-1 px-4 md:px-8 pt-20 md:pt-8 pb-8 flex items-center justify-center">
           <div className="text-center max-w-sm">
             <div className="w-16 h-16 rounded-full bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center mx-auto mb-4">
               <UserCircle2 className="w-8 h-8 text-indigo-400" />
@@ -205,8 +197,7 @@ ${profile?.name || "[Your Name]"}`;
 
   return (
     <div className="flex min-h-screen bg-transparent">
-      <Navbar />
-      <main className="md:ml-64 flex-1 px-4 md:px-8 pt-20 md:pt-8 pb-8 max-w-5xl">
+      <main className="md:ml-64 xl:mr-72 flex-1 px-4 md:px-8 pt-20 md:pt-8 pb-8 max-w-5xl">
         <div className="mb-8">
           <div className="flex items-center gap-2 text-indigo-400 text-sm font-medium mb-2">
             <BarChart3 className="w-4 h-4" /> Global Market Intelligence

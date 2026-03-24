@@ -2,7 +2,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState, useEffect } from "react";
-import { loadProfile } from "@/lib/profile";
+import { useProfile } from "@/lib/ProfileContext";
 import { useTheme } from "@/components/ThemeProvider";
 import ThemeSelector from "@/components/ThemeSelector";
 import { THEMES } from "@/lib/theme";
@@ -19,6 +19,7 @@ import {
   Palette,
   Menu,
   X,
+  Crosshair,
 } from "lucide-react";
 
 const navItems = [
@@ -30,19 +31,16 @@ const navItems = [
   { href: "/insights",      icon: BarChart2,       label: "Insights"         },
   { href: "/interview",     icon: Brain,           label: "Interview Prep"   },
   { href: "/linkedin",      icon: Linkedin,        label: "LinkedIn Enhancer"},
+  { href: "/power-tools",   icon: Crosshair,       label: "Power Tools"      },
 ];
 
 export default function Navbar() {
   const path = usePathname();
-  const [userName, setUserName] = useState<string>("");
+  const { profile } = useProfile();
+  const userName = profile?.name ?? "";
   const [themeOpen, setThemeOpen] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const { theme } = useTheme();
-
-  useEffect(() => {
-    const p = loadProfile();
-    if (p?.name) setUserName(p.name);
-  }, []);
 
   // Close mobile nav on route change
   useEffect(() => {

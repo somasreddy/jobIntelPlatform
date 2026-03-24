@@ -1,6 +1,9 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import ThemeProvider from "@/components/ThemeProvider";
+import Navbar from "@/components/Navbar";
+import ProfileSidebar from "@/components/ProfileSidebar";
+import { ProfileProvider } from "@/lib/ProfileContext";
 
 export const metadata: Metadata = {
   title: "JobIntel AI – Career Intelligence Platform",
@@ -43,7 +46,13 @@ export default function RootLayout({
         <div className="orb orb-3" />
         <div className="orb orb-4" />
         <ThemeProvider>
-          <div style={{ position: "relative", zIndex: 1 }}>{children}</div>
+          <ProfileProvider>
+            <div style={{ position: "relative", zIndex: 1 }}>
+              <Navbar />
+              {children}
+              <ProfileSidebar />
+            </div>
+          </ProfileProvider>
         </ThemeProvider>
       </body>
     </html>

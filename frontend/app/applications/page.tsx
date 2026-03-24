@@ -1,5 +1,4 @@
 "use client";
-import Navbar from "@/components/Navbar";
 import { mockApplications, mockJobs } from "@/lib/mockData";
 import { ApplicationStatus, Application } from "@/lib/types";
 import { Building2, Calendar, ArrowUpRight, Bell, BellOff, AlertCircle } from "lucide-react";
@@ -114,8 +113,7 @@ export default function TrackerPage() {
 
   return (
     <div className="flex min-h-screen bg-transparent">
-      <Navbar />
-      <main className="md:ml-64 flex-1 px-4 md:px-8 pt-20 md:pt-8 pb-4 flex flex-col" style={{ height: "100dvh", overflow: "hidden" }}>
+      <main className="md:ml-64 xl:mr-72 flex-1 px-4 md:px-8 pt-20 md:pt-8 pb-4 flex flex-col" style={{ height: "100dvh", overflow: "hidden" }}>
         <div className="mb-6 shrink-0 flex items-start justify-between">
           <div>
             <h1 className="text-2xl font-bold text-white">Application Tracker</h1>

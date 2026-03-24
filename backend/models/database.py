@@ -9,6 +9,29 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from core.database import Base
 
 
+class ResumeHistory(Base):
+    __tablename__ = "resume_history"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False, index=True)
+    job_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("verified_jobs.id"), nullable=True
+    )
+    job_title: Mapped[str | None] = mapped_column(String(255))
+    organization: Mapped[str | None] = mapped_column(String(255))
+    ats_score: Mapped[int | None] = mapped_column(Integer)
+    summary: Mapped[str | None] = mapped_column(Text)
+    bullets: Mapped[list | None] = mapped_column(JSONB, default=list)
+    skills_grouped: Mapped[dict | None] = mapped_column(JSONB, default=dict)
+    pdf_base64: Mapped[str | None] = mapped_column(Text)
+    docx_base64: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+
 class VerifiedJob(Base):
     __tablename__ = "verified_jobs"
 
@@ -66,6 +89,7 @@ class CandidateProfile(Base):
     frameworks: Mapped[list | None] = mapped_column(JSONB, default=list)
     languages: Mapped[list | None] = mapped_column(JSONB, default=list)
     cicd_tools: Mapped[list | None] = mapped_column(JSONB, default=list)
+    ai_tools: Mapped[list | None] = mapped_column(JSONB, default=list)
     certifications: Mapped[list | None] = mapped_column(JSONB, default=list)
     work_mode: Mapped[str | None] = mapped_column(String(50))
     base_resume_text: Mapped[str | None] = mapped_column(Text)

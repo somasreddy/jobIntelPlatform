@@ -629,7 +629,7 @@ body {
   padding: 1.5rem;
   position: relative;
   transition: border-color 0.25s ease, box-shadow 0.25s ease, transform 0.2s ease, background 0.5s ease;
-  overflow: hidden;
+  overflow: visible;
 }
 .card::before {
   content: '';
@@ -638,6 +638,7 @@ body {
   border-radius: inherit;
   background: linear-gradient(135deg, var(--card-hover-ring) 0%, transparent 60%);
   pointer-events: none;
+  overflow: hidden;
 }
 .card:hover {
   border-color: var(--border-hover);
@@ -912,3 +913,169 @@ aside {
 .animate-slide-left { animation: slideInLeft 0.4s ease-out both; }
 .animate-scale-in   { animation: scaleIn 0.3s ease-out both; }
 .animate-glow-pulse { animation: glowPulse 2.5s ease-in-out infinite; }
+
+/* ─── macOS Spring & Vibrancy Effects ───────────────────────────────────────── */
+:root {
+  --spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --ease-smooth: cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-out-quint: cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+/* macOS-style vibrancy glass */
+.vibrancy {
+  background: color-mix(in srgb, var(--bg-card) 70%, transparent) !important;
+  backdrop-filter: blur(40px) saturate(1.8) !important;
+  -webkit-backdrop-filter: blur(40px) saturate(1.8) !important;
+}
+
+/* macOS lift-hover — cards lift and glow on hover */
+.mac-hover {
+  transition: transform 0.25s var(--spring), box-shadow 0.25s var(--ease-smooth);
+}
+.mac-hover:hover {
+  transform: translateY(-2px) scale(1.005);
+  box-shadow: 0 8px 32px -6px var(--glow-card), 0 0 0 1px var(--border-hover);
+}
+
+/* macOS button press */
+.mac-press {
+  transition: transform 0.12s var(--ease-smooth), box-shadow 0.12s ease;
+}
+.mac-press:active {
+  transform: scale(0.96);
+  box-shadow: 0 2px 8px -2px var(--glow-accent);
+}
+
+/* Apply mac-press to all btn-primary and btn-secondary */
+.btn-primary, .btn-secondary {
+  transition: all 0.2s var(--ease-smooth);
+}
+.btn-primary:active, .btn-secondary:active {
+  transform: scale(0.97);
+}
+
+/* macOS smooth card */
+.card {
+  transition: background 0.3s var(--ease-smooth), border-color 0.3s var(--ease-smooth), box-shadow 0.3s var(--ease-smooth) !important;
+}
+.card:focus-within {
+  border-color: var(--border-hover) !important;
+  box-shadow: 0 0 0 1px var(--border-hover), 0 4px 24px -8px var(--glow-card) !important;
+}
+
+/* macOS input focus spring */
+.input {
+  transition: border-color 0.2s var(--ease-smooth), box-shadow 0.25s var(--spring) !important;
+}
+
+/* ─── Collapsible Section ────────────────────────────────────────────────────── */
+.collapsible-content {
+  overflow: hidden;
+  transition: max-height 0.38s var(--ease-out-quint), opacity 0.28s var(--ease-smooth);
+}
+.collapsible-content[data-open="false"] {
+  max-height: 0 !important;
+  opacity: 0;
+  pointer-events: none;
+}
+.collapsible-content[data-open="true"] {
+  opacity: 1;
+}
+
+.collapse-chevron {
+  transition: transform 0.3s var(--spring);
+}
+.collapse-chevron[data-open="false"] {
+  transform: rotate(-90deg);
+}
+.collapse-chevron[data-open="true"] {
+  transform: rotate(0deg);
+}
+
+/* ─── Tag press spring ───────────────────────────────────────────────────────── */
+.tag {
+  transition: all 0.18s var(--spring) !important;
+}
+.tag:hover {
+  transform: translateY(-1px) scale(1.04);
+}
+.tag:active {
+  transform: scale(0.94);
+}
+
+/* ─── Smooth page transitions ────────────────────────────────────────────────── */
+main {
+  animation: slideUp 0.35s var(--ease-out-quint) both;
+}
+
+@keyframes springIn {
+  0%   { opacity: 0; transform: scale(0.92) translateY(10px); }
+  60%  { opacity: 1; transform: scale(1.02) translateY(-2px); }
+  100% { opacity: 1; transform: scale(1) translateY(0); }
+}
+.animate-spring-in { animation: springIn 0.45s var(--spring) both; }
+
+/* ─── Mobile Responsiveness ──────────────────────────────────────────────────── */
+
+/* Base: fluid type scale */
+html { font-size: clamp(14px, 1.5vw, 16px); }
+
+/* Card: reduce padding on small screens */
+@media (max-width: 640px) {
+  .card { padding: 1rem; border-radius: 0.875rem; }
+  .btn-primary, .btn-secondary { padding: 0.5rem 1rem; font-size: 0.8rem; }
+  .input { font-size: 0.875rem; padding: 0.5rem 0.75rem; }
+}
+
+/* Grid helpers: always single column on mobile */
+@media (max-width: 640px) {
+  .grid-cols-2, .grid-cols-3, .grid-cols-4 { grid-template-columns: 1fr !important; }
+  .sm\:grid-cols-2 { grid-template-columns: 1fr !important; }
+}
+
+/* Right sidebar: never show on non-xl */
+@media (max-width: 1279px) {
+  aside[class*="xl:flex"] { display: none !important; }
+}
+
+/* Main content: no right margin on non-xl */
+@media (max-width: 1279px) {
+  main[class*="xl:mr-72"] { margin-right: 0 !important; }
+}
+
+/* Kanban: horizontal scroll on mobile */
+@media (max-width: 768px) {
+  .kanban-col { min-width: 85vw; }
+}
+
+/* Table-like grids: scroll horizontally */
+@media (max-width: 640px) {
+  .overflow-x-auto { -webkit-overflow-scrolling: touch; }
+}
+
+/* Prevent horizontal overflow */
+body { overflow-x: hidden; }
+
+/* Touch targets: minimum 44px for interactive elements on mobile */
+@media (max-width: 768px) {
+  button, a, [role="button"] { min-height: 36px; }
+  .tag { padding: 0.3rem 0.6rem; font-size: 0.75rem; }
+}
+
+/* Hover effects disabled on touch devices */
+@media (hover: none) {
+  .mac-hover:hover { transform: none; box-shadow: none; }
+  .tag:hover { transform: none; }
+  .card:hover { border-color: var(--border); box-shadow: none; }
+}
+
+/* Dropdown: never overflow viewport */
+[class*="absolute"] ul, ul[class*="absolute"] {
+  max-width: calc(100vw - 2rem);
+}
+
+/* Safe area for notched phones */
+@supports (padding-bottom: env(safe-area-inset-bottom)) {
+  body { padding-bottom: env(safe-area-inset-bottom); }
+  .fixed.bottom-0 { padding-bottom: env(safe-area-inset-bottom); }
+}

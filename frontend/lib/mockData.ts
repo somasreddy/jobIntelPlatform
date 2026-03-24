@@ -20,6 +20,7 @@ export const demoProfile: CandidateProfile = {
   frameworks: [],
   languages: [],
   cicdTools: [],
+  aiTools: [],
   certifications: [],
 };
 

@@ -120,12 +120,12 @@ export default function LocationAutocomplete({
   return (
     <div ref={containerRef} className={`relative ${className}`}>
       <div className="relative">
-        <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-500 pointer-events-none" />
+        <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-500 pointer-events-none z-10" />
         <input
           id={id}
           type="text"
           autoComplete="off"
-          className="input pl-8 pr-7"
+          className="input pl-9 pr-8"
           placeholder={placeholder}
           value={query}
           onChange={e => {
@@ -151,11 +151,14 @@ export default function LocationAutocomplete({
       {open && suggestions.length > 0 && (
         <ul
           ref={listRef}
-          className="absolute z-50 w-full mt-1 max-h-56 overflow-y-auto rounded-xl shadow-2xl shadow-black/50 py-1"
+          className="absolute z-[200] w-full mt-1 rounded-xl shadow-2xl shadow-black/60 py-1"
           style={{
             background: "var(--bg-elevated)",
             border: "1px solid var(--border-hover)",
             backdropFilter: "blur(20px)",
+            maxHeight: "220px",
+            overflowY: "auto",
+            overscrollBehavior: "contain",
           }}
         >
           {suggestions.map((city, i) => (

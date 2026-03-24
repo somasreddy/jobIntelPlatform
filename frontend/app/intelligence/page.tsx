@@ -1,26 +1,20 @@
 "use client";
-import Navbar from "@/components/Navbar";
 import { mockSkillGaps, mockRoadmap } from "@/lib/mockData";
 import { BrainCircuit, Target, BookOpen, AlertCircle, ArrowRight, Zap, GraduationCap, UserCircle2 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { loadProfile } from "@/lib/profile";
-import { CandidateProfile } from "@/lib/types";
+import { useProfile } from "@/lib/ProfileContext";
 
 export default function IntelligencePage() {
   const router = useRouter();
-  const [profile, setProfile] = useState<CandidateProfile | null>(null);
-  const [profileChecked, setProfileChecked] = useState(false);
+  const { profile, loading } = useProfile();
   const [apiGaps, setApiGaps] = useState<typeof mockSkillGaps | null>(null);
   const [apiStrengths, setApiStrengths] = useState<typeof mockSkillGaps | null>(null);
   const [apiRoadmap, setApiRoadmap] = useState<typeof mockRoadmap | null>(null);
 
   useEffect(() => {
-    const prof = loadProfile();
-    setProfile(prof);
-    setProfileChecked(true);
-
-    if (!prof || (!prof.skills?.length && !prof.currentRole)) return;
+    if (loading || !profile) return;
+    if (!profile.skills?.length && !profile.currentRole) return;
 
     const apiUrl = process.env.NEXT_PUBLIC_API_URL;
     if (!apiUrl) return;
@@ -29,8 +23,8 @@ export default function IntelligencePage() {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        profile_skills: prof.skills ?? [],
-        target_role: prof.currentRole || "",
+        profile_skills: profile.skills ?? [],
+        target_role: profile.currentRole || "",
       }),
     })
       .then(r => r.ok ? r.json() : null)
@@ -41,7 +35,7 @@ export default function IntelligencePage() {
         if (d.roadmap) setApiRoadmap(d.roadmap);
       })
       .catch(() => {});
-  }, []);
+  }, [loading, profile]);
 
   // Derive displayed data — only show mock data if a profile exists (as fallback when API is unavailable)
   const profileSkills = profile?.skills ?? [];
@@ -49,11 +43,10 @@ export default function IntelligencePage() {
   const strengths = apiStrengths ?? (profile ? mockSkillGaps.filter(g => g.inProfile) : []);
   const roadmap = apiRoadmap ?? (profile ? mockRoadmap : []);
 
-  if (profileChecked && !profile) {
+  if (!loading && !profile) {
     return (
       <div className="flex min-h-screen bg-transparent">
-        <Navbar />
-        <main className="md:ml-64 flex-1 px-4 md:px-8 pt-20 md:pt-8 pb-8 flex items-center justify-center">
+        <main className="md:ml-64 xl:mr-72 flex-1 px-4 md:px-8 pt-20 md:pt-8 pb-8 flex items-center justify-center">
           <div className="text-center max-w-sm">
             <div className="w-16 h-16 rounded-full bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center mx-auto mb-4">
               <UserCircle2 className="w-8 h-8 text-indigo-400" />
@@ -73,8 +66,7 @@ export default function IntelligencePage() {
 
   return (
     <div className="flex min-h-screen bg-transparent">
-      <Navbar />
-      <main className="md:ml-64 flex-1 px-4 md:px-8 pt-20 md:pt-8 pb-8 max-w-6xl">
+      <main className="md:ml-64 xl:mr-72 flex-1 px-4 md:px-8 pt-20 md:pt-8 pb-8 max-w-6xl">
         <div className="mb-8">
           <div className="flex items-center gap-2 text-indigo-400 text-sm font-medium mb-2">
             <BrainCircuit className="w-4 h-4" /> Career Intelligence Engine

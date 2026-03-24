@@ -25,19 +25,40 @@ class Settings(BaseSettings):
     # LLM API
     LLM_PROVIDER: str = "openai"  # "anthropic", "openai", "google", "groq", or "perplexity"
     ANTHROPIC_API_KEY: str = ""
-    ANTHROPIC_MODEL: str = "claude-haiku-4-5-20251001"
+    ANTHROPIC_MODEL: str = "claude-3-5-sonnet-20241022"
 
     OPENAI_API_KEY: str = ""
-    OPENAI_MODEL: str = "gpt-4o-mini"
+    OPENAI_MODEL: str = "gpt-4o"
 
     GOOGLE_API_KEY: str = ""
-    GOOGLE_MODEL: str = "gemini-1.5-pro"
+    GOOGLE_MODEL: str = "gemini-1.5-flash"
 
     GROQ_API_KEY: str = ""
     GROQ_MODEL: str = "llama-3.3-70b-versatile"
 
     PERPLEXITY_API_KEY: str = ""
-    PERPLEXITY_MODEL: str = "sonar-reasoning"
+    PERPLEXITY_MODEL: str = "sonar-reasoning-pro"
+
+    # New Providers (Alternative Free/Cheap)
+    MISTRAL_API_KEY: str = ""
+    MISTRAL_MODEL: str = "mistral-small-latest"
+
+    COHERE_API_KEY: str = ""
+    COHERE_MODEL: str = "command-r"
+
+    TOGETHER_API_KEY: str = ""
+    TOGETHER_MODEL: str = "meta-llama/Llama-3-70b-chat-hf"
+
+    DEEPSEEK_API_KEY: str = ""
+    DEEPSEEK_MODEL: str = "deepseek-chat"
+
+    OPENROUTER_API_KEY: str = ""
+    OPENROUTER_MODEL: str = "meta-llama/llama-3.3-70b-instruct:free"
+
+    HUGGINGFACE_API_KEY: str = ""
+    HUGGINGFACE_MODEL: str = "Qwen/Qwen2.5-72B-Instruct"
+
+    LLM_FALLBACK_ORDER: str = "groq,deepseek,mistral,openrouter,openai,anthropic,google"
 
     CONSOLIDATED_MODE: bool = True
 
@@ -47,7 +68,9 @@ class Settings(BaseSettings):
     JSEARCH_API_KEY: str = "" # https://rapidapi.com/letscrape-6bRBa3QguO5/api/jsearch (aggregates LinkedIn/Indeed/Glassdoor/Naukri)
 
     class Config:
-        env_file = ".env"
+        import os
+        base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        env_file = os.path.join(base_dir, ".env")
         case_sensitive = True
 
 settings = Settings()

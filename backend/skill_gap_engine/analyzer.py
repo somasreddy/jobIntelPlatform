@@ -1,7 +1,8 @@
 """
 Skill gap analyzer — compares profile skills against aggregated demand
-from the verified_jobs table, and produces a prioritized gap list + roadmap.
+from the verified_jobs table, and produces a prioritized gap list + LLM-powered roadmap.
 """
+import json
 import logging
 from collections import Counter
 
@@ -44,29 +45,55 @@ _CATEGORIES: dict[str, str] = {
     "Grafana": "Monitoring",
 }
 
-_ROADMAP_PHASES = [
+_SYSTEM_PROMPT = """You are a Senior Engineering Career Coach specializing in QA/SDET career growth.
+Given a candidate's current skills, target role, and their identified skill gaps (missing high-demand skills),
+generate a personalized learning roadmap and strategic career insights.
+
+Return ONLY a JSON object with this structure:
+{
+  "summary": "2-3 sentence strategic overview of the candidate's skill gap situation",
+  "roadmap": [
     {
-        "phase": 1,
-        "title": "Modern UI & API Automation",
-        "duration": "4–6 weeks",
-        "skills": ["Playwright", "TypeScript", "Cypress"],
-        "resources": ["playwright.dev", "typescriptlang.org", "cypress.io"],
-    },
-    {
-        "phase": 2,
-        "title": "Performance & Contract Testing",
-        "duration": "4–6 weeks",
-        "skills": ["K6", "REST Assured", "Postman Collections"],
-        "resources": ["k6.io", "rest-assured.io"],
-    },
-    {
-        "phase": 3,
-        "title": "DevOps & Cloud Integration",
-        "duration": "6–8 weeks",
-        "skills": ["Kubernetes", "AWS", "Terraform", "Grafana"],
-        "resources": ["kubernetes.io", "aws.amazon.com/training", "grafana.com"],
-    },
-]
+      "phase": 1,
+      "title": "Phase title",
+      "duration": "X-Y weeks",
+      "skills": ["skill1", "skill2"],
+      "resources": ["resource_url1"],
+      "why": "Why this phase matters for their target role"
+    }
+  ],
+  "quick_wins": ["skill or action that can be added/demonstrated quickly"],
+  "market_insight": "1-2 sentences on current market demand for their target role"
+}
+
+Keep roadmap to 3 phases max. Focus on the specific gaps provided, not generic advice."""
+
+
+async def _generate_llm_insights(
+    profile_skills: list,
+    target_role: str,
+    missing_skills: list,
+    strengths: list,
+) -> dict | None:
+    """Use LLM to generate personalized roadmap and insights."""
+    try:
+        from core.llm import smart_chat
+        top_missing = [g["skill"] for g in missing_skills[:8]]
+        top_strengths = [g["skill"] for g in strengths[:6]]
+        user_prompt = (
+            f"Candidate Profile:\n"
+            f"- Target Role: {target_role}\n"
+            f"- Current Skills: {', '.join(profile_skills[:15])}\n"
+            f"- Strengths (already has): {', '.join(top_strengths)}\n"
+            f"- Missing High-Demand Skills: {', '.join(top_missing)}\n\n"
+            "Generate a personalized learning roadmap and career insights."
+        )
+        raw = await smart_chat(_SYSTEM_PROMPT, user_prompt, temperature=0.5, task_type="skill_gap", cache_ttl=1800)
+        clean = raw.strip().lstrip("```json").lstrip("```").rstrip("```").strip()
+        return json.loads(clean)
+    except Exception as e:
+        logger.warning(f"LLM skill gap insights failed: {e}")
+        return None
 
 
 class SkillGapAnalyzer:
@@ -81,13 +108,13 @@ class SkillGapAnalyzer:
     ) -> dict:
         """
         Aggregates technology demand from verified_jobs DB (if available),
-        falls back to curated data. Returns gap list + roadmap.
+        falls back to curated data. Uses LLM to generate personalized roadmap + insights.
         """
         tech_counts: Counter = Counter()
 
         if db_session is not None:
             try:
-                from sqlalchemy import select, text
+                from sqlalchemy import select
                 from models.database import VerifiedJob
                 result = await db_session.execute(
                     select(VerifiedJob.technologies).where(
@@ -118,7 +145,7 @@ class SkillGapAnalyzer:
         gaps = []
         for tech, count in tech_counts.most_common(20):
             in_profile = tech.lower() in profile_lower
-            demand_score = min(99, int((count / total) * 100 * 6))  # normalize to 0-99
+            demand_score = min(99, int((count / total) * 100 * 6))
             priority = "High" if demand_score >= 75 else ("Medium" if demand_score >= 50 else "Low")
             gaps.append({
                 "skill": tech,
@@ -132,9 +159,47 @@ class SkillGapAnalyzer:
         missing = [g for g in gaps if not g["inProfile"]]
         have = [g for g in gaps if g["inProfile"]]
 
-        return {
+        # Generate LLM-powered personalized roadmap and insights
+        llm_insights = await _generate_llm_insights(profile_skills, target_role, missing, have)
+
+        result = {
             "missing_high_demand_skills": missing[:10],
             "strengths": have,
-            "roadmap": _ROADMAP_PHASES,
             "total_jobs_analyzed": sum(tech_counts.values()),
         }
+
+        if llm_insights:
+            result["summary"] = llm_insights.get("summary", "")
+            result["roadmap"] = llm_insights.get("roadmap", [])
+            result["quick_wins"] = llm_insights.get("quick_wins", [])
+            result["market_insight"] = llm_insights.get("market_insight", "")
+        else:
+            # Static fallback roadmap if LLM fails
+            result["roadmap"] = [
+                {
+                    "phase": 1,
+                    "title": "Modern UI & API Automation",
+                    "duration": "4–6 weeks",
+                    "skills": ["Playwright", "TypeScript", "Cypress"],
+                    "resources": ["playwright.dev", "typescriptlang.org", "cypress.io"],
+                    "why": "Highest demand skills in current job market for QA roles.",
+                },
+                {
+                    "phase": 2,
+                    "title": "Performance & Contract Testing",
+                    "duration": "4–6 weeks",
+                    "skills": ["K6", "REST Assured", "Postman Collections"],
+                    "resources": ["k6.io", "rest-assured.io"],
+                    "why": "Differentiates senior QA engineers from mid-level candidates.",
+                },
+                {
+                    "phase": 3,
+                    "title": "DevOps & Cloud Integration",
+                    "duration": "6–8 weeks",
+                    "skills": ["Kubernetes", "AWS", "Terraform", "Grafana"],
+                    "resources": ["kubernetes.io", "aws.amazon.com/training", "grafana.com"],
+                    "why": "Required for principal/staff SDET roles and higher compensation bands.",
+                },
+            ]
+
+        return result

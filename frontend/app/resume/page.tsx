@@ -1,13 +1,14 @@
 "use client";
-import { useState, useEffect, useRef } from "react";
+import { useState, useRef } from "react";
 import { useRouter } from "next/navigation";
-import Navbar from "@/components/Navbar";
-import { loadProfile } from "@/lib/profile";
+import { useProfile } from "@/lib/ProfileContext";
 import {
   FileText, CheckCircle, Upload, ShieldAlert, Sparkles,
-  FileOutput, UserCircle2, Target, TrendingUp, AlertCircle, Plus
+  FileOutput, UserCircle2, Target, TrendingUp, AlertCircle, Plus,
+  Download, Loader2
 } from "lucide-react";
-import { CandidateProfile } from "@/lib/types";
+
+const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 // High-demand keywords used by ATS systems across all engineering roles
 const ATS_KEYWORD_POOL = [
@@ -42,18 +43,64 @@ function calcKeywordHeatmap(resumeText: string, profileSkills: string[]): {
 
 export default function ResumePage() {
   const router = useRouter();
-  const [profile, setProfile] = useState<CandidateProfile | null>(null);
-  const [profileChecked, setProfileChecked] = useState(false);
+  const { profile, loading } = useProfile();
   const [dragging, setDragging] = useState(false);
   const [file, setFile] = useState<File | null>(null);
   const [heatmapJd, setHeatmapJd] = useState("");
   const [showHeatmap, setShowHeatmap] = useState(false);
   const jdRef = useRef<HTMLTextAreaElement>(null);
+  const [generating, setGenerating] = useState(false);
+  const [genError, setGenError] = useState("");
+  const [genResult, setGenResult] = useState<{ pdf_base64?: string; docx_base64?: string; summary?: string } | null>(null);
 
-  useEffect(() => {
-    setProfile(loadProfile());
-    setProfileChecked(true);
-  }, []);
+  const generateMasterResume = async () => {
+    if (!profile) return;
+    setGenerating(true);
+    setGenError("");
+    setGenResult(null);
+    try {
+      const res = await fetch(`${API}/api/resume/generate-master`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          profile: {
+            name: profile.name,
+            current_role: profile.currentRole,
+            experience_years: profile.experienceYears,
+            current_location: profile.currentLocation,
+            work_mode: profile.workMode,
+            skills: profile.skills,
+            frameworks: profile.frameworks,
+            languages: profile.languages,
+            cicd_tools: profile.cicdTools,
+            ai_tools: profile.aiTools,
+            certifications: profile.certifications,
+            base_resume_text: profile.resumeText,
+          }
+        }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error((err as Record<string, string>).detail || `Error ${res.status}`);
+      }
+      setGenResult(await res.json());
+    } catch (e: unknown) {
+      setGenError(e instanceof Error ? e.message : "Generation failed");
+    } finally {
+      setGenerating(false);
+    }
+  };
+
+  const downloadFile = (b64: string, filename: string, mime: string) => {
+    const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+    const blob = new Blob([bytes], { type: mime });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
 
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
@@ -96,11 +143,10 @@ export default function ResumePage() {
   const missingHigh = heatmapData.filter(k => !k.inResume && !k.inProfile && k.priority === "High");
   const coverageScore = Math.round((inResumeCount / heatmapData.length) * 100);
 
-  if (profileChecked && !profile) {
+  if (!loading && !profile) {
     return (
       <div className="flex min-h-screen bg-transparent">
-        <Navbar />
-        <main className="md:ml-64 flex-1 px-4 md:px-8 pt-20 md:pt-8 pb-8 flex items-center justify-center">
+        <main className="md:ml-64 xl:mr-72 flex-1 px-4 md:px-8 pt-20 md:pt-8 pb-8 flex items-center justify-center">
           <div className="text-center max-w-sm">
             <div className="w-16 h-16 rounded-full bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center mx-auto mb-4">
               <UserCircle2 className="w-8 h-8 text-indigo-400" />
@@ -120,8 +166,7 @@ export default function ResumePage() {
 
   return (
     <div className="flex min-h-screen bg-transparent">
-      <Navbar />
-      <main className="md:ml-64 flex-1 px-4 md:px-8 pt-20 md:pt-8 pb-8 max-w-6xl">
+      <main className="md:ml-64 xl:mr-72 flex-1 px-4 md:px-8 pt-20 md:pt-8 pb-8 max-w-6xl">
         <div className="mb-8">
           <div className="flex items-center gap-2 text-indigo-400 text-sm font-medium mb-2">
             <FileOutput className="w-4 h-4" /> Base Resume Manager
@@ -366,6 +411,83 @@ export default function ResumePage() {
               <button onClick={() => router.push("/")} className="btn-secondary w-full mt-4 text-xs py-2">
                 Edit Profile
               </button>
+            </div>
+
+            {/* Download Master ATS Resume */}
+            <div className="card" style={{ border: "1px solid rgba(99,102,241,0.3)", background: "linear-gradient(135deg, rgba(99,102,241,0.06), rgba(139,92,246,0.04))" }}>
+              <div className="flex items-center gap-2 mb-1">
+                <Download className="w-4 h-4" style={{ color: "var(--accent-bright)" }} />
+                <h2 className="text-sm font-semibold text-white">Download Master ATS Resume</h2>
+              </div>
+              <p className="text-xs text-slate-400 mb-4 leading-relaxed">
+                Merges your full profile + uploaded resume into a polished ATS-ready document. Uses AI to write your professional summary and format your experience.
+              </p>
+
+              {!genResult ? (
+                <button
+                  onClick={generateMasterResume}
+                  disabled={generating || !profile?.name}
+                  className="w-full py-2.5 rounded-xl font-semibold text-sm text-white flex items-center justify-center gap-2 transition-all"
+                  style={{
+                    background: generating ? "rgba(255,255,255,0.05)" : "linear-gradient(135deg, var(--accent-deep), var(--accent))",
+                    opacity: generating || !profile?.name ? 0.6 : 1,
+                    boxShadow: generating ? "none" : "0 4px 14px -4px var(--glow-accent)",
+                  }}
+                >
+                  {generating
+                    ? <><Loader2 className="w-4 h-4 animate-spin" /> Generating…</>
+                    : <><Sparkles className="w-4 h-4" /> Generate & Download</>
+                  }
+                </button>
+              ) : (
+                <div className="space-y-2">
+                  {genResult.summary && (
+                    <div className="rounded-xl p-3 mb-2" style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)" }}>
+                      <p className="text-xs font-semibold text-slate-400 mb-1">AI-Written Summary</p>
+                      <p className="text-xs text-slate-300 leading-relaxed">{genResult.summary}</p>
+                    </div>
+                  )}
+                  <div className="flex gap-2">
+                    {genResult.pdf_base64 && (
+                      <button
+                        onClick={() => downloadFile(genResult!.pdf_base64!, `${profile?.name?.replace(/\s+/g, "_") || "resume"}_ATS.pdf`, "application/pdf")}
+                        className="flex-1 py-2 rounded-xl text-sm font-semibold flex items-center justify-center gap-1.5 transition-all"
+                        style={{ background: "rgba(239,68,68,0.12)", color: "#f87171", border: "1px solid rgba(239,68,68,0.3)" }}
+                      >
+                        <Download className="w-3.5 h-3.5" /> PDF
+                      </button>
+                    )}
+                    {genResult.docx_base64 && (
+                      <button
+                        onClick={() => downloadFile(genResult!.docx_base64!, `${profile?.name?.replace(/\s+/g, "_") || "resume"}_ATS.docx`, "application/vnd.openxmlformats-officedocument.wordprocessingml.document")}
+                        className="flex-1 py-2 rounded-xl text-sm font-semibold flex items-center justify-center gap-1.5 transition-all"
+                        style={{ background: "rgba(59,130,246,0.12)", color: "#60a5fa", border: "1px solid rgba(59,130,246,0.3)" }}
+                      >
+                        <Download className="w-3.5 h-3.5" /> DOCX
+                      </button>
+                    )}
+                  </div>
+                  <button
+                    onClick={generateMasterResume}
+                    disabled={generating}
+                    className="w-full py-1.5 rounded-xl text-xs text-slate-400 hover:text-white transition-colors flex items-center justify-center gap-1"
+                    style={{ background: "var(--bg-elevated)" }}
+                  >
+                    {generating ? <Loader2 className="w-3 h-3 animate-spin" /> : null}
+                    Regenerate
+                  </button>
+                </div>
+              )}
+
+              {genError && (
+                <div className="mt-3 rounded-xl p-3 text-xs text-red-400" style={{ background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.2)" }}>
+                  {genError}
+                </div>
+              )}
+
+              {!profile?.name && (
+                <p className="text-xs text-slate-500 mt-2 text-center">Save your profile first to enable this.</p>
+              )}
             </div>
 
             {/* Update Source Document */}

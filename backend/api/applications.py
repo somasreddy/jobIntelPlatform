@@ -1,7 +1,8 @@
 import uuid
 import logging
 from typing import Optional
-from datetime import datetime
+from datetime import datetime, timezone
+from collections import Counter
 from fastapi import APIRouter, Depends, HTTPException, Query, Body
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -161,3 +162,85 @@ async def delete_application(app_id: str, db: AsyncSession = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Application not found")
     await db.delete(app)
     return {"deleted": str(uid)}
+
+
+@router.get("/analytics")
+async def get_application_analytics(
+    user_id: str = Query(str(_DEMO_USER_ID)),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Return pipeline analytics: stage breakdown, response rate, offer rate,
+    avg days to apply, top companies/roles applied to.
+    """
+    try:
+        uid = uuid.UUID(user_id)
+    except ValueError:
+        uid = _DEMO_USER_ID
+
+    stmt = select(Application).where(Application.user_id == uid)
+    result = await db.execute(stmt)
+    apps = result.scalars().all()
+
+    if not apps:
+        return {"message": "No applications found", "total": 0}
+
+    # Stage breakdown
+    stage_counter = Counter(a.status for a in apps)
+    all_stages = ["Saved", "Applied", "Assessment", "Interview", "Offer", "Rejected"]
+    stage_breakdown = {s: stage_counter.get(s, 0) for s in all_stages}
+
+    total = len(apps)
+    applied_count = sum(stage_counter.get(s, 0) for s in ["Applied", "Assessment", "Interview", "Offer", "Rejected"])
+    responded_count = sum(stage_counter.get(s, 0) for s in ["Assessment", "Interview", "Offer"])
+    offer_count = stage_counter.get("Offer", 0)
+
+    response_rate = round((responded_count / applied_count * 100), 1) if applied_count > 0 else 0
+    offer_rate = round((offer_count / applied_count * 100), 1) if applied_count > 0 else 0
+
+    # Avg days from Saved → Applied
+    days_to_apply = []
+    for a in apps:
+        if a.date_applied and a.created_at:
+            delta = (a.date_applied.replace(tzinfo=timezone.utc) - a.created_at.replace(tzinfo=timezone.utc)).days
+            if delta >= 0:
+                days_to_apply.append(delta)
+    avg_days_to_apply = round(sum(days_to_apply) / len(days_to_apply), 1) if days_to_apply else None
+
+    # Top companies & roles — load jobs
+    company_counter: Counter = Counter()
+    role_counter: Counter = Counter()
+    for a in apps:
+        if a.job_id:
+            job_res = await db.execute(select(VerifiedJob).where(VerifiedJob.id == a.job_id))
+            job = job_res.scalar_one_or_none()
+            if job:
+                company_counter[job.organization] += 1
+                role_counter[job.title] += 1
+
+    # Follow-ups due (in next 7 days)
+    now = datetime.now(timezone.utc)
+    upcoming_followups = [
+        {
+            "app_id": str(a.id),
+            "follow_up_date": str(a.follow_up_date)[:10],
+        }
+        for a in apps
+        if a.follow_up_date and 0 <= (a.follow_up_date.replace(tzinfo=timezone.utc) - now).days <= 7
+    ]
+
+    return {
+        "total": total,
+        "stage_breakdown": stage_breakdown,
+        "response_rate_pct": response_rate,
+        "offer_rate_pct": offer_rate,
+        "avg_days_to_apply": avg_days_to_apply,
+        "top_companies": [{"company": c, "count": n} for c, n in company_counter.most_common(5)],
+        "top_roles": [{"role": r, "count": n} for r, n in role_counter.most_common(5)],
+        "upcoming_followups": upcoming_followups,
+        "pipeline_health": (
+            "Strong" if offer_rate >= 10 else
+            "Progressing" if response_rate >= 20 else
+            "Needs attention — focus on improving application quality or targeting"
+        ),
+    }

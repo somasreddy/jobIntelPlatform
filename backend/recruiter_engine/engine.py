@@ -2,12 +2,15 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-_SYSTEM_PROMPT = """You are an expert career coach crafting concise LinkedIn outreach messages
-for QA/SDET professionals reaching out to recruiters. Write a short, direct message (4-5 sentences, <100 words).
+_SYSTEM_PROMPT = """You are an expert career coach crafting highly personalized LinkedIn outreach messages
+for professionals across ANY domain and role reaching out to recruiters and hiring managers.
+Write a short, direct message (4-5 sentences, <100 words).
+Rules:
 - Reference the specific role and company
-- Mention 1-2 relevant technical achievements with metrics
-- End with a specific low-friction ask (10-minute call)
-- Tone: professional, confident, not sycophantic
+- Mention 1-2 relevant achievements with metrics from the candidate's background
+- Use the candidate's actual skills and domain — not generic phrases
+- End with a specific low-friction ask (10-minute call or quick chat)
+- Tone: confident, professional, not sycophantic
 Return only the message body, no subject line."""
 
 
@@ -23,22 +26,30 @@ class RecruiterEngine:
         first_name = recruiter_name.split()[0] if recruiter_name else "Recruiter"
         job_title = job.get("title", "the role")
         org = job.get("organization", "your company")
-        techs = (job.get("technologies") or [])[:3]
+        techs = (job.get("technologies") or [])[:5]
+        jd_snippet = (job.get("description") or "")[:500]
         name = profile.get("name", "Candidate")
-        role = profile.get("current_role", "QA Engineer")
+        role = profile.get("current_role", "Professional")
         exp = profile.get("experience_years", 5)
+        all_skills = (
+            (profile.get("skills") or [])
+            + (profile.get("frameworks") or [])
+            + (profile.get("ai_tools") or [])
+        )
 
         try:
-            from core.llm import chat
+            from core.llm import smart_chat
             user_prompt = (
                 f"Recruiter first name: {first_name}\n"
                 f"Company: {org}\n"
                 f"Role: {job_title}\n"
                 f"Candidate: {name}, {role}, {exp} years exp\n"
-                f"Tech stack required: {', '.join(techs)}\n\n"
-                "Write the outreach message body (max 100 words)."
+                f"Candidate's key skills: {', '.join(all_skills[:10])}\n"
+                f"Tech/keywords from JD: {', '.join(techs)}\n"
+                f"JD context: {jd_snippet}\n\n"
+                "Write the outreach message body (max 100 words). Make it specific to this candidate's background."
             )
-            message = await chat(_SYSTEM_PROMPT, user_prompt, temperature=0.5)
+            message = await smart_chat(_SYSTEM_PROMPT, user_prompt, temperature=0.5, task_type="outreach", cache_ttl=0)
         except Exception as e:
             logger.warning(f"LLM outreach generation failed: {e}")
             message = (

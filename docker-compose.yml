@@ -26,7 +26,15 @@ services:
     environment:
       - DATABASE_URL=postgresql+asyncpg://postgres:password@postgres:5432/job_platform
       - REDIS_URL=redis://redis:6379/0
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
       - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY:-}
+      - GROQ_API_KEY=${GROQ_API_KEY:-}
+      - PERPLEXITY_API_KEY=${PERPLEXITY_API_KEY:-}
+      - ADZUNA_APP_ID=${ADZUNA_APP_ID:-}
+      - ADZUNA_APP_KEY=${ADZUNA_APP_KEY:-}
+      - JSEARCH_API_KEY=${JSEARCH_API_KEY:-}
+      - CONSOLIDATED_MODE=${CONSOLIDATED_MODE:-true}
     depends_on:
       - postgres
       - redis
@@ -41,6 +49,15 @@ services:
       - DATABASE_URL=postgresql+asyncpg://postgres:password@postgres:5432/job_platform
       - REDIS_URL=redis://redis:6379/0
       - PYTHONPATH=/app:/app/workers
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY:-}
+      - GROQ_API_KEY=${GROQ_API_KEY:-}
+      - PERPLEXITY_API_KEY=${PERPLEXITY_API_KEY:-}
+      - ADZUNA_APP_ID=${ADZUNA_APP_ID:-}
+      - ADZUNA_APP_KEY=${ADZUNA_APP_KEY:-}
+      - JSEARCH_API_KEY=${JSEARCH_API_KEY:-}
+      - CONSOLIDATED_MODE=${CONSOLIDATED_MODE:-true}
     depends_on:
       - redis
       - postgres
@@ -55,6 +72,15 @@ services:
     environment:
       - REDIS_URL=redis://redis:6379/0
       - PYTHONPATH=/app:/app/workers
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY:-}
+      - GROQ_API_KEY=${GROQ_API_KEY:-}
+      - PERPLEXITY_API_KEY=${PERPLEXITY_API_KEY:-}
+      - ADZUNA_APP_ID=${ADZUNA_APP_ID:-}
+      - ADZUNA_APP_KEY=${ADZUNA_APP_KEY:-}
+      - JSEARCH_API_KEY=${JSEARCH_API_KEY:-}
+      - CONSOLIDATED_MODE=${CONSOLIDATED_MODE:-true}
     depends_on:
       - redis
     volumes:

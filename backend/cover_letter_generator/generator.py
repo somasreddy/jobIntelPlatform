@@ -2,11 +2,16 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-_SYSTEM_PROMPT = """You are an expert career coach writing highly personalized cover letters
-for QA/SDET professionals. Write a compelling, concise cover letter (3 paragraphs, ~200 words)
-that mirrors the job description language. Do not use generic phrases like "I am a team player".
-Focus on specific technical achievements and alignment with the company's engineering culture.
-Return only the cover letter text, no subject line, no sign-off instructions."""
+_SYSTEM_PROMPT = """You are an expert career coach writing highly personalized cover letters for ANY role and domain.
+Write a compelling, concise cover letter (3 paragraphs, ~200 words) that mirrors the job description language.
+Rules:
+- Do NOT use generic phrases like "I am a team player" or "I am a quick learner".
+- Mirror the exact terminology from the job description.
+- Paragraph 1: Hook — specific achievement or insight that shows you understand their problem.
+- Paragraph 2: Proof — 1-2 quantified accomplishments directly relevant to this role's requirements.
+- Paragraph 3: Close — why this company/role specifically, confident ask for a conversation.
+- Use the candidate's full profile: skills, AI tools, certifications, years of experience.
+Return only the cover letter body text. No subject line, no sign-off instructions."""
 
 
 class CoverLetterGenerator:
@@ -25,15 +30,24 @@ class CoverLetterGenerator:
         techs = (job.get("technologies") or [])[:3]
 
         try:
-            from core.llm import chat
+            from core.llm import smart_chat
+            all_skills = (
+                (profile.get("skills") or [])
+                + (profile.get("frameworks") or [])
+                + (profile.get("languages") or [])
+                + (profile.get("ai_tools") or [])
+            )
             user_prompt = (
-                f"Candidate: {name}, {role}, {exp} years exp, skills: {', '.join(skills)}\n"
+                f"Candidate: {name}, {role}, {exp} years exp\n"
+                f"All Skills & Tools: {', '.join(all_skills[:20])}\n"
+                f"Certifications: {', '.join(profile.get('certifications') or [])}\n"
+                f"Resume summary: {profile.get('base_resume_text', '')[:400]}\n"
                 f"Target role: {job_title} at {org}\n"
                 f"Key technologies required: {', '.join(techs)}\n"
-                f"Job Description excerpt: {jd[:600]}\n\n"
+                f"Full Job Description:\n{jd[:2000]}\n\n"
                 "Write the cover letter body (3 paragraphs, ~200 words)."
             )
-            content = await chat(_SYSTEM_PROMPT, user_prompt, temperature=0.6)
+            content = await smart_chat(_SYSTEM_PROMPT, user_prompt, temperature=0.6, task_type="cover_letter", cache_ttl=0)
         except Exception as e:
             logger.warning(f"LLM cover letter generation failed: {e}")
             content = (
