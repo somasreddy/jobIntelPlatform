@@ -4,6 +4,7 @@ import ThemeProvider from "@/components/ThemeProvider";
 import Navbar from "@/components/Navbar";
 import ProfileSidebar from "@/components/ProfileSidebar";
 import { ProfileProvider } from "@/lib/ProfileContext";
+import Footer from "@/components/Footer";
 
 export const metadata: Metadata = {
   title: "JobIntel AI – Career Intelligence Platform",
@@ -51,6 +52,8 @@ export default function RootLayout({
               <Navbar />
               {children}
               <ProfileSidebar />
+
+              <Footer />
             </div>
           </ProfileProvider>
         </ThemeProvider>
