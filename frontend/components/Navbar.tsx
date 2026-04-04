@@ -227,7 +227,7 @@ export default function Navbar() {
 
       {/* Sidebar — always visible on desktop, slide-in on mobile */}
       <aside
-        className={`fixed left-0 top-0 h-screen w-72 md:w-64 flex flex-col z-50 transition-transform duration-300 ${
+        className={`fixed left-0 top-0 h-screen w-72 md:w-64 flex flex-col z-50 pb-10 transition-transform duration-300 ${
           mobileOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"
         }`}
         style={{ background: "var(--bg-card)" }}

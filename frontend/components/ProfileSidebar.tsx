@@ -99,7 +99,7 @@ export default function ProfileSidebar() {
   if (!profile?.name) {
     return (
       <aside
-        className="hidden xl:flex fixed right-0 top-0 h-screen w-72 flex-col z-30 overflow-y-auto"
+        className="hidden xl:flex fixed right-0 top-0 h-screen w-72 flex-col z-30 overflow-y-auto pb-10"
         style={{ background: "var(--bg-card)", borderLeft: "1px solid var(--border)" }}
       >
         <div className="flex-1 flex flex-col items-center justify-center p-6 text-center gap-4">
@@ -153,7 +153,7 @@ export default function ProfileSidebar() {
 
   return (
     <aside
-      className="hidden xl:flex fixed right-0 top-0 h-screen w-72 flex-col z-30 overflow-y-auto"
+      className="hidden xl:flex fixed right-0 top-0 h-screen w-72 flex-col z-30 overflow-y-auto pb-10"
       style={{ background: "var(--bg-card)", borderLeft: "1px solid var(--border)" }}
     >
       {/* Profile Header */}
