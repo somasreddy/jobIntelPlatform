@@ -171,13 +171,28 @@ export default function ResumePage() {
           <div className="flex items-center gap-2 text-indigo-400 text-sm font-medium mb-2">
             <FileOutput className="w-4 h-4" /> Base Resume Manager
           </div>
-          <h1 className="text-3xl font-bold text-white mb-2">
-            Your <span className="gradient-text">Master Profile</span>
-          </h1>
-          <p className="text-slate-400 text-sm max-w-2xl">
-            This is your master profile. When you view a job in the{" "}
-            <strong className="text-white">Jobs Dashboard</strong>, AI generates a highly-targeted ATS resume by merging this data with the job description.
-          </p>
+          <div className="flex items-start justify-between gap-4 flex-wrap">
+            <div>
+              <h1 className="text-3xl font-bold text-white mb-2">
+                Your <span className="gradient-text">Master Profile</span>
+              </h1>
+              <p className="text-slate-400 text-sm max-w-2xl">
+                This is your master profile. When you view a job in the{" "}
+                <strong className="text-white">Jobs Dashboard</strong>, AI generates a highly-targeted ATS resume by merging this data with the job description.
+              </p>
+            </div>
+            <a
+              href="/resume/studio"
+              className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold shrink-0 transition-all"
+              style={{
+                background: "color-mix(in srgb, var(--accent) 15%, transparent)",
+                border: "1px solid var(--border-hover)",
+                color: "var(--accent-bright)",
+              }}
+            >
+              <Target className="w-4 h-4" /> JD Match Studio
+            </a>
+          </div>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

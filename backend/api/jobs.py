@@ -207,3 +207,265 @@ async def compute_match_score(payload: dict = Body(...)):
     elif cand_exp < exp_req - 2:
         score = max(10, score - 15)
     return {"score": score, "overlap": list(p_skills & j_techs), "missing": list(j_techs - p_skills)}
+
+
+@router.post("/scan-portals")
+async def scan_portals(
+    payload: dict = Body(default={}),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Career-Ops 2C — 3-level portal scanner.
+
+    Scans tracked company career pages and Greenhouse/Ashby APIs for new jobs,
+    deduplicates against existing DB records, and ingests new postings.
+
+    Body (all optional):
+      {
+        "companies": ["Anthropic", "Stripe"],  # filter to specific companies; omit for all
+        "scan_level": 2,                        # 1=Playwright, 2=API only (default), 3=WebSearch
+        "title_filter": true                    # apply TITLE_FILTER rules (default true)
+      }
+    """
+    import asyncio
+    import httpx
+    from job_discovery.portals_config import (
+        get_enabled_companies, get_greenhouse_companies, filter_title
+    )
+
+    scan_level   = int(payload.get("scan_level", 2))
+    apply_filter = bool(payload.get("title_filter", True))
+    company_filter = [c.lower() for c in (payload.get("companies") or [])]
+
+    companies = get_enabled_companies()
+    if company_filter:
+        companies = [c for c in companies if c["company"].lower() in company_filter]
+
+    # Fetch existing URLs from DB to deduplicate
+    existing_result = await db.execute(select(VerifiedJob.application_link))
+    existing_links: set[str] = {row[0] for row in existing_result if row[0]}
+
+    discovered: list[dict] = []
+    new_count   = 0
+    dedup_count = 0
+
+    async def _fetch_greenhouse(company: dict) -> list[dict]:
+        api_url = company.get("api")
+        if not api_url:
+            return []
+        try:
+            async with httpx.AsyncClient(timeout=15) as client:
+                resp = await client.get(api_url, params={"content": "true"})
+                if not resp.is_success:
+                    return []
+                data = resp.json()
+                jobs_raw = data.get("jobs", [])
+                results = []
+                for j in jobs_raw[:50]:
+                    title = j.get("title", "")
+                    if apply_filter and not filter_title(title)["passes"]:
+                        continue
+                    link = j.get("absolute_url") or j.get("url") or ""
+                    results.append({
+                        "title":           title,
+                        "organization":    company["company"],
+                        "location":        j.get("location", {}).get("name", ""),
+                        "work_mode":       "hybrid",
+                        "description":     j.get("content", "")[:5000],
+                        "application_link": link,
+                        "career_page_link": company["careers_url"],
+                        "posted_date":     (j.get("updated_at") or "")[:10],
+                        "source":          "greenhouse_api",
+                        "verification_status": "VERIFIED",
+                    })
+                return results
+        except Exception as e:
+            logger.warning(f"Greenhouse scan failed for {company['company']}: {e}")
+            return []
+
+    async def _fetch_ashby(company: dict) -> list[dict]:
+        slug = company["careers_url"].rstrip("/").split("/")[-1]
+        api_url = f"https://api.ashbyhq.com/posting-api/job-board/{slug}"
+        try:
+            async with httpx.AsyncClient(timeout=15) as client:
+                resp = await client.get(api_url)
+                if not resp.is_success:
+                    return []
+                data = resp.json()
+                jobs_raw = data.get("jobs", [])
+                results = []
+                for j in jobs_raw[:50]:
+                    title = j.get("title", "")
+                    if apply_filter and not filter_title(title)["passes"]:
+                        continue
+                    link = j.get("jobUrl") or j.get("applyUrl") or ""
+                    dept = (j.get("department") or {}).get("name", "")
+                    loc  = ", ".join(l.get("name", "") for l in (j.get("location") or [{}]))
+                    results.append({
+                        "title":           title,
+                        "organization":    company["company"],
+                        "location":        loc,
+                        "work_mode":       "remote" if "remote" in loc.lower() else "hybrid",
+                        "description":     j.get("descriptionHtml", "")[:5000],
+                        "application_link": link,
+                        "career_page_link": company["careers_url"],
+                        "posted_date":     (j.get("publishedDate") or "")[:10],
+                        "source":          "ashby_api",
+                        "verification_status": "VERIFIED",
+                    })
+                return results
+        except Exception as e:
+            logger.warning(f"Ashby scan failed for {company['company']}: {e}")
+            return []
+
+    # Level 2 — API-based scan (Greenhouse + Ashby)
+    if scan_level >= 2:
+        tasks = []
+        for company in companies:
+            platform = company.get("platform")
+            if platform == "greenhouse" and company.get("api"):
+                tasks.append(_fetch_greenhouse(company))
+            elif platform == "ashby":
+                tasks.append(_fetch_ashby(company))
+
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+        for batch in results:
+            if isinstance(batch, list):
+                discovered.extend(batch)
+
+    # Deduplicate and ingest new jobs
+    for job_data in discovered:
+        link = job_data.get("application_link", "")
+        if link and link in existing_links:
+            dedup_count += 1
+            continue
+
+        try:
+            job = VerifiedJob(
+                title=job_data["title"],
+                organization=job_data["organization"],
+                location=job_data.get("location", ""),
+                work_mode=job_data.get("work_mode", "hybrid"),
+                description=job_data.get("description", ""),
+                application_link=job_data.get("application_link"),
+                career_page_link=job_data.get("career_page_link"),
+                posted_date=job_data.get("posted_date"),
+                verification_status=job_data.get("verification_status", "VERIFIED"),
+            )
+            db.add(job)
+            await db.flush()
+            new_count += 1
+            if link:
+                existing_links.add(link)
+        except Exception as e:
+            logger.warning(f"Failed to ingest job '{job_data.get('title')}': {e}")
+
+    return {
+        "scan_level": scan_level,
+        "companies_scanned": len(companies),
+        "total_discovered": len(discovered),
+        "new_ingested": new_count,
+        "duplicates_skipped": dedup_count,
+        "companies": [c["company"] for c in companies],
+    }
+
+
+@router.post("/batch-evaluate")
+async def batch_evaluate(
+    payload: dict = Body(...),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Batch evaluate multiple jobs using the Career-Ops 6-Block Evaluator.
+
+    Payload:
+      job_ids:     list[str]  — UUIDs of jobs to evaluate
+      resume_text: str        — Candidate's resume as plain text (min 50 chars)
+
+    Returns a list of { job_id, title, organization, score, archetype, evaluation }.
+    Evaluations run concurrently (up to 5 at a time).
+    """
+    import asyncio
+    from services.intelligence_tools import run_job_evaluator
+
+    job_ids = payload.get("job_ids", [])
+    resume_text = payload.get("resume_text", "")
+
+    if not job_ids:
+        return {"error": "job_ids list is required", "results": []}
+    if len(resume_text) < 50:
+        return {"error": "resume_text must be at least 50 characters", "results": []}
+
+    # Cap at 10 jobs per batch to avoid LLM cost explosion
+    job_ids = job_ids[:10]
+
+    # Fetch all jobs from DB
+    jobs_map = {}
+    for jid in job_ids:
+        try:
+            uid = uuid.UUID(jid)
+        except ValueError:
+            continue
+        result = await db.execute(select(VerifiedJob).where(VerifiedJob.id == uid))
+        job = result.scalar_one_or_none()
+        if job:
+            jobs_map[str(uid)] = job
+
+    if not jobs_map:
+        return {"error": "No valid jobs found for given IDs", "results": []}
+
+    # Build JD text for each job
+    async def evaluate_single(jid: str, job: VerifiedJob) -> dict:
+        jd = job.description or (
+            f"Role: {job.title}. Company: {job.organization}. "
+            f"Location: {job.location}. Work mode: {job.work_mode}. "
+            f"Experience: {job.experience_required}+ years. "
+            f"Technologies: {', '.join(job.technologies or [])}."
+        )
+        # Ensure JD meets minimum length
+        if len(jd) < 50:
+            jd += f" Salary: {job.salary_min or 0}-{job.salary_max or 0} {job.currency or 'USD'}."
+
+        try:
+            evaluation = await run_job_evaluator(jd, resume_text)
+            return {
+                "job_id": jid,
+                "title": job.title,
+                "organization": job.organization,
+                "score": evaluation.get("score", 0),
+                "archetype": (evaluation.get("block_a_summary") or {}).get("archetype", "Unknown"),
+                "evaluation": evaluation,
+                "status": "success",
+            }
+        except Exception as e:
+            logger.error(f"Batch evaluate failed for {jid}: {e}")
+            return {
+                "job_id": jid,
+                "title": job.title,
+                "organization": job.organization,
+                "score": 0,
+                "archetype": "Error",
+                "evaluation": None,
+                "status": "error",
+                "error": str(e),
+            }
+
+    # Semaphore to limit concurrency to 5
+    sem = asyncio.Semaphore(5)
+
+    async def sem_evaluate(jid: str, job: VerifiedJob) -> dict:
+        async with sem:
+            return await evaluate_single(jid, job)
+
+    tasks = [sem_evaluate(jid, job) for jid, job in jobs_map.items()]
+    results = await asyncio.gather(*tasks)
+
+    # Sort by score descending
+    results = sorted(results, key=lambda r: r.get("score", 0), reverse=True)
+
+    return {
+        "total": len(results),
+        "evaluated": sum(1 for r in results if r["status"] == "success"),
+        "results": results,
+    }
+

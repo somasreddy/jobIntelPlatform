@@ -370,12 +370,27 @@ export default function InterviewPrepPage() {
           <div className="flex items-center gap-2 text-indigo-400 text-sm font-medium mb-2">
             <Brain className="w-4 h-4" /> AI Interview Coach
           </div>
-          <h1 className="text-3xl font-bold text-white mb-2">
-            Interview <span className="gradient-text">Preparation</span>
-          </h1>
-          <p className="text-slate-400 text-sm max-w-2xl">
-            Click any domain below to instantly browse all questions for that topic — or enter your role and generate a personalised set.
-          </p>
+          <div className="flex items-start justify-between gap-4 flex-wrap">
+            <div>
+              <h1 className="text-3xl font-bold text-white mb-2">
+                Interview <span className="gradient-text">Preparation</span>
+              </h1>
+              <p className="text-slate-400 text-sm max-w-2xl">
+                Click any domain below to instantly browse all questions for that topic — or enter your role and generate a personalised set.
+              </p>
+            </div>
+            <a
+              href="/interview/simulator"
+              className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold shrink-0 transition-all"
+              style={{
+                background: "color-mix(in srgb, var(--accent) 15%, transparent)",
+                border: "1px solid var(--border-hover)",
+                color: "var(--accent-bright)",
+              }}
+            >
+              <Timer className="w-4 h-4" /> Live Simulator
+            </a>
+          </div>
         </div>
 
         {/* Clickable Domain Filter Chips */}

@@ -13,6 +13,7 @@ from services.intelligence_tools import (
     run_offer_negotiator,
     run_gap_killer,
     run_attack_plan,
+    run_job_evaluator,
 )
 
 router = APIRouter()
@@ -65,6 +66,11 @@ class AttackPlanRequest(BaseModel):
     target_role: str = Field(..., min_length=1, description="Target role title")
     resume_text: str = Field(..., min_length=50, description="Candidate's resume or background summary")
     location: str = Field(default="Remote", description="Preferred location or 'Remote'")
+
+
+class JobEvaluatorRequest(BaseModel):
+    job_description: str = Field(..., min_length=50, description="Full job description text")
+    resume_text: str = Field(..., min_length=50, description="Candidate's current resume as plain text")
 
 
 # ─── Endpoints ───────────────────────────────────────────────────────────────
@@ -121,3 +127,9 @@ async def gap_killer(req: GapKillerRequest):
 async def attack_plan(req: AttackPlanRequest):
     """Generate a hyper-specific 48-hour job search action plan."""
     return await run_attack_plan(req.target_role, req.resume_text, req.location)
+
+
+@router.post("/job-evaluator")
+async def job_evaluator(req: JobEvaluatorRequest):
+    """Execute the Career-Ops 6-Block Analysis (Role, Match, Level, Comp, Personalization, Interview)."""
+    return await run_job_evaluator(req.job_description, req.resume_text)

@@ -8,12 +8,11 @@ from sqlalchemy import select
 from pydantic import BaseModel
 
 from core.database import get_db
+from core.auth import get_current_user_id
 from models.database import CandidateProfile
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
-
-_DEMO_USER_ID = uuid.UUID("00000000-0000-0000-0000-000000000001")
 
 
 class ProfileUpsert(BaseModel):
@@ -58,10 +57,13 @@ def _profile_to_dict(p: CandidateProfile) -> dict:
 
 
 @router.get("/")
-async def get_profile(db: AsyncSession = Depends(get_db)):
+async def get_profile(
+    uid: uuid.UUID = Depends(get_current_user_id),
+    db: AsyncSession = Depends(get_db),
+):
     """Get the current user's profile from the database."""
     result = await db.execute(
-        select(CandidateProfile).where(CandidateProfile.user_id == _DEMO_USER_ID)
+        select(CandidateProfile).where(CandidateProfile.user_id == uid)
     )
     profile = result.scalar_one_or_none()
     if not profile:
@@ -70,10 +72,14 @@ async def get_profile(db: AsyncSession = Depends(get_db)):
 
 
 @router.put("/")
-async def upsert_profile(payload: ProfileUpsert, db: AsyncSession = Depends(get_db)):
+async def upsert_profile(
+    payload: ProfileUpsert,
+    uid: uuid.UUID = Depends(get_current_user_id),
+    db: AsyncSession = Depends(get_db),
+):
     """Create or update the current user's profile in the database."""
     result = await db.execute(
-        select(CandidateProfile).where(CandidateProfile.user_id == _DEMO_USER_ID)
+        select(CandidateProfile).where(CandidateProfile.user_id == uid)
     )
     profile = result.scalar_one_or_none()
 
@@ -83,7 +89,7 @@ async def upsert_profile(payload: ProfileUpsert, db: AsyncSession = Depends(get_
         for field, value in data.items():
             setattr(profile, field, value)
     else:
-        profile = CandidateProfile(user_id=_DEMO_USER_ID, **data)
+        profile = CandidateProfile(user_id=uid, **data)
         db.add(profile)
 
     await db.flush()
@@ -252,10 +258,13 @@ async def parse_resume_file(file: UploadFile = File(...)):
 
 
 @router.delete("/")
-async def delete_profile(db: AsyncSession = Depends(get_db)):
+async def delete_profile(
+    uid: uuid.UUID = Depends(get_current_user_id),
+    db: AsyncSession = Depends(get_db),
+):
     """Delete the current user's profile."""
     result = await db.execute(
-        select(CandidateProfile).where(CandidateProfile.user_id == _DEMO_USER_ID)
+        select(CandidateProfile).where(CandidateProfile.user_id == uid)
     )
     profile = result.scalar_one_or_none()
     if not profile:

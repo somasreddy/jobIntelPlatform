@@ -2,8 +2,8 @@
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 
-export default function InsightsRedirect() {
+export default function OutreachRedirect() {
   const router = useRouter();
-  useEffect(() => { router.replace("/intelligence"); }, [router]);
+  useEffect(() => { router.replace("/applications"); }, [router]);
   return null;
 }

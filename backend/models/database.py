@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 from sqlalchemy import (
-    String, Integer, Boolean, Text, DateTime, ForeignKey, func
+    String, Integer, Float, Boolean, Text, DateTime, ForeignKey, func
 )
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -122,6 +122,9 @@ class Application(Base):
     date_applied: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     follow_up_date: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     notes: Mapped[str | None] = mapped_column(Text)
+    evaluation_score: Mapped[float | None] = mapped_column(Float)
+    archetype: Mapped[str | None] = mapped_column(String(100))
+    evaluation_report: Mapped[dict | None] = mapped_column(JSONB, default=dict)
     generated_resume_url: Mapped[str | None] = mapped_column(Text)
     generated_cover_letter_url: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(
@@ -134,4 +137,26 @@ class Application(Base):
     job: Mapped["VerifiedJob | None"] = relationship(back_populates="applications")
     profile: Mapped["CandidateProfile | None"] = relationship(
         back_populates="applications"
+    )
+
+
+class MasterStory(Base):
+    """Interview Story Bank — STAR+Reflection stories accumulated across evaluations (career-ops)."""
+    __tablename__ = "master_stories"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False, index=True)
+    requirement: Mapped[str] = mapped_column(String(500), nullable=False)
+    story_theme: Mapped[str] = mapped_column(Text, nullable=False)
+    situation: Mapped[str | None] = mapped_column(Text)
+    task: Mapped[str | None] = mapped_column(Text)
+    action: Mapped[str | None] = mapped_column(Text)
+    result: Mapped[str | None] = mapped_column(Text)
+    reflection: Mapped[str | None] = mapped_column(Text)
+    archetype_tags: Mapped[list | None] = mapped_column(JSONB, default=list)
+    source_job: Mapped[str | None] = mapped_column(String(255))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
     )

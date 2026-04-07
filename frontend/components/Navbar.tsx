@@ -1,18 +1,18 @@
 "use client";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useState, useEffect } from "react";
 import { useProfile } from "@/lib/ProfileContext";
 import { useTheme } from "@/components/ThemeProvider";
 import ThemeSelector from "@/components/ThemeSelector";
 import { THEMES } from "@/lib/theme";
+import { useAuth } from "@/lib/AuthContext";
 import {
   LayoutDashboard,
   Briefcase,
   FileText,
-  TrendingUp,
-  CheckSquare,
-  BarChart2,
+  BarChart3,
+  Layers,
   Zap,
   Linkedin,
   Brain,
@@ -20,24 +20,31 @@ import {
   Menu,
   X,
   Crosshair,
+  Target,
+  LogIn,
+  LogOut,
+  DollarSign,
 } from "lucide-react";
 
 const navItems = [
-  { href: "/",              icon: LayoutDashboard, label: "Profile"          },
-  { href: "/jobs",          icon: Briefcase,       label: "Find Jobs"        },
-  { href: "/resume",        icon: FileText,        label: "Resume & ATS"     },
-  { href: "/applications",  icon: CheckSquare,     label: "Tracker"          },
-  { href: "/intelligence",  icon: TrendingUp,      label: "Intelligence"     },
-  { href: "/insights",      icon: BarChart2,       label: "Insights"         },
-  { href: "/interview",     icon: Brain,           label: "Interview Prep"   },
-  { href: "/linkedin",      icon: Linkedin,        label: "LinkedIn Enhancer"},
-  { href: "/power-tools",   icon: Crosshair,       label: "Power Tools"      },
+  { href: "/",             icon: LayoutDashboard, label: "Profile"          },
+  { href: "/jobs",         icon: Briefcase,       label: "Find Jobs"        },
+  { href: "/resume",       icon: FileText,        label: "Resume & ATS"     },
+  { href: "/applications", icon: Layers,          label: "Pipeline"         },
+  { href: "/campaign",     icon: Target,          label: "Campaign"         },
+  { href: "/intelligence", icon: BarChart3,       label: "Intelligence"     },
+  { href: "/interview",    icon: Brain,           label: "Interview Prep"   },
+  { href: "/linkedin",     icon: Linkedin,        label: "LinkedIn Enhancer"},
+  { href: "/negotiation",  icon: DollarSign,      label: "Negotiation"      },
+  { href: "/power-tools",  icon: Crosshair,       label: "Power Tools"      },
 ];
 
 export default function Navbar() {
   const path = usePathname();
+  const router = useRouter();
   const { profile } = useProfile();
-  const userName = profile?.name ?? "";
+  const { user, logout } = useAuth();
+  const userName = user?.name || profile?.name || "";
   const [themeOpen, setThemeOpen] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const { theme } = useTheme();
@@ -165,23 +172,41 @@ export default function Navbar() {
             >
               {initials}
             </div>
-            <div className="min-w-0">
+            <div className="min-w-0 flex-1">
               <p className="text-xs font-semibold text-white truncate">{userName}</p>
-              <p className="text-[10px] text-slate-400">Career Profile Active</p>
+              <p className="text-[10px] text-slate-400">{user ? "Signed in" : "Demo mode"}</p>
             </div>
+            {user ? (
+              <button
+                onClick={() => { logout(); router.push("/login"); }}
+                className="text-slate-500 hover:text-slate-300 transition-colors shrink-0"
+                title="Sign out"
+              >
+                <LogOut className="w-4 h-4" />
+              </button>
+            ) : null}
           </div>
         ) : (
-          <div
-            className="rounded-xl p-3"
-            style={{
-              background: "color-mix(in srgb, var(--accent-deep) 20%, transparent)",
-              border: "1px solid var(--border)",
-            }}
-          >
-            <p className="text-xs font-semibold" style={{ color: "var(--accent-bright)" }}>
-              AI-Powered Platform
-            </p>
-            <p className="text-[11px] text-slate-400 mt-0.5">Job Discovery · ATS · Intelligence</p>
+          <div className="space-y-2">
+            <div
+              className="rounded-xl p-3"
+              style={{
+                background: "color-mix(in srgb, var(--accent-deep) 20%, transparent)",
+                border: "1px solid var(--border)",
+              }}
+            >
+              <p className="text-xs font-semibold" style={{ color: "var(--accent-bright)" }}>
+                AI-Powered Platform
+              </p>
+              <p className="text-[11px] text-slate-400 mt-0.5">Job Discovery · ATS · Intelligence</p>
+            </div>
+            <Link
+              href="/login"
+              className="flex items-center justify-center gap-2 w-full py-2 rounded-xl text-xs font-medium transition-all"
+              style={{ border: "1px solid var(--border)", color: "var(--accent-bright)" }}
+            >
+              <LogIn className="w-3.5 h-3.5" /> Sign In
+            </Link>
           </div>
         )}
       </div>

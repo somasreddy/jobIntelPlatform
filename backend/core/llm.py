@@ -169,21 +169,27 @@ async def _execute_provider_call(provider: str, model: str | None, system_prompt
 
     elif p == "google":
         client = get_google_client()
-        target_model = model or settings.GOOGLE_MODEL
-        # New Google SDK pattern with retry handles
-        try:
-            response = client.models.generate_content(
-                model=target_model,
-                config=genai.types.GenerateContentConfig(system_instruction=system_prompt, max_output_tokens=max_tokens, temperature=temperature),
-                contents=user_prompt
+        target_model = model or settings.GOOGLE_MODEL or "gemini-2.0-flash"
+        from google.genai import types as genai_types
+
+        def _sync_google_call(mdl: str, sys_prompt: str, usr_prompt: str) -> str:
+            cfg = genai_types.GenerateContentConfig(
+                system_instruction=sys_prompt,
+                max_output_tokens=max_tokens,
+                temperature=temperature,
             )
-            return response.text
+            resp = client.models.generate_content(model=mdl, config=cfg, contents=usr_prompt)
+            return resp.text or ""
+
+        try:
+            return await asyncio.to_thread(_sync_google_call, target_model, system_prompt, user_prompt)
         except Exception as e:
-            # Fallback for deprecated models
-            if "not found" in str(e).lower():
-                response = client.models.generate_content(model="gemini-1.5-flash-latest", contents=user_prompt)
-                return response.text
-            raise e
+            err_lower = str(e).lower()
+            if any(k in err_lower for k in ("not found", "not supported", "deprecated")):
+                fallback_model = "gemini-2.0-flash"
+                logger.warning(f"Google model {target_model} unavailable, falling back to {fallback_model}")
+                return await asyncio.to_thread(_sync_google_call, fallback_model, system_prompt, user_prompt)
+            raise
 
     elif p == "deepseek":
         client = get_deepseek_client()
@@ -353,6 +359,12 @@ _SYNTHESIS_PROMPTS: dict[str, str] = {
         "Synthesize: the most specific target_companies with best insider tips, "
         "the most engaging and shareable linkedin_post, the most effective referral_outreach template, "
         "and the most actionable hour_by_hour breakdown. Return ONLY valid JSON."
+    ),
+    "job_evaluator": (
+        "You are an elite career strategist. Multiple AI models have performed a 6-Block Job Evaluation. "
+        "Synthesize the BEST analysis: most accurate archetype classification, most thorough strengths/gaps analysis, "
+        "strongest level strategy, most realistic compensation range, most impactful resume personalization edits, "
+        "and most insightful STAR+R interview stories. Resolve conflicting scores by averaging. Return ONLY valid JSON."
     ),
     "ats_gap": (
         "You are an ATS optimization expert. Multiple AI models have analyzed a skill gap. "

@@ -9,7 +9,7 @@ import {
   FileText, Mail, MessageSquare, Download, CheckCircle,
   TrendingUp, Sparkles, ExternalLink, ShieldCheck, Copy,
   Search, ThumbsUp, ThumbsDown, Zap, Users, BarChart3,
-  AlertTriangle, Star, MessageCircle
+  AlertTriangle, Star, MessageCircle, Radio, Loader2, BookOpen,
 } from "lucide-react";
 
 function formatSalary(min: number, max: number, currency: string): string {
@@ -32,6 +32,13 @@ export default function JobDetailPage() {
   const { profile: ctxProfile } = useProfile();
   const profile = ctxProfile ?? emptyProfile;
   const [activeTab, setActiveTab] = useState<"resume" | "cover" | "recruiter" | "company">("resume");
+  const [intelStream, setIntelStream] = useState("");
+  const [intelStreaming, setIntelStreaming] = useState(false);
+  const [intelDone, setIntelDone] = useState(false);
+  const [deepStream, setDeepStream] = useState("");
+  const [deepStreaming, setDeepStreaming] = useState(false);
+  const [deepDone, setDeepDone] = useState(false);
+  const [salaryEst, setSalaryEst] = useState<{min:number;mid:number;max:number;negotiation_tip?:string}|null>(null);
   const [generating, setGenerating] = useState(false);
   const [generated, setGenerated] = useState(false);
   const [generatedData, setGeneratedData] = useState<{
@@ -903,6 +910,97 @@ export default function JobDetailPage() {
                             </ul>
                           </div>
 
+                          {/* AI Deep Dive */}
+                          <div className="p-4 rounded-xl border border-cyan-500/20" style={{ background: "rgba(6,182,212,0.03)" }}>
+                            <div className="flex items-center justify-between mb-3">
+                              <p className="text-xs font-bold text-cyan-400 uppercase tracking-wider flex items-center gap-1.5">
+                                <Zap className="w-3.5 h-3.5" /> AI Insider Analysis
+                              </p>
+                              {!intelStreaming && !intelDone && (
+                                <button
+                                  onClick={async () => {
+                                    if (!job) return;
+                                    setIntelStreaming(true);
+                                    setIntelStream("");
+                                    setIntelDone(false);
+                                    try {
+                                      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/stream/hiring-decoder`, {
+                                        method: "POST",
+                                        headers: { "Content-Type": "application/json" },
+                                        body: JSON.stringify({
+                                          job: { title: job.title, organization: job.organization, description: job.description },
+                                          profile: { current_role: profile.currentRole, experience_years: profile.experienceYears, skills: profile.skills },
+                                        }),
+                                      });
+                                      if (!res.body) return;
+                                      const reader = res.body.getReader();
+                                      const dec = new TextDecoder();
+                                      let buf = "";
+                                      while (true) {
+                                        const { done, value } = await reader.read();
+                                        if (done) break;
+                                        buf += dec.decode(value, { stream: true });
+                                        const lines = buf.split("\n"); buf = lines.pop() ?? "";
+                                        for (const line of lines) {
+                                          if (!line.startsWith("data: ")) continue;
+                                          const raw = line.slice(6).trim();
+                                          if (raw === "[DONE]") { setIntelDone(true); continue; }
+                                          try { const p = JSON.parse(raw); if (p.token) setIntelStream(prev => prev + p.token); } catch { /* skip */ }
+                                        }
+                                      }
+                                      // Also fetch salary estimate
+                                      try {
+                                        const sr = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/salary/predict`, {
+                                          method: "POST",
+                                          headers: { "Content-Type": "application/json" },
+                                          body: JSON.stringify({ role: job.title, location: profile.currentLocation || "United States", experience_years: profile.experienceYears || 5 }),
+                                        });
+                                        if (sr.ok) setSalaryEst(await sr.json());
+                                      } catch { /* silent */ }
+                                    } catch { /* silent */ }
+                                    finally { setIntelStreaming(false); setIntelDone(true); }
+                                  }}
+                                  className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg font-medium transition-all"
+                                  style={{ background: "rgba(6,182,212,0.15)", border: "1px solid rgba(6,182,212,0.3)", color: "#67e8f9" }}
+                                >
+                                  <Radio className="w-3 h-3" /> Run AI Deep Dive
+                                </button>
+                              )}
+                              {intelStreaming && <span className="text-xs text-cyan-400 flex items-center gap-1"><Loader2 className="w-3 h-3 animate-spin" />Analyzing…</span>}
+                            </div>
+                            {!intelStream && !intelStreaming && (
+                              <p className="text-xs text-slate-500 italic">Click &ldquo;Run AI Deep Dive&rdquo; for an insider breakdown: what they&apos;re really looking for, hidden requirements, and how to position yourself.</p>
+                            )}
+                            {intelStream && (
+                              <div className="text-xs text-slate-300 leading-relaxed whitespace-pre-wrap max-h-[400px] overflow-y-auto font-mono" style={{ scrollbarWidth: "thin" }}>
+                                {intelStream}
+                                {intelStreaming && <span className="inline-block w-1.5 h-3 bg-cyan-400 animate-pulse ml-0.5 align-middle" />}
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Salary Estimate */}
+                          {salaryEst && (
+                            <div className="p-4 rounded-xl border border-emerald-500/20" style={{ background: "rgba(16,185,129,0.03)" }}>
+                              <p className="text-xs font-bold text-emerald-400 uppercase tracking-wider mb-3 flex items-center gap-1.5">
+                                <DollarSign className="w-3.5 h-3.5" /> Salary Estimate for This Role
+                              </p>
+                              <div className="grid grid-cols-3 gap-2 mb-2">
+                                {[
+                                  { label: "Floor", value: salaryEst.min },
+                                  { label: "Market", value: salaryEst.mid },
+                                  { label: "Target", value: salaryEst.max },
+                                ].map(({ label, value }) => (
+                                  <div key={label} className="text-center p-2 rounded-lg" style={{ background: "var(--bg-elevated)" }}>
+                                    <p className="text-[10px] text-slate-500">{label}</p>
+                                    <p className="text-sm font-bold text-white">${Math.round(value / 1000)}k</p>
+                                  </div>
+                                ))}
+                              </div>
+                              {salaryEst.negotiation_tip && <p className="text-[11px] text-emerald-300 mt-1">{salaryEst.negotiation_tip}</p>}
+                            </div>
+                          )}
+
                           {/* Culture Sentiment (mock Glassdoor-style) */}
                           <div className="p-4 rounded-xl border border-amber-500/20">
                             <p className="text-xs font-bold text-amber-400 uppercase tracking-wider mb-3 flex items-center gap-1.5">
@@ -928,6 +1026,89 @@ export default function JobDetailPage() {
                               ))}
                             </div>
                             <p className="text-[10px] text-slate-500 mt-3">* Derived from job signals. For verified reviews, check Glassdoor, Levels.fyi, or Blind.</p>
+                          </div>
+
+                          {/* Deep Research Brief */}
+                          <div className="p-4 rounded-xl border border-violet-500/20" style={{ background: "rgba(139,92,246,0.03)" }}>
+                            <div className="flex items-center justify-between mb-3">
+                              <p className="text-xs font-bold text-violet-400 uppercase tracking-wider flex items-center gap-1.5">
+                                <BookOpen className="w-3.5 h-3.5" /> Deep Research Brief
+                              </p>
+                              {!deepStreaming && !deepDone && (
+                                <button
+                                  onClick={async () => {
+                                    if (!job) return;
+                                    setDeepStreaming(true);
+                                    setDeepStream("");
+                                    setDeepDone(false);
+                                    try {
+                                      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/stream/deep-research`, {
+                                        method: "POST",
+                                        headers: { "Content-Type": "application/json" },
+                                        body: JSON.stringify({
+                                          company: job.organization,
+                                          role: job.title,
+                                          profile: {
+                                            name: profile.name,
+                                            current_role: profile.currentRole,
+                                            experience_years: profile.experienceYears,
+                                            skills: profile.skills,
+                                          },
+                                        }),
+                                      });
+                                      if (!res.body) return;
+                                      const reader = res.body.getReader();
+                                      const dec = new TextDecoder();
+                                      let buf = "";
+                                      while (true) {
+                                        const { done, value } = await reader.read();
+                                        if (done) break;
+                                        buf += dec.decode(value, { stream: true });
+                                        const lines = buf.split("\n"); buf = lines.pop() ?? "";
+                                        for (const line of lines) {
+                                          if (!line.startsWith("data: ")) continue;
+                                          const raw = line.slice(6).trim();
+                                          if (raw === "[DONE]") { setDeepDone(true); continue; }
+                                          try { const p = JSON.parse(raw); if (p.token) setDeepStream(prev => prev + p.token); } catch { /* skip */ }
+                                        }
+                                      }
+                                    } catch { /* silent */ }
+                                    finally { setDeepStreaming(false); setDeepDone(true); }
+                                  }}
+                                  className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg font-medium transition-all"
+                                  style={{ background: "rgba(139,92,246,0.15)", border: "1px solid rgba(139,92,246,0.3)", color: "#c4b5fd" }}
+                                >
+                                  <BookOpen className="w-3 h-3" /> Run Deep Research
+                                </button>
+                              )}
+                              {deepStreaming && (
+                                <span className="text-xs text-violet-400 flex items-center gap-1">
+                                  <Loader2 className="w-3 h-3 animate-spin" /> Researching…
+                                </span>
+                              )}
+                              {deepDone && (
+                                <button
+                                  onClick={() => { setDeepStream(""); setDeepDone(false); }}
+                                  className="text-[10px] text-slate-500 hover:text-slate-300 transition-colors"
+                                >
+                                  Reset
+                                </button>
+                              )}
+                            </div>
+                            {!deepStream && !deepStreaming && (
+                              <p className="text-xs text-slate-500 italic">
+                                6-axis company brief: AI strategy, recent moves, engineering culture, likely challenges, competitive landscape, and your candidate angle — all personalised to this role.
+                              </p>
+                            )}
+                            {deepStream && (
+                              <div
+                                className="text-xs text-slate-300 leading-relaxed whitespace-pre-wrap max-h-[600px] overflow-y-auto"
+                                style={{ scrollbarWidth: "thin" }}
+                              >
+                                {deepStream}
+                                {deepStreaming && <span className="inline-block w-1.5 h-3 bg-violet-400 animate-pulse ml-0.5 align-middle" />}
+                              </div>
+                            )}
                           </div>
                         </div>
                       );

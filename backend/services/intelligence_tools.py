@@ -215,6 +215,59 @@ Return ONLY valid JSON:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# 9. THE JOB EVALUATOR (CAREER-OPS 6-BLOCK)
+# ─────────────────────────────────────────────────────────────────────────────
+_JOB_EVALUATOR_SYSTEM = """You are an elite career strategist. Analyze the provided Job Description against the Candidate Resume using the 6-Block Analysis method.
+Return ONLY valid JSON:
+{
+  "score": 4.5,
+  "block_a_summary": {
+    "archetype": "Detected Archetype (e.g., FDE, PM, SA, LLMOps)",
+    "domain": "Platform/Agentic/ML/Enterprise...",
+    "level": "Junior/Mid/Senior/Staff",
+    "tldr": "1 sentence TL;DR"
+  },
+  "block_b_match": {
+    "strengths": ["Matched requirement 1 with CV line", "Matched requirement 2"],
+    "gaps": [
+      {
+        "gap": "Missing requirement",
+        "severity": "hard_blocker|nice_to_have",
+        "mitigation": "How to address it in interview/cover letter"
+      }
+    ]
+  },
+  "block_c_level": {
+    "natural_level": "Candidate's inferred level",
+    "strategy_sell_senior": "How to frame experience as a senior level",
+    "strategy_downlevel": "What to do if offered a lower title"
+  },
+  "block_d_comp": {
+    "estimated_range": "e.g., $150k - $200k based on market data",
+    "market_demand": "High/Medium/Low"
+  },
+  "block_e_personalization": [
+    {
+      "section": "Summary|Experience",
+      "current": "current text",
+      "proposed": "new text",
+      "rationale": "why"
+    }
+  ],
+  "block_f_interview": {
+    "star_stories": [
+      {
+        "requirement": "JD requirement addressed",
+        "story_theme": "Theme or hook to use",
+        "reflection": "What candidate learned (signals seniority)"
+      }
+    ],
+    "red_flags": ["Potential trap questions"]
+  }
+}"""
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Public async service functions
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -314,6 +367,15 @@ async def run_attack_plan(
     )
     raw = await smart_chat(_ATTACK_PLAN_SYSTEM, user, max_tokens=3000, task_type="attack_plan")
     return _parse_json(raw, _fallback_attack_plan(target_role))
+
+
+async def run_job_evaluator(job_description: str, resume_text: str) -> dict:
+    user = (
+        f"Job Description:\n\n{job_description}\n\n"
+        f"Candidate Background:\n\n{resume_text}"
+    )
+    raw = await smart_chat(_JOB_EVALUATOR_SYSTEM, user, max_tokens=4000, task_type="job_evaluator")
+    return _parse_json(raw, _fallback_job_evaluator())
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -515,4 +577,53 @@ def _fallback_attack_plan(role: str) -> dict:
             "Only applying through job boards and not doing direct outreach",
             "Sending generic messages instead of personalized ones",
         ],
+    }
+
+
+def _fallback_job_evaluator() -> dict:
+    return {
+        "score": 3.0,
+        "block_a_summary": {
+            "archetype": "General Software Engineering",
+            "domain": "Enterprise Tech",
+            "level": "Mid-to-Senior",
+            "tldr": "Standard engineering role with mixed requirements."
+        },
+        "block_b_match": {
+            "strengths": ["General programming experience", "Domain familiarity"],
+            "gaps": [
+                {
+                    "gap": "Specific proprietary technology mentioned in JD",
+                    "severity": "nice_to_have",
+                    "mitigation": "Highlight fast learning curve with adjacent tech."
+                }
+            ]
+        },
+        "block_c_level": {
+            "natural_level": "Mid-level",
+            "strategy_sell_senior": "Focus on system design contributions rather than just ticket execution.",
+            "strategy_downlevel": "Accept lower title if compensation is adjusted with clear promotion path."
+        },
+        "block_d_comp": {
+            "estimated_range": "Market average for locale",
+            "market_demand": "Medium"
+        },
+        "block_e_personalization": [
+            {
+                "section": "Summary",
+                "current": "Experienced developer...",
+                "proposed": "Product-minded developer with focus on delivery...",
+                "rationale": "Aligns better with the operational focus of the JD."
+            }
+        ],
+        "block_f_interview": {
+            "star_stories": [
+                {
+                    "requirement": "Cross-functional collaboration",
+                    "story_theme": "Time you helped product/design resolve a blocker",
+                    "reflection": "Learned that early communication prevents late technical debt."
+                }
+            ],
+            "red_flags": ["They might ask why you've only worked in X language so far."]
+        }
     }

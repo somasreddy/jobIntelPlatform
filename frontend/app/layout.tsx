@@ -4,6 +4,7 @@ import ThemeProvider from "@/components/ThemeProvider";
 import Navbar from "@/components/Navbar";
 import ProfileSidebar from "@/components/ProfileSidebar";
 import { ProfileProvider } from "@/lib/ProfileContext";
+import { AuthProvider } from "@/lib/AuthContext";
 import Footer from "@/components/Footer";
 
 export const metadata: Metadata = {
@@ -47,15 +48,16 @@ export default function RootLayout({
         <div className="orb orb-3" />
         <div className="orb orb-4" />
         <ThemeProvider>
-          <ProfileProvider>
-            <div style={{ position: "relative", zIndex: 1 }}>
-              <Navbar />
-              {children}
-              <ProfileSidebar />
-
-              <Footer />
-            </div>
-          </ProfileProvider>
+          <AuthProvider>
+            <ProfileProvider>
+              <div style={{ position: "relative", zIndex: 1 }}>
+                <Navbar />
+                {children}
+                <ProfileSidebar />
+                <Footer />
+              </div>
+            </ProfileProvider>
+          </AuthProvider>
         </ThemeProvider>
       </body>
     </html>

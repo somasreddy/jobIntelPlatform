@@ -4,7 +4,8 @@ import { createPortal } from "react-dom";
 import {
   X, Zap, Loader2, Check, Copy,
   Search, FileText, AlertTriangle, Linkedin, Mail,
-  DollarSign, Hourglass, Crosshair, Building2, MapPin, Clock
+  DollarSign, Hourglass, Crosshair, Building2, MapPin, Clock,
+  Target
 } from "lucide-react";
 import { Job } from "@/lib/types";
 import { useProfile } from "@/lib/ProfileContext";
@@ -351,6 +352,138 @@ function AttackPlanResult({ r }: { r: Record<string, unknown> }) {
   );
 }
 
+function JobEvaluatorResult({ r }: { r: Record<string, unknown> }) {
+  type Summary = { archetype?: string; domain?: string; level?: string; tldr?: string };
+  type Gap = { gap: string; severity: string; mitigation: string };
+  type Match = { strengths?: string[]; gaps?: Gap[] };
+  type Level = { natural_level?: string; strategy_sell_senior?: string; strategy_downlevel?: string };
+  type Comp = { estimated_range?: string; market_demand?: string };
+  type PersonalizationItem = { section?: string; current?: string; proposed?: string; rationale?: string };
+  type Story = { requirement?: string; story_theme?: string; reflection?: string };
+  type Interview = { star_stories?: Story[]; red_flags?: string[] };
+
+  const score = r.score as number | undefined;
+  const summary = r.block_a_summary as Summary | undefined;
+  const match = r.block_b_match as Match | undefined;
+  const level = r.block_c_level as Level | undefined;
+  const comp = r.block_d_comp as Comp | undefined;
+  const personalization = r.block_e_personalization as PersonalizationItem[] | undefined;
+  const interview = r.block_f_interview as Interview | undefined;
+
+  const scoreColor = (score ?? 0) >= 4 ? "text-green-400" : (score ?? 0) >= 3 ? "text-yellow-400" : "text-red-400";
+  const scoreBg = (score ?? 0) >= 4 ? "rgba(34,197,94,0.1)" : (score ?? 0) >= 3 ? "rgba(234,179,8,0.1)" : "rgba(239,68,68,0.1)";
+  const scoreBorder = (score ?? 0) >= 4 ? "rgba(34,197,94,0.25)" : (score ?? 0) >= 3 ? "rgba(234,179,8,0.25)" : "rgba(239,68,68,0.25)";
+
+  return (
+    <div className="space-y-5">
+      {/* Score Badge */}
+      {score != null && (
+        <div className="flex items-center gap-4 p-4 rounded-xl" style={{ background: scoreBg, border: `1px solid ${scoreBorder}` }}>
+          <div className={`text-4xl font-black ${scoreColor}`}>{score.toFixed(1)}</div>
+          <div>
+            <p className="text-sm text-slate-400">Overall Match Score</p>
+            <p className={`text-xs ${scoreColor}`}>{score >= 4 ? "Strong match — worth applying" : score >= 3 ? "Moderate match — review gaps" : "Weak match — proceed with caution"}</p>
+          </div>
+        </div>
+      )}
+
+      {/* Block A: Role Summary */}
+      {summary && (
+        <div className="rounded-xl p-4 border border-white/10 space-y-2" style={{ background: "var(--bg-elevated)" }}>
+          <p className="text-xs font-semibold text-indigo-400 uppercase tracking-wider">A · Role Summary</p>
+          <div className="grid grid-cols-2 gap-2 text-sm">
+            {summary.archetype && <div><span className="text-slate-500">Archetype:</span> <span className="text-white font-medium">{summary.archetype}</span></div>}
+            {summary.domain && <div><span className="text-slate-500">Domain:</span> <span className="text-white font-medium">{summary.domain}</span></div>}
+            {summary.level && <div><span className="text-slate-500">Level:</span> <span className="text-white font-medium">{summary.level}</span></div>}
+          </div>
+          {summary.tldr && <p className="text-sm text-slate-300 italic mt-1">{summary.tldr}</p>}
+        </div>
+      )}
+
+      {/* Block B: CV Match */}
+      {match && (
+        <div className="space-y-3">
+          <p className="text-xs font-semibold text-green-400 uppercase tracking-wider">B · CV Match</p>
+          <ListSection title="Strengths" items={match.strengths} color="text-green-400" />
+          {match.gaps && match.gaps.length > 0 && (
+            <div>
+              <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Gaps</p>
+              <div className="space-y-2">
+                {match.gaps.map((g, i) => (
+                  <div key={i} className="rounded-lg p-3 border border-white/5" style={{ background: "var(--bg-elevated)" }}>
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${g.severity === "hard_blocker" ? "bg-red-500/15 text-red-400" : "bg-yellow-500/15 text-yellow-400"}`}>
+                        {g.severity === "hard_blocker" ? "⛔ Blocker" : "⚠ Nice-to-have"}
+                      </span>
+                    </div>
+                    <p className="text-sm text-white font-medium">{g.gap}</p>
+                    <p className="text-xs text-slate-400 mt-1">💡 {g.mitigation}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Block C: Level Strategy */}
+      {level && (
+        <div className="rounded-xl p-4 border border-white/10 space-y-2" style={{ background: "var(--bg-elevated)" }}>
+          <p className="text-xs font-semibold text-violet-400 uppercase tracking-wider">C · Level Strategy</p>
+          {level.natural_level && <Section title="Your Natural Level" content={level.natural_level} />}
+          {level.strategy_sell_senior && <CopyBlock title="Sell Senior" content={level.strategy_sell_senior} />}
+          {level.strategy_downlevel && <CopyBlock title="If Downleveled" content={level.strategy_downlevel} />}
+        </div>
+      )}
+
+      {/* Block D: Comp & Demand */}
+      {comp && (
+        <div className="rounded-xl p-4 border border-white/10" style={{ background: "var(--bg-elevated)" }}>
+          <p className="text-xs font-semibold text-amber-400 uppercase tracking-wider mb-2">D · Compensation & Demand</p>
+          <div className="grid grid-cols-2 gap-3 text-sm">
+            {comp.estimated_range && <div><span className="text-slate-500">Range:</span> <span className="text-white font-semibold">{comp.estimated_range}</span></div>}
+            {comp.market_demand && <div><span className="text-slate-500">Demand:</span> <span className="text-white font-semibold">{comp.market_demand}</span></div>}
+          </div>
+        </div>
+      )}
+
+      {/* Block E: Personalization */}
+      {personalization && personalization.length > 0 && (
+        <div>
+          <p className="text-xs font-semibold text-cyan-400 uppercase tracking-wider mb-2">E · Resume Personalization</p>
+          <div className="space-y-2">
+            {personalization.map((p, i) => (
+              <div key={i} className="rounded-lg p-3 border border-white/5" style={{ background: "var(--bg-elevated)" }}>
+                <p className="text-xs text-slate-500 mb-1">{p.section}</p>
+                <div className="grid grid-cols-2 gap-3">
+                  <div><p className="text-[10px] text-red-400 uppercase mb-0.5">Current</p><p className="text-xs text-slate-400">{p.current}</p></div>
+                  <div><p className="text-[10px] text-green-400 uppercase mb-0.5">Proposed</p><p className="text-xs text-slate-300">{p.proposed}</p></div>
+                </div>
+                {p.rationale && <p className="text-[10px] text-slate-500 mt-1 italic">Why: {p.rationale}</p>}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Block F: Interview Prep */}
+      {interview && (
+        <div className="space-y-3">
+          <p className="text-xs font-semibold text-rose-400 uppercase tracking-wider">F · Interview Prep (STAR+R)</p>
+          {interview.star_stories?.map((s, i) => (
+            <div key={i} className="rounded-lg p-3 border border-white/5" style={{ background: "var(--bg-elevated)" }}>
+              <p className="text-xs text-slate-500 mb-0.5">Addresses: <span className="text-white">{s.requirement}</span></p>
+              <p className="text-sm text-slate-300">{s.story_theme}</p>
+              {s.reflection && <p className="text-xs text-indigo-400 mt-1 italic">Reflection: {s.reflection}</p>}
+            </div>
+          ))}
+          <ListSection title="Red-Flag Questions" items={interview.red_flags} color="text-rose-400" />
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Tool configs ─────────────────────────────────────────────────────────────
 
 const CORE_TOOLS = [
@@ -421,6 +554,14 @@ const EXTENDED_TOOLS = [
     glow: "rgba(239,68,68,0.3)",
     endpoint: "/api/intelligence-tools/attack-plan",
   },
+  {
+    id: "job-evaluator",
+    icon: Target,
+    title: "6-Block Evaluator",
+    color: "from-indigo-500 to-violet-600",
+    glow: "rgba(99,102,241,0.3)",
+    endpoint: "/api/intelligence-tools/job-evaluator",
+  },
 ];
 
 const ALL_TOOLS = [...CORE_TOOLS, ...EXTENDED_TOOLS];
@@ -489,6 +630,8 @@ export default function JobPowerToolsModal({ job, onClose }: Props) {
         };
       case "attack-plan":
         return { target_role: job.title, resume_text: resumeText || backgroundSummary, location: job.location };
+      case "job-evaluator":
+        return { job_description: jd, resume_text: resumeText || backgroundSummary };
       default:
         return { job_description: jd };
     }
@@ -564,7 +707,7 @@ export default function JobPowerToolsModal({ job, onClose }: Props) {
 
   const modal = (
     <div
-      className="fixed inset-0 z-[9999] flex items-center justify-center p-4"
+      className="fixed inset-0 z-9999 flex items-center justify-center p-4"
       style={{ background: "rgba(0,0,0,0.75)", backdropFilter: "blur(8px)" }}
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
     >
@@ -699,7 +842,7 @@ export default function JobPowerToolsModal({ job, onClose }: Props) {
                 {loading && (
                   <div className="flex flex-col items-center justify-center py-16 gap-4">
                     <div
-                      className={`w-12 h-12 rounded-2xl bg-gradient-to-br ${cfg.color} flex items-center justify-center`}
+                      className={`w-12 h-12 rounded-2xl bg-linear-to-br ${cfg.color} flex items-center justify-center`}
                       style={{ boxShadow: `0 8px 24px -4px ${cfg.glow}` }}
                     >
                       <Loader2 className="w-6 h-6 text-white animate-spin" />
@@ -730,7 +873,7 @@ export default function JobPowerToolsModal({ job, onClose }: Props) {
                 )}
                 {!loading && !result && !error && (
                   <div className="flex flex-col items-center justify-center py-16 gap-4 text-center">
-                    <div className={`w-12 h-12 rounded-2xl bg-gradient-to-br ${cfg.color} opacity-30 flex items-center justify-center`}>
+                    <div className={`w-12 h-12 rounded-2xl bg-linear-to-br ${cfg.color} opacity-30 flex items-center justify-center`}>
                       <cfg.icon className="w-6 h-6 text-white" />
                     </div>
                     <p className="text-slate-500 text-sm">Click ⚡ Re-run All to generate results</p>
@@ -746,6 +889,7 @@ export default function JobPowerToolsModal({ job, onClose }: Props) {
                     {cfg.id === "offer-negotiator" && <OfferNegotiatorResult r={result} />}
                     {cfg.id === "gap-killer" && <GapKillerResult r={result} />}
                     {cfg.id === "attack-plan" && <AttackPlanResult r={result} />}
+                    {cfg.id === "job-evaluator" && <JobEvaluatorResult r={result} />}
                   </div>
                 )}
               </div>
