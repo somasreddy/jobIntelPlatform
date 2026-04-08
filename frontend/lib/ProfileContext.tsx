@@ -49,9 +49,20 @@ function profileToDb(p: CandidateProfile): Record<string, unknown> {
   };
 }
 
+function getAuthHeaders(): Record<string, string> {
+  const token = typeof window !== "undefined" ? localStorage.getItem("ji_token") : null;
+  return {
+    "Content-Type": "application/json",
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+  };
+}
+
 async function fetchFromDB(): Promise<CandidateProfile | null> {
   try {
-    const res = await fetch(`${API}/api/profile/`, { cache: "no-store" });
+    const res = await fetch(`${API}/api/profile/`, {
+      cache: "no-store",
+      headers: getAuthHeaders(),
+    });
     if (!res.ok) return null;
     return dbToProfile(await res.json());
   } catch {
@@ -62,7 +73,7 @@ async function fetchFromDB(): Promise<CandidateProfile | null> {
 async function saveToDb(p: CandidateProfile): Promise<void> {
   await fetch(`${API}/api/profile/`, {
     method: "PUT",
-    headers: { "Content-Type": "application/json" },
+    headers: getAuthHeaders(),
     body: JSON.stringify(profileToDb(p)),
   });
 }
@@ -109,9 +120,14 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
     refreshProfile();
   }, [refreshProfile]);
 
-  // Sync across tabs: when another tab saves to localStorage, re-read it
+  // Sync across tabs and re-fetch from DB when user logs in
   useEffect(() => {
     const handler = (e: StorageEvent) => {
+      if (e.key === "ji_token" && e.newValue) {
+        // User just logged in — fetch their server profile with the new token
+        refreshProfile();
+        return;
+      }
       if (e.key === "candidateProfile" && e.newValue) {
         try {
           const updated = JSON.parse(e.newValue) as CandidateProfile;
@@ -121,7 +137,7 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
     };
     window.addEventListener("storage", handler);
     return () => window.removeEventListener("storage", handler);
-  }, []);
+  }, [refreshProfile]);
 
   const saveProfile = useCallback(async (p: CandidateProfile) => {
     // Optimistic update — all consumers see new profile immediately

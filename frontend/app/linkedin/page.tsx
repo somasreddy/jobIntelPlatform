@@ -179,7 +179,7 @@ export default function LinkedInEnhancerPage() {
             <p className="text-slate-400 text-sm mb-6">
               Set up your career profile first — we use your skills, experience, and role to generate personalised LinkedIn suggestions.
             </p>
-            <button onClick={() => router.push("/")} className="btn-primary text-sm px-6 py-2.5">
+            <button onClick={() => router.push("/profile")} className="btn-primary text-sm px-6 py-2.5">
               Set Up Profile
             </button>
           </div>

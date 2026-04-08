@@ -213,7 +213,7 @@ export default function JobsPage() {
             <p className="text-slate-400 text-sm mb-6">
               Complete your career profile first — we&apos;ll match you with verified jobs tailored to your skills and experience.
             </p>
-            <button onClick={() => router.push("/")} className="btn-primary text-sm px-6 py-2.5">
+            <button onClick={() => router.push("/profile")} className="btn-primary text-sm px-6 py-2.5">
               Set Up Profile
             </button>
           </div>

@@ -114,7 +114,7 @@ export default function ProfileSidebar() {
             <p className="text-xs text-slate-400 mt-1">Set up your profile to see your skills summary here</p>
           </div>
           <button
-            onClick={() => router.push("/")}
+            onClick={() => router.push("/profile")}
             className="text-xs px-4 py-2 rounded-xl font-medium transition-all flex items-center gap-1.5 mac-press"
             style={{ background: "color-mix(in srgb, var(--accent) 15%, transparent)", color: "var(--accent-bright)", border: "1px solid var(--border-hover)" }}
           >
@@ -372,7 +372,7 @@ export default function ProfileSidebar() {
       {/* Edit profile link */}
       <div className="px-4 py-3 mt-auto">
         <button
-          onClick={() => router.push("/")}
+          onClick={() => router.push("/profile")}
           className="w-full flex items-center justify-center gap-2 text-xs py-2 rounded-xl font-medium transition-all mac-press"
           style={{
             background: "color-mix(in srgb, var(--accent) 10%, transparent)",

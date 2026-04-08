@@ -1,5 +1,5 @@
 "use client";
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useProfile } from "@/lib/ProfileContext";
 import {
   DollarSign, ChevronRight, ChevronLeft, CheckCircle2,
@@ -87,11 +87,26 @@ export default function NegotiationPage() {
   const { profile } = useProfile();
   const [step, setStep] = useState<Step>("offer");
   const [offer, setOffer] = useState<OfferData>({ company: "", role: "", base: "", equity: "", bonus: "", benefits: "", start_date: "" });
-  const [market, setMarket] = useState<MarketData>({ current_salary: "", target_salary: "", competing_offers: "", location: "", experience_years: String(profile?.experienceYears ?? "") });
+  const [market, setMarket] = useState<MarketData>({ current_salary: "", target_salary: "", competing_offers: "", location: "", experience_years: "" });
   const [streamText, setStreamText] = useState("");
   const [streaming, setStreaming] = useState(false);
   const [streamDone, setStreamDone] = useState(false);
   const [error, setError] = useState("");
+
+  // Pre-fill from profile once loaded
+  useEffect(() => {
+    if (!profile) return;
+    setMarket(prev => ({
+      ...prev,
+      experience_years: prev.experience_years || String(profile.experienceYears || ""),
+      location: prev.location || profile.currentLocation || (profile.preferredLocations?.[0] ?? ""),
+      current_salary: prev.current_salary || (profile.currentSalary > 0 ? String(profile.currentSalary) : ""),
+    }));
+    setOffer(prev => ({
+      ...prev,
+      role: prev.role || profile.currentRole || "",
+    }));
+  }, [profile]);
 
   const setOfr = (k: keyof OfferData, v: string) => setOffer(o => ({ ...o, [k]: v }));
   const setMkt = (k: keyof MarketData, v: string) => setMarket(m => ({ ...m, [k]: v }));

@@ -1,19 +1,35 @@
 import time
 import logging
 from collections import defaultdict
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from core.config import settings
+from core.database import engine
+from models import database as _models   # noqa: F401 — ensures all models are registered
+from models.database import Base
 from api import (
     jobs, resume, applications, skill_gap, salary,
     recruiter, interview, profile, negotiation, stream,
     intelligence_tools, auth, evaluate, apply, campaign,
+    career_graph, company, learning, notifications, market,
+    insights, interview_analytics, portfolio, autopilot, digest,
 )
 
 logger = logging.getLogger(__name__)
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Create all SQLAlchemy-managed tables on startup (idempotent)."""
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    logger.info("Database tables ensured.")
+    yield
+
 
 app = FastAPI(
     title="Job Intelligence Platform API",
@@ -21,6 +37,7 @@ app = FastAPI(
     version="3.0.0",
     docs_url="/docs",
     redoc_url="/redoc",
+    lifespan=lifespan,
 )
 
 # ── CORS ──────────────────────────────────────────────────────────────────────
@@ -71,6 +88,21 @@ _LLM_PATHS = {
     "/api/apply/generate-answers",
     "/api/apply/voice-note-script",
     "/api/campaign/daily-todos",
+    "/api/career-graph/compute-health",
+    "/api/career-graph/fit-score",
+    "/api/market/radar",
+    "/api/market/salary-benchmark",
+    "/api/market/trending-skills",
+    "/api/market/role-demand",
+    "/api/company/enrich",
+    "/api/insights/rejection-analysis",
+    "/api/interview-analytics/mock-feedback",
+    "/api/interview-analytics/shadow-review",
+    "/api/learning/paths/generate",
+    "/api/portfolio/generate-bio",
+    "/api/autopilot/scan",
+    "/api/interview-analytics/mock-feedback",
+    "/api/interview-analytics/shadow-review",
 }
 
 
@@ -111,6 +143,16 @@ app.include_router(profile.router,           prefix="/api/profile",           ta
 app.include_router(negotiation.router,       prefix="/api/negotiation",       tags=["Negotiation"])
 app.include_router(stream.router,            prefix="/api/stream",            tags=["Streaming"])
 app.include_router(intelligence_tools.router, prefix="/api/intelligence-tools", tags=["Intelligence Tools"])
+app.include_router(career_graph.router,       prefix="/api/career-graph",       tags=["Career Graph"])
+app.include_router(company.router,            prefix="/api/company",            tags=["Company Intelligence"])
+app.include_router(learning.router,           prefix="/api/learning",           tags=["Learning Engine"])
+app.include_router(notifications.router,      prefix="/api/notifications",      tags=["Notifications"])
+app.include_router(market.router,               prefix="/api/market",               tags=["Market Radar"])
+app.include_router(insights.router,             prefix="/api/insights",             tags=["Insights"])
+app.include_router(interview_analytics.router,  prefix="/api/interview-analytics",  tags=["Interview Analytics"])
+app.include_router(portfolio.router,            prefix="/api/portfolio",            tags=["Portfolio"])
+app.include_router(autopilot.router,            prefix="/api/autopilot",            tags=["Autopilot"])
+app.include_router(digest.router,               prefix="/api/digest",               tags=["Digest"])
 
 
 # ── Health check ──────────────────────────────────────────────────────────────

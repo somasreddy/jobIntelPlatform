@@ -20,7 +20,7 @@ export default function LoginPage() {
     setError("");
     try {
       await login(email, password);
-      router.push("/");
+      router.push("/jobs");
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Login failed");
     } finally {

@@ -2,11 +2,13 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { useProfile } from "@/lib/ProfileContext";
+import { useAppData } from "@/lib/AppDataContext";
 import {
   Brain, ChevronRight, CheckCircle2,
   Star, BookmarkPlus, ArrowLeft, RotateCcw, Zap,
   AlertTriangle, Play, Pause, SkipForward, Trophy,
   TrendingUp, MessageSquare, Target, Lightbulb,
+  Mic, MicOff, Volume2, VolumeX,
 } from "lucide-react";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
@@ -94,6 +96,7 @@ const DEFAULT_ANSWER_SECS = 120;
 export default function InterviewSimulatorPage() {
   const router = useRouter();
   const { profile, loading } = useProfile();
+  const { refreshStories, authHeaders } = useAppData();
 
   // Setup state
   const [targetRole, setTargetRole] = useState("");
@@ -102,6 +105,8 @@ export default function InterviewSimulatorPage() {
   const [questionCount, setQuestionCount] = useState(5);
   const [questions, setQuestions] = useState<SimQuestion[]>([]);
   const [loadingQs, setLoadingQs] = useState(false);
+  const [interviewMode, setInterviewMode] = useState<"standard" | "case_study" | "stress_test" | "panel">("standard");
+  const [panelPersona, setPanelPersona] = useState<string>("Hiring Manager");
 
   // Simulation state
   const [phase, setPhase] = useState<Phase>("setup");
@@ -115,6 +120,90 @@ export default function InterviewSimulatorPage() {
 
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  // ── Voice state ────────────────────────────────────────────────────────────
+  const [isListening, setIsListening] = useState(false);
+  const [isSpeaking, setIsSpeaking] = useState(false);
+  const [voiceSupported, setVoiceSupported] = useState(false);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const recognitionRef = useRef<any>(null);
+
+  useEffect(() => {
+    // Check browser support
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const w = typeof window !== "undefined" ? (window as any) : null;
+    const SpeechRecognitionAPI = w && (w.SpeechRecognition || w.webkitSpeechRecognition);
+    setVoiceSupported(!!SpeechRecognitionAPI && typeof window !== "undefined" && "speechSynthesis" in window);
+  }, []);
+
+  const startListening = useCallback(() => {
+    if (isListening) {
+      recognitionRef.current?.stop();
+      setIsListening(false);
+      return;
+    }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const w = window as any;
+    const SpeechRecognitionAPI = w.SpeechRecognition || w.webkitSpeechRecognition;
+    if (!SpeechRecognitionAPI) return;
+
+    const recognition = new SpeechRecognitionAPI();
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    recognition.lang = "en-US";
+
+    let finalText = answer;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    recognition.onresult = (event: any) => {
+      let interim = "";
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        const transcript = event.results[i][0].transcript;
+        if (event.results[i].isFinal) {
+          finalText += (finalText ? " " : "") + transcript;
+        } else {
+          interim = transcript;
+        }
+      }
+      setAnswer(finalText + (interim ? " " + interim : ""));
+    };
+
+    recognition.onend = () => {
+      setIsListening(false);
+      setAnswer(prev => prev.trim());
+    };
+
+    recognition.onerror = () => {
+      setIsListening(false);
+    };
+
+    recognitionRef.current = recognition;
+    recognition.start();
+    setIsListening(true);
+  }, [isListening, answer]);
+
+  const speakQuestion = useCallback((text: string) => {
+    if (!("speechSynthesis" in window)) return;
+    window.speechSynthesis.cancel();
+    if (isSpeaking) {
+      setIsSpeaking(false);
+      return;
+    }
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.rate = 0.9;
+    utterance.pitch = 1;
+    utterance.onend = () => setIsSpeaking(false);
+    utterance.onerror = () => setIsSpeaking(false);
+    setIsSpeaking(true);
+    window.speechSynthesis.speak(utterance);
+  }, [isSpeaking]);
+
+  // Stop listening/speaking when phase changes
+  useEffect(() => {
+    recognitionRef.current?.stop();
+    setIsListening(false);
+    if ("speechSynthesis" in window) window.speechSynthesis.cancel();
+    setIsSpeaking(false);
+  }, [phase, currentIdx]);
 
   useEffect(() => {
     if (!loading && profile) setTargetRole(profile.currentRole ?? "");
@@ -153,7 +242,13 @@ export default function InterviewSimulatorPage() {
       const res = await fetch(`${apiUrl}/api/interview/questions`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ profile, target_role: targetRole, target_company: targetCompany }),
+        body: JSON.stringify({
+          profile,
+          target_role: targetRole,
+          target_company: targetCompany,
+          mode: interviewMode,
+          panel_persona: panelPersona,
+        }),
       });
       if (res.ok) {
         const data = await res.json();
@@ -174,6 +269,10 @@ export default function InterviewSimulatorPage() {
 
   // ── Simulation flow ────────────────────────────────────────────────────────
   const startSimulation = async () => {
+    // Stress test: shrink timer
+    if (interviewMode === "stress_test") {
+      setAnswerTimeSecs(60);
+    }
     await loadQuestions();
     setCurrentIdx(0);
     setRecords([]);
@@ -254,9 +353,9 @@ export default function InterviewSimulatorPage() {
     setSavingToBank(qId);
     try {
       const apiUrl = process.env.NEXT_PUBLIC_API_URL;
-      await fetch(`${apiUrl}/api/interview/stories`, {
+      const res = await fetch(`${apiUrl}/api/interview/stories`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: authHeaders(),
         body: JSON.stringify({
           title: record.question.question.slice(0, 80),
           situation: record.answer,
@@ -266,7 +365,10 @@ export default function InterviewSimulatorPage() {
           tags: [record.question.domain, record.question.type, record.question.difficulty],
         }),
       });
-      setSavedIds(prev => new Set([...prev, qId]));
+      if (res.ok) {
+        setSavedIds(prev => new Set([...prev, qId]));
+        refreshStories(); // sync to AppDataContext so Interview page sees it instantly
+      }
     } catch { /* silent */ }
     setSavingToBank(null);
   };
@@ -340,7 +442,7 @@ export default function InterviewSimulatorPage() {
             <Brain className="w-12 h-12 text-indigo-400 mx-auto mb-4" />
             <h2 className="text-white font-semibold text-xl mb-2">No profile found</h2>
             <p className="text-slate-400 text-sm mb-6">Set up your career profile first.</p>
-            <button onClick={() => router.push("/")} className="btn-primary text-sm px-6 py-2.5">Set Up Profile</button>
+            <button onClick={() => router.push("/profile")} className="btn-primary text-sm px-6 py-2.5">Set Up Profile</button>
           </div>
         </main>
       </div>
@@ -362,6 +464,13 @@ export default function InterviewSimulatorPage() {
           <div>
             <div className="flex items-center gap-2 text-indigo-400 text-xs font-medium mb-1">
               <Brain className="w-3.5 h-3.5" /> Interview Simulator
+              {interviewMode !== "standard" && (
+                <span className="ml-2 px-2 py-0.5 rounded-full text-[10px] font-bold"
+                  style={{ background: "var(--accent)", color: "white" }}>
+                  {interviewMode === "case_study" ? "📊 Case Study" :
+                   interviewMode === "stress_test" ? "⚡ Stress Test" : "👥 Panel"}
+                </span>
+              )}
             </div>
             <h1 className="text-2xl font-bold text-white">
               Live <span className="gradient-text">Mock Session</span>
@@ -427,6 +536,59 @@ export default function InterviewSimulatorPage() {
                 </div>
               </div>
 
+              {/* Interview Mode */}
+              <div className="mb-5">
+                <label className="block text-xs font-medium text-slate-400 mb-2">Interview Mode</label>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                  {[
+                    { value: "standard", label: "Standard", desc: "Behavioral & technical mix", emoji: "🎯" },
+                    { value: "case_study", label: "Case Study", desc: "Business problem solving", emoji: "📊" },
+                    { value: "stress_test", label: "Stress Test", desc: "Rapid-fire under pressure", emoji: "⚡" },
+                    { value: "panel", label: "Panel", desc: "Multi-persona interviewers", emoji: "👥" },
+                  ].map(mode => (
+                    <button
+                      key={mode.value}
+                      onClick={() => setInterviewMode(mode.value as typeof interviewMode)}
+                      className="p-3 rounded-xl text-left transition-all"
+                      style={{
+                        background: interviewMode === mode.value
+                          ? "color-mix(in srgb, var(--accent) 15%, transparent)"
+                          : "var(--bg-elevated)",
+                        border: `1px solid ${interviewMode === mode.value ? "var(--border-hover)" : "var(--border)"}`,
+                      }}>
+                      <div className="text-base mb-1">{mode.emoji}</div>
+                      <p className="text-xs font-semibold text-white">{mode.label}</p>
+                      <p className="text-[10px] text-slate-400 mt-0.5">{mode.desc}</p>
+                    </button>
+                  ))}
+                </div>
+                {interviewMode === "panel" && (
+                  <div className="mt-3">
+                    <label className="text-xs text-slate-400 mb-1 block">Current Interviewer Persona</label>
+                    <select
+                      className="input-field w-full"
+                      value={panelPersona}
+                      onChange={e => setPanelPersona(e.target.value)}>
+                      <option>Hiring Manager</option>
+                      <option>Technical Lead</option>
+                      <option>HR / Recruiter</option>
+                      <option>Executive / VP</option>
+                      <option>Peer Engineer</option>
+                    </select>
+                  </div>
+                )}
+                {interviewMode === "stress_test" && (
+                  <p className="text-[11px] text-amber-400 mt-2">
+                    ⚡ Stress Test: shorter time limits, rapid follow-ups, unexpected pivots. Stay calm!
+                  </p>
+                )}
+                {interviewMode === "case_study" && (
+                  <p className="text-[11px] text-slate-400 mt-2">
+                    📊 Case Study: you&apos;ll be asked to analyze business scenarios and present structured recommendations.
+                  </p>
+                )}
+              </div>
+
               {/* Rules */}
               <div className="rounded-xl p-4 mb-5" style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)" }}>
                 <p className="text-xs font-semibold text-slate-300 mb-2 flex items-center gap-1.5">
@@ -486,9 +648,24 @@ export default function InterviewSimulatorPage() {
                 </div>
               </div>
 
-              <h2 className="text-white text-lg font-semibold leading-snug mb-6">
-                {currentQ.question}
-              </h2>
+              <div className="flex items-start gap-3 mb-6">
+                <h2 className="text-white text-lg font-semibold leading-snug flex-1">
+                  {currentQ.question}
+                </h2>
+                {voiceSupported && (
+                  <button
+                    onClick={() => speakQuestion(currentQ.question)}
+                    title="Read question aloud"
+                    className="shrink-0 p-2 rounded-lg transition-all mt-0.5"
+                    style={{
+                      background: isSpeaking ? "color-mix(in srgb, var(--accent) 15%, transparent)" : "var(--bg-elevated)",
+                      border: `1px solid ${isSpeaking ? "var(--border-hover)" : "var(--border)"}`,
+                      color: isSpeaking ? "var(--accent-bright)" : "#64748b",
+                    }}>
+                    {isSpeaking ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
+                  </button>
+                )}
+              </div>
 
               {/* Hint */}
               <div className="rounded-xl p-3 mb-6" style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)" }}>
@@ -573,12 +750,48 @@ export default function InterviewSimulatorPage() {
                 </div>
               )}
 
+              {/* Voice + Read controls */}
+              {voiceSupported && (
+                <div className="flex items-center gap-2 mb-2">
+                  <button
+                    onClick={() => speakQuestion(currentQ.question)}
+                    title="Read question aloud"
+                    className="flex items-center gap-1.5 text-[11px] px-2.5 py-1.5 rounded-lg transition-all"
+                    style={{
+                      background: isSpeaking ? "color-mix(in srgb, var(--accent) 15%, transparent)" : "var(--bg-elevated)",
+                      border: `1px solid ${isSpeaking ? "var(--border-hover)" : "var(--border)"}`,
+                      color: isSpeaking ? "var(--accent-bright)" : "#64748b",
+                    }}>
+                    {isSpeaking ? <VolumeX className="w-3.5 h-3.5" /> : <Volume2 className="w-3.5 h-3.5" />}
+                    {isSpeaking ? "Stop" : "Read aloud"}
+                  </button>
+                  <button
+                    onClick={startListening}
+                    title={isListening ? "Stop voice input" : "Start voice input"}
+                    className="flex items-center gap-1.5 text-[11px] px-2.5 py-1.5 rounded-lg transition-all"
+                    style={{
+                      background: isListening ? "#ef444420" : "var(--bg-elevated)",
+                      border: `1px solid ${isListening ? "#ef4444" : "var(--border)"}`,
+                      color: isListening ? "#ef4444" : "#64748b",
+                    }}>
+                    {isListening ? <MicOff className="w-3.5 h-3.5" /> : <Mic className="w-3.5 h-3.5" />}
+                    {isListening ? "Stop recording" : "Voice input"}
+                  </button>
+                  {isListening && (
+                    <span className="flex items-center gap-1 text-[10px] text-red-400 animate-pulse">
+                      <span className="w-1.5 h-1.5 rounded-full bg-red-400" />
+                      Listening…
+                    </span>
+                  )}
+                </div>
+              )}
+
               {/* Answer textarea */}
               <textarea
                 ref={textareaRef}
                 className="input-field w-full resize-none text-sm leading-relaxed"
                 rows={8}
-                placeholder="Type your answer here… Use STAR format: Situation → Task → Action → Result. Include specific numbers, tools, and outcomes."
+                placeholder="Type your answer here… or use Voice Input above. Use STAR format: Situation → Task → Action → Result. Include specific numbers, tools, and outcomes."
                 value={answer}
                 onChange={e => setAnswer(e.target.value)}
               />

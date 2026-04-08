@@ -5,7 +5,10 @@ import Navbar from "@/components/Navbar";
 import ProfileSidebar from "@/components/ProfileSidebar";
 import { ProfileProvider } from "@/lib/ProfileContext";
 import { AuthProvider } from "@/lib/AuthContext";
+import { AppDataProvider } from "@/lib/AppDataContext";
 import Footer from "@/components/Footer";
+import AnalyticsProvider from "@/components/AnalyticsProvider";
+import PWAProvider from "@/components/PWAProvider";
 
 export const metadata: Metadata = {
   title: "JobIntel AI – Career Intelligence Platform",
@@ -50,12 +53,16 @@ export default function RootLayout({
         <ThemeProvider>
           <AuthProvider>
             <ProfileProvider>
-              <div style={{ position: "relative", zIndex: 1 }}>
-                <Navbar />
-                {children}
-                <ProfileSidebar />
-                <Footer />
-              </div>
+              <AppDataProvider>
+                <div style={{ position: "relative", zIndex: 1 }}>
+                  <AnalyticsProvider />
+                  <PWAProvider />
+                  <Navbar />
+                  {children}
+                  <ProfileSidebar />
+                  <Footer />
+                </div>
+              </AppDataProvider>
             </ProfileProvider>
           </AuthProvider>
         </ThemeProvider>

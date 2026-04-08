@@ -62,7 +62,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     } catch { /* network failure — stay in demo mode */ }
     setLoading(false);
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     const stored = localStorage.getItem(TOKEN_KEY);

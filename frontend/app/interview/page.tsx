@@ -3,13 +3,13 @@ import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useProfile } from "@/lib/ProfileContext";
 import { CandidateProfile } from "@/lib/types";
-import { getQuestionsForRole, getAllQuestionsForDomain, QuestionBankItem, ALL_DOMAINS } from "@/lib/questionBank";
+import { getQuestionsForRole, getAllQuestionsForDomain, QuestionBankItem, ALL_DOMAINS, ALL_BANK_QUESTIONS } from "@/lib/questionBank";
 import {
   Brain, Sparkles, ChevronDown, ChevronUp,
   MessageSquare, Code2, Users, Lightbulb, Target,
-  Star, UserCircle2, RefreshCw, ClipboardList, Trophy,
+  Star, RefreshCw, ClipboardList, Trophy,
   BookOpen, Cpu, GitMerge, Database, Cloud, Globe2, TestTube2, BarChart2,
-  Timer, Zap, Coffee, MousePointerClick, Shield,
+  Timer, Zap, Coffee, MousePointerClick, Shield, Eye,
 } from "lucide-react";
 
 // ─── Local interview question type (profile-personalised behavioral) ───────────
@@ -195,7 +195,7 @@ export default function InterviewPrepPage() {
   const { profile, loading } = useProfile();
   const [targetRole, setTargetRole] = useState("");
   const [targetCompany, setTargetCompany] = useState("");
-  const [questions, setQuestions] = useState<AnyQuestion[] | null>(null);
+  const [questions, setQuestions] = useState<AnyQuestion[] | null>(ALL_BANK_QUESTIONS);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [scores, setScores] = useState<Record<string, number>>({});
@@ -259,7 +259,7 @@ export default function InterviewPrepPage() {
   };
 
   const clearAll = () => {
-    setQuestions(null);
+    setQuestions(ALL_BANK_QUESTIONS);
     setFilterDomain("all");
     setFilterType("all");
     setExpanded({});
@@ -345,22 +345,7 @@ export default function InterviewPrepPage() {
     ? Math.round(Object.values(scores).reduce((a, b) => a + b, 0) / completedCount)
     : 0;
 
-  if (!loading && !profile) {
-    return (
-      <div className="flex min-h-screen bg-transparent">
-        <main className="md:ml-64 xl:mr-72 flex-1 px-4 md:px-8 pt-20 md:pt-8 pb-8 flex items-center justify-center">
-          <div className="text-center max-w-sm">
-            <div className="w-16 h-16 rounded-full bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center mx-auto mb-4">
-              <UserCircle2 className="w-8 h-8 text-indigo-400" />
-            </div>
-            <h2 className="text-white font-semibold text-xl mb-2">No profile found</h2>
-            <p className="text-slate-400 text-sm mb-6">Set up your career profile first to get personalised interview questions.</p>
-            <button onClick={() => router.push("/")} className="btn-primary text-sm px-6 py-2.5">Set Up Profile</button>
-          </div>
-        </main>
-      </div>
-    );
-  }
+  // No profile? Still show the full question bank — just disable personalized generation.
 
   return (
     <div className="flex min-h-screen bg-transparent">
@@ -376,20 +361,33 @@ export default function InterviewPrepPage() {
                 Interview <span className="gradient-text">Preparation</span>
               </h1>
               <p className="text-slate-400 text-sm max-w-2xl">
-                Click any domain below to instantly browse all questions for that topic — or enter your role and generate a personalised set.
+                All questions from the bank are shown below. Filter by domain or type, or generate a personalized set tailored to your role and skills.
               </p>
             </div>
-            <a
-              href="/interview/simulator"
-              className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold shrink-0 transition-all"
-              style={{
-                background: "color-mix(in srgb, var(--accent) 15%, transparent)",
-                border: "1px solid var(--border-hover)",
-                color: "var(--accent-bright)",
-              }}
-            >
-              <Timer className="w-4 h-4" /> Live Simulator
-            </a>
+            <div className="flex gap-2">
+              <a
+                href="/interview/shadow-review"
+                className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold shrink-0 transition-all"
+                style={{
+                  background: "rgba(16,185,129,0.12)",
+                  border: "1px solid rgba(16,185,129,0.25)",
+                  color: "#10b981",
+                }}
+              >
+                <Eye className="w-4 h-4" /> Shadow Review
+              </a>
+              <a
+                href="/interview/simulator"
+                className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold shrink-0 transition-all"
+                style={{
+                  background: "color-mix(in srgb, var(--accent) 15%, transparent)",
+                  border: "1px solid var(--border-hover)",
+                  color: "var(--accent-bright)",
+                }}
+              >
+                <Timer className="w-4 h-4" /> Live Simulator
+              </a>
+            </div>
           </div>
         </div>
 
@@ -452,12 +450,13 @@ export default function InterviewPrepPage() {
             <div className="flex items-end gap-2">
               <button
                 onClick={() => handleGenerate()}
-                disabled={generating}
-                className="btn-primary flex-1 flex items-center justify-center gap-2 text-sm"
+                disabled={generating || !profile}
+                title={!profile ? "Set up your profile first for personalized questions" : "Generate questions tailored to your role and skills"}
+                className="btn-primary flex-1 flex items-center justify-center gap-2 text-sm disabled:opacity-50"
               >
                 {generating
                   ? <><RefreshCw className="w-4 h-4 animate-spin" /> Generating…</>
-                  : <><Sparkles className="w-4 h-4" /> Generate Questions</>}
+                  : <><Sparkles className="w-4 h-4" /> Generate Personalized Set</>}
               </button>
               {questions && !generating && (
                 <>
@@ -487,14 +486,20 @@ export default function InterviewPrepPage() {
               )}
             </div>
           </div>
-          <p className="text-[11px] text-slate-500">
-            Profile: <span className="text-slate-300">{profile?.name || "—"}</span>
-            {" · "}<span className="text-slate-300">{profile?.experienceYears}yr exp</span>
-            {" · "}<span className="text-slate-300">{(profile?.skills ?? []).slice(0, 3).join(", ")}</span>
-            {profile?.resumeText && !profile.resumeText.startsWith("[Resume file:") && (
-              <span className="text-emerald-400 ml-2">· Resume enriched ✓</span>
-            )}
-          </p>
+          {profile ? (
+            <p className="text-[11px] text-slate-500">
+              Profile: <span className="text-slate-300">{profile.name || "—"}</span>
+              {" · "}<span className="text-slate-300">{profile.experienceYears}yr exp</span>
+              {" · "}<span className="text-slate-300">{(profile.skills ?? []).slice(0, 3).join(", ")}</span>
+              {profile.resumeText && !profile.resumeText.startsWith("[Resume file:") && (
+                <span className="text-emerald-400 ml-2">· Resume enriched ✓</span>
+              )}
+            </p>
+          ) : (
+            <p className="text-[11px] text-amber-400/80">
+              ⚠ <button onClick={() => router.push("/profile")} className="underline hover:text-amber-300 transition-colors">Set up your profile</button> to generate a personalized question set tailored to your role and skills.
+            </p>
+          )}
         </div>
 
         {/* Progress bar */}

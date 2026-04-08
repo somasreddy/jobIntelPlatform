@@ -8,9 +8,12 @@ from sqlalchemy import select, func
 
 from core.database import get_db
 from core.config import settings
-from models.database import VerifiedJob
+from core.auth import get_current_user_id
+from models.database import VerifiedJob, CandidateProfile, CareerGoal
 from models.schemas import JobCreate
 from job_discovery.service_v2 import JobDiscoveryService
+from services.fit_score import compute_fit_score
+from services.job_intel import compute_intel_flags
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -52,8 +55,10 @@ async def get_jobs(
     skip: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=200),
     db: AsyncSession = Depends(get_db),
+    user_id: uuid.UUID = Depends(get_current_user_id),
 ):
     """Get all discovered jobs with optional filters. Only returns jobs from the last 7 days."""
+    from collections import Counter
     cutoff = datetime.now(timezone.utc) - timedelta(days=7)
     stmt = select(VerifiedJob).where(VerifiedJob.created_at >= cutoff)
     if verified_only:
@@ -68,7 +73,8 @@ async def get_jobs(
         )
     stmt = stmt.order_by(VerifiedJob.created_at.desc()).offset(skip).limit(limit)
     result = await db.execute(stmt)
-    rows = [_row_to_dict(j) for j in result.scalars().all()]
+    job_objs = result.scalars().all()
+    rows = [_row_to_dict(j) for j in job_objs]
 
     # Post-filter: tech tag
     if tech and tech != "All":
@@ -79,6 +85,69 @@ async def get_jobs(
     # Post-filter: minimum match score
     if min_match_score > 0:
         rows = [r for r in rows if (r.get("matchScore") or 0) >= min_match_score]
+
+    # ── Attach fit scores using the user's live profile ──────────────────────
+    try:
+        profile_r = await db.execute(
+            select(CandidateProfile).where(CandidateProfile.user_id == user_id)
+        )
+        profile = profile_r.scalar_one_or_none()
+
+        goal_r = await db.execute(
+            select(CareerGoal).where(CareerGoal.user_id == user_id, CareerGoal.is_active == True)
+        )
+        goal = goal_r.scalar_one_or_none()
+
+        if profile:
+            for row in rows:
+                fit = compute_fit_score(
+                    user_skills=list(profile.skills or []),
+                    user_frameworks=list(profile.frameworks or []),
+                    user_languages=list(profile.languages or []),
+                    user_experience_years=profile.experience_years,
+                    user_preferred_locations=list(profile.preferred_locations or []),
+                    user_work_mode=profile.work_mode,
+                    user_current_salary=profile.current_salary,
+                    user_target_role=goal.target_role if goal else None,
+                    user_target_salary_min=goal.target_salary_min if goal else None,
+                    job_title=row.get("title", ""),
+                    job_description=row.get("description", ""),
+                    job_requirements=row.get("technologies") or [],
+                    job_experience_required=row.get("experienceRequired"),
+                    job_location=row.get("location"),
+                    job_work_mode=row.get("workMode"),
+                    job_salary_min=row.get("salaryMin"),
+                    job_salary_max=row.get("salaryMax"),
+                )
+                row["fitScore"] = fit["fit_score"]
+                row["fitBadge"] = fit["badge"]
+    except Exception as exc:
+        logger.warning(f"Fit score computation skipped: {exc}")
+
+    # ── Attach intel flags ────────────────────────────────────────────────────
+    try:
+        org_counts = Counter(j.organization or "" for j in job_objs)
+        job_obj_map = {str(j.id): j for j in job_objs}
+        for row in rows:
+            jobj = job_obj_map.get(row["id"])
+            if jobj:
+                flags = compute_intel_flags(
+                    job_id=str(jobj.id),
+                    title=jobj.title or "",
+                    organization=jobj.organization or "",
+                    description=jobj.description,
+                    application_link=jobj.application_link,
+                    salary_min=jobj.salary_min,
+                    salary_max=jobj.salary_max,
+                    work_mode=jobj.work_mode,
+                    requirements=list(jobj.requirements or []) + list(jobj.technologies or []),
+                    created_at=jobj.created_at,
+                    posted_date=jobj.posted_date,
+                    org_recent_count=org_counts.get(jobj.organization or "", 1),
+                )
+                row.update(flags)
+    except Exception as exc:
+        logger.warning(f"Intel flags computation skipped: {exc}")
 
     return rows
 

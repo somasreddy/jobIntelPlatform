@@ -493,7 +493,8 @@ async def stream_offer_negotiator(payload: Dict[str, Any] = Body(...)):
 
     competing_str = ""
     if competing:
-        competing_str = f"\nCompeting offers: {', '.join([f\"{o.get('company','?')} ${o.get('base',0)}k\" for o in competing[:3]])}"
+        parts = [f"{o.get('company', '?')} ${o.get('base', 0)}k" for o in competing[:3]]
+        competing_str = f"\nCompeting offers: {', '.join(parts)}"
 
     user_prompt = (
         f"Offer from: {offer.get('company', 'Company')}\n"

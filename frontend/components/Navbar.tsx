@@ -5,12 +5,12 @@ import { useState, useEffect } from "react";
 import { useProfile } from "@/lib/ProfileContext";
 import { useTheme } from "@/components/ThemeProvider";
 import ThemeSelector from "@/components/ThemeSelector";
+import NotificationBell from "@/components/NotificationBell";
 import { THEMES } from "@/lib/theme";
 import { useAuth } from "@/lib/AuthContext";
 import {
   LayoutDashboard,
   Briefcase,
-  FileText,
   BarChart3,
   Layers,
   Zap,
@@ -24,19 +24,30 @@ import {
   LogIn,
   LogOut,
   DollarSign,
+  Activity,
+  BookOpen,
+  Radar,
+  PieChart,
+  Bot,
+  Globe,
 } from "lucide-react";
 
 const navItems = [
-  { href: "/",             icon: LayoutDashboard, label: "Profile"          },
-  { href: "/jobs",         icon: Briefcase,       label: "Find Jobs"        },
-  { href: "/resume",       icon: FileText,        label: "Resume & ATS"     },
-  { href: "/applications", icon: Layers,          label: "Pipeline"         },
-  { href: "/campaign",     icon: Target,          label: "Campaign"         },
-  { href: "/intelligence", icon: BarChart3,       label: "Intelligence"     },
-  { href: "/interview",    icon: Brain,           label: "Interview Prep"   },
-  { href: "/linkedin",     icon: Linkedin,        label: "LinkedIn Enhancer"},
-  { href: "/negotiation",  icon: DollarSign,      label: "Negotiation"      },
-  { href: "/power-tools",  icon: Crosshair,       label: "Power Tools"      },
+  { href: "/jobs",          icon: Briefcase,       label: "Find Jobs"        },
+  { href: "/profile",       icon: LayoutDashboard, label: "Profile & Resume" },
+  { href: "/career-graph",  icon: Activity,        label: "Career Graph"     },
+  { href: "/applications",  icon: Layers,          label: "Pipeline"         },
+  { href: "/campaign",      icon: Target,          label: "Campaign"         },
+  { href: "/autopilot",     icon: Bot,             label: "Autopilot"        },
+  { href: "/learn",         icon: BookOpen,        label: "Learning Engine"  },
+  { href: "/market-radar",  icon: BarChart3,       label: "Market Radar"     },
+  { href: "/insights",      icon: PieChart,        label: "Insights"         },
+  { href: "/intelligence",  icon: Crosshair,       label: "Intelligence"     },
+  { href: "/interview",     icon: Brain,           label: "Interview Prep"   },
+  { href: "/linkedin",      icon: Linkedin,        label: "LinkedIn Enhancer"},
+  { href: "/negotiation",   icon: DollarSign,      label: "Negotiation"      },
+  { href: "/portfolio",     icon: Globe,           label: "Portfolio"        },
+  { href: "/power-tools",   icon: Radar,           label: "Power Tools"      },
 ];
 
 export default function Navbar() {
@@ -125,6 +136,10 @@ export default function Navbar() {
 
       {/* Footer */}
       <div className="px-4 pb-4 pt-2 space-y-2" style={{ borderTop: "1px solid var(--border)" }}>
+        {/* Notifications */}
+        <div className="flex justify-end px-1">
+          <NotificationBell />
+        </div>
         {/* Theme picker button */}
         <div className="relative">
           <button

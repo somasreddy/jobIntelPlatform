@@ -1,6 +1,6 @@
 "use client";
-import { mockApplications, mockJobs } from "@/lib/mockData";
-import { ApplicationStatus, Application } from "@/lib/types";
+import { ApplicationStatus } from "@/lib/types";
+import { useAppData } from "@/lib/AppDataContext";
 import {
   Building2, ArrowUpRight, Bell, BellOff, AlertCircle,
   Mail, Plus, Trash2, Edit3, CheckCircle2, Clock, AlertTriangle,
@@ -10,7 +10,6 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useState, useEffect, useMemo } from "react";
-import { getSavedJobIds } from "@/lib/profile";
 
 // ─── Application Tracker types ────────────────────────────────────────────────
 const COLUMNS: { id: ApplicationStatus; title: string; color: string }[] = [
@@ -212,35 +211,23 @@ function ContactRow({ contact, onEdit, onDelete, onStatusChange, onToggleFollowU
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 export default function PipelinePage() {
+  const { applications: apps, moveApplication } = useAppData();
   const [activeTab, setActiveTab] = useState<"applications" | "outreach">("applications");
 
   // ── Applications state ──────────────────────────────────────────────────────
-  const [apps, setApps] = useState<Application[]>(mockApplications);
   const [followUpDates, setFollowUpDates] = useState<Record<string, string>>({});
   const [editingFollowUp, setEditingFollowUp] = useState<string | null>(null);
   const today = new Date().toISOString().split("T")[0];
 
   useEffect(() => {
     setFollowUpDates(loadFollowUpDates());
-    const savedIds = getSavedJobIds();
-    const existingJobIds = new Set(mockApplications.map(a => a.jobId));
-    const savedApps: Application[] = savedIds
-      .filter(id => !existingJobIds.has(id))
-      .map(id => { const job = mockJobs.find(j => j.id === id); if (!job) return null; return { id: `saved-${id}`, jobId: id, job, status: "Saved" as ApplicationStatus, dateApplied: new Date().toISOString().split("T")[0] }; })
-      .filter(Boolean) as Application[];
-    const merged = [...mockApplications, ...savedApps];
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL;
-    if (!apiUrl) { setApps(merged); return; }
-    fetch(`${apiUrl}/api/applications/`).then(r => r.ok ? r.json() : null).then(data => { if (Array.isArray(data) && data.length > 0) setApps(data); else setApps(merged); }).catch(() => setApps(merged));
   }, []);
 
   const handleDragStart = (e: React.DragEvent, id: string) => { e.dataTransfer.setData("applicationId", id); };
   const handleDrop = (e: React.DragEvent, status: ApplicationStatus) => {
     e.preventDefault();
     const id = e.dataTransfer.getData("applicationId");
-    setApps(prev => prev.map(a => a.id === id ? { ...a, status } : a));
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL;
-    if (apiUrl) fetch(`${apiUrl}/api/applications/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status }) }).catch(() => {});
+    moveApplication(id, status);
   };
   const handleSetFollowUp = (appId: string, date: string) => {
     const updated = { ...followUpDates, [appId]: date };

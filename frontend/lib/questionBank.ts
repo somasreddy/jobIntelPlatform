@@ -33403,7 +33403,7 @@ site:target.com filetype:sql OR filetype:env OR filetype:log  → Google dorking
 
 // ─── Role-based question selector ─────────────────────────────────────────────
 
-const ALL_BANK_QUESTIONS: QuestionBankItem[] = [
+export const ALL_BANK_QUESTIONS: QuestionBankItem[] = [
   ...DSA_QUESTIONS,
   ...SYSTEM_DESIGN_QUESTIONS,
   ...CICD_DEVOPS_QUESTIONS,

@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Offline – JobIntel AI</title>
+  <style>
+    body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+           background: #0f172a; color: #f1f5f9; display: flex; align-items: center;
+           justify-content: center; min-height: 100vh; }
+    .card { text-align: center; padding: 40px; max-width: 380px; }
+    .icon { font-size: 56px; margin-bottom: 20px; }
+    h1 { font-size: 22px; font-weight: 700; margin: 0 0 10px; }
+    p { color: #94a3b8; font-size: 14px; line-height: 1.6; margin: 0 0 24px; }
+    button { background: #6366f1; color: white; border: none; padding: 12px 28px;
+             border-radius: 12px; font-size: 14px; font-weight: 600; cursor: pointer; }
+    button:hover { background: #818cf8; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="icon">⚡</div>
+    <h1>You're offline</h1>
+    <p>JobIntel AI needs a connection to fetch real-time jobs, AI tools, and your career data. Check your network and try again.</p>
+    <button onclick="window.location.reload()">Retry</button>
+  </div>
+</body>
+</html>

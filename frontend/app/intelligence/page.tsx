@@ -167,7 +167,7 @@ export default function IntelligencePage() {
   const [data, setData] = useState<MarketData>(FALLBACK);
   const [marketLoading, setMarketLoading] = useState(true);
   const [isFallback, setIsFallback] = useState(false);
-  const [salaryQuery, setSalaryQuery] = useState({ role: "Senior AI Engineer", location: "United States", experience_years: 7 });
+  const [salaryQuery, setSalaryQuery] = useState({ role: "", location: "", experience_years: 5 });
   const [salaryResult, setSalaryResult] = useState<Record<string, unknown> | null>(null);
   const [salaryLoading, setSalaryLoading] = useState(false);
 
@@ -232,6 +232,16 @@ export default function IntelligencePage() {
   };
 
   useEffect(() => { fetchMarketData(); }, [fetchMarketData]);
+
+  // Pre-fill salary explorer from profile
+  useEffect(() => {
+    if (!profile) return;
+    setSalaryQuery(q => ({
+      role: q.role || profile.currentRole || "Senior Software Engineer",
+      location: q.location || profile.preferredLocations?.[0] || profile.currentLocation || "United States",
+      experience_years: q.experience_years === 5 ? (profile.experienceYears || 5) : q.experience_years,
+    }));
+  }, [profile]);
 
   // ── Personal salary fetch ───────────────────────────────────────────────────
   const fetchPersonalSalary = useCallback(async () => {
@@ -500,7 +510,7 @@ export default function IntelligencePage() {
                 </div>
                 <h2 className="text-white font-semibold text-xl mb-2">No profile found</h2>
                 <p className="text-slate-400 text-sm mb-6">Set up your career profile to get personalised salary benchmarks.</p>
-                <button onClick={() => router.push("/")} className="btn-primary text-sm px-6 py-2.5">Set Up Profile</button>
+                <button onClick={() => router.push("/profile")} className="btn-primary text-sm px-6 py-2.5">Set Up Profile</button>
               </div>
             ) : (
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

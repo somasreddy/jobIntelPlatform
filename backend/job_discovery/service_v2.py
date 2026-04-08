@@ -267,6 +267,7 @@ class JobDiscoveryService:
         self.jsearch_api_key = jsearch_api_key
 
     async def discover_jobs(self, role: str = "", location: str = "Remote", profile_skills: Optional[list[str]] = None, exp_years: int = 0, min_match_score: int = 0, run_verification: bool = True) -> list[dict]:
+        from job_discovery.connectors_v3 import _fetch_greenhouse, _fetch_lever, _fetch_wellfound
         search_terms = _get_search_terms(role) if role else _DEFAULT_TERMS
         primary = search_terms[0]
         results = await asyncio.gather(
@@ -276,6 +277,9 @@ class JobDiscoveryService:
             _fetch_hn_hiring(primary),
             _fetch_adzuna(primary, location, self.adzuna_app_id, self.adzuna_app_key),
             _fetch_authentic_jobs(primary),
+            _fetch_greenhouse(primary),
+            _fetch_lever(primary),
+            _fetch_wellfound(primary),
             return_exceptions=True
         )
         all_jobs = []

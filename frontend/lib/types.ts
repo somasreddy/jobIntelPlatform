@@ -52,10 +52,19 @@ export interface Job {
   verificationStatus: VerificationStatus;
   postedDate: string;
   matchScore?: number;
+  fitScore?: number;
+  fitBadge?: string;
   levelUp: boolean;
-  source?: JobPortal;       // which portal this job came from
+  source?: JobPortal;
   recruiterName?: string;
   recruiterLinkedIn?: string;
+  // Intelligence flags
+  hiringVelocity?: "fast" | "normal" | "slow";
+  ghostJobRisk?: "low" | "medium" | "high";
+  competitionLevel?: "low" | "medium" | "high";
+  jobFreshnessHours?: number;
+  salaryDisclosed?: boolean;
+  repostDetected?: boolean;
 }
 
 export interface Application {

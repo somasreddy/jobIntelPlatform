@@ -3,6 +3,7 @@ import { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { mockJobs } from "@/lib/mockData";
 import { useProfile } from "@/lib/ProfileContext";
+import { useAppData } from "@/lib/AppDataContext";
 import { Job, CandidateProfile } from "@/lib/types";
 import {
   ArrowLeft, Building2, MapPin, Clock, DollarSign,
@@ -30,6 +31,8 @@ export default function JobDetailPage() {
   const router = useRouter();
   const [job, setJob] = useState<Job | null>(null);
   const { profile: ctxProfile } = useProfile();
+  const { applyToJob, applications } = useAppData();
+  const [tracked, setTracked] = useState(false);
   const profile = ctxProfile ?? emptyProfile;
   const [activeTab, setActiveTab] = useState<"resume" | "cover" | "recruiter" | "company">("resume");
   const [intelStream, setIntelStream] = useState("");
@@ -339,6 +342,30 @@ export default function JobDetailPage() {
               <button onClick={() => window.open(job.applicationLink, "_blank")} className="btn-primary w-full py-3 mb-2 flex items-center justify-center gap-2 text-sm">
                 Apply on Company Portal <ExternalLink className="w-4 h-4" />
               </button>
+              {(() => {
+                const existingApp = applications.find(a => a.jobId === job.id);
+                const isTracked = tracked || !!existingApp;
+                return (
+                  <button
+                    onClick={async () => {
+                      if (!isTracked) {
+                        await applyToJob(job);
+                        setTracked(true);
+                      }
+                    }}
+                    disabled={isTracked}
+                    className="w-full py-2.5 mb-2 flex items-center justify-center gap-2 text-sm rounded-xl border transition-colors"
+                    style={isTracked
+                      ? { borderColor: "rgba(16,185,129,0.3)", color: "#34d399", background: "rgba(16,185,129,0.08)", cursor: "default" }
+                      : { borderColor: "var(--border)", color: "var(--accent-bright)", background: "transparent" }}
+                  >
+                    <CheckCircle className="w-4 h-4" />
+                    {isTracked
+                      ? `In Pipeline (${existingApp?.status ?? "Applied"})`
+                      : "Track in Pipeline"}
+                  </button>
+                );
+              })()}
               <p className="text-xs text-slate-500 text-center">
                 We verified this job is actively hiring on the official site.
               </p>

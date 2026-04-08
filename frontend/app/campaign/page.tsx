@@ -2,6 +2,8 @@
 
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
+import { useAppData } from "@/lib/AppDataContext";
+import { useProfile } from "@/lib/ProfileContext";
 import {
   Target, Flame, CheckCircle2, Circle, ArrowRight,
   Briefcase, MessageSquare, FileText, BookOpen,
@@ -17,31 +19,6 @@ interface Todo {
   type: "apply" | "evaluate" | "outreach" | "prep" | "admin";
   priority: "high" | "medium" | "low";
   time_minutes: number;
-}
-
-interface CampaignData {
-  campaign: {
-    id: string;
-    name: string;
-    target_role: string | null;
-    target_salary: string | null;
-    target_location: string | null;
-    work_mode: string;
-    days_remaining: number | null;
-    current_streak: number;
-    longest_streak: number;
-  } | null;
-  today_progress: {
-    applications_sent: number; applications_goal: number;
-    evaluations_done: number;  evaluations_goal: number;
-    outreaches_sent: number;   outreaches_goal: number;
-  };
-  pipeline_summary: {
-    total_applications: number;
-    interviews: number;
-    offers: number;
-  };
-  message?: string;
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -73,6 +50,7 @@ function ProgressBar({ value, max, color }: { value: number; max: number; color:
 
 // ── Setup Wizard ──────────────────────────────────────────────────────────────
 function CampaignSetup({ onCreated }: { onCreated: () => void }) {
+  const { profile } = useProfile();
   const [form, setForm] = useState({
     name: "My Job Search",
     target_role: "",
@@ -88,16 +66,28 @@ function CampaignSetup({ onCreated }: { onCreated: () => void }) {
   });
   const [loading, setLoading] = useState(false);
 
+  // Pre-fill from profile once loaded
+  useEffect(() => {
+    if (!profile) return;
+    setForm(f => ({
+      ...f,
+      target_role: f.target_role || profile.currentRole || "",
+      target_location: f.target_location || profile.preferredLocations?.[0] || profile.currentLocation || "",
+      target_currency: f.target_currency || profile.currency || "USD",
+      work_mode: f.work_mode === "hybrid" && profile.workMode && profile.workMode !== "Any"
+        ? profile.workMode.toLowerCase()
+        : f.work_mode,
+      target_salary_min: f.target_salary_min || (profile.currentSalary > 0 ? String(Math.round(profile.currentSalary * 1.1)) : ""),
+    }));
+  }, [profile]);
+
+  const { authHeaders } = useAppData();
   const submit = async () => {
     setLoading(true);
     try {
-      const token = localStorage.getItem("ji_token");
       const res = await fetch(`${API}/api/campaign/`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
+        headers: authHeaders(),
         body: JSON.stringify({
           ...form,
           target_salary_min: form.target_salary_min ? parseInt(form.target_salary_min) : undefined,
@@ -197,52 +187,34 @@ function CampaignSetup({ onCreated }: { onCreated: () => void }) {
 
 // ── Main Dashboard ─────────────────────────────────────────────────────────────
 export default function CampaignPage() {
-  const [data, setData] = useState<CampaignData | null>(null);
+  const {
+    campaign: campaignInfo, todayProgress, pipelineSummary,
+    campaignLoading, refreshCampaign, logAction: ctxLogAction, authHeaders,
+  } = useAppData();
+
   const [todos, setTodos] = useState<{ todos: Todo[]; motivation: string } | null>(null);
   const [completedTodos, setCompletedTodos] = useState<Set<number>>(new Set());
-  const [loading, setLoading] = useState(true);
   const [todosLoading, setTodosLoading] = useState(false);
-
-  const getHeaders = (): HeadersInit => {
-    const token = typeof window !== "undefined" ? localStorage.getItem("ji_token") : null;
-    return token ? { Authorization: `Bearer ${token}` } : {};
-  };
-
-  const fetchCampaign = useCallback(async () => {
-    setLoading(true);
-    try {
-      const res = await fetch(`${API}/api/campaign/active`, { headers: getHeaders() });
-      if (res.ok) setData(await res.json());
-    } catch {}
-    finally { setLoading(false); }
-  }, []);
 
   const fetchTodos = useCallback(async (campaignId: string) => {
     setTodosLoading(true);
     try {
-      const res = await fetch(`${API}/api/campaign/${campaignId}/daily-todos`, { headers: getHeaders() });
+      const res = await fetch(`${API}/api/campaign/${campaignId}/daily-todos`, { headers: authHeaders() });
       if (res.ok) setTodos(await res.json());
     } catch {}
     finally { setTodosLoading(false); }
-  }, []);
-
-  useEffect(() => { fetchCampaign(); }, [fetchCampaign]);
+  }, [authHeaders]);
 
   useEffect(() => {
-    if (data?.campaign?.id) fetchTodos(data.campaign.id);
-  }, [data?.campaign?.id, fetchTodos]);
+    if (campaignInfo?.id) fetchTodos(campaignInfo.id);
+  }, [campaignInfo?.id, fetchTodos]);
 
   const logAction = async (type: string) => {
-    if (!data?.campaign?.id) return;
-    await fetch(`${API}/api/campaign/${data.campaign.id}/log-action`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", ...getHeaders() },
-      body: JSON.stringify({ action_type: type, count: 1 }),
-    });
-    fetchCampaign();
+    await ctxLogAction(type as Parameters<typeof ctxLogAction>[0]);
+    // re-fetch todos since pipeline state may have changed
   };
 
-  if (loading) {
+  if (campaignLoading) {
     return (
       <main className="min-h-screen flex items-center justify-center">
         <RefreshCw className="w-8 h-8 text-cyan-400 animate-spin" />
@@ -250,13 +222,13 @@ export default function CampaignPage() {
     );
   }
 
-  if (!data?.campaign) {
-    return <CampaignSetup onCreated={fetchCampaign} />;
+  if (!campaignInfo) {
+    return <CampaignSetup onCreated={refreshCampaign} />;
   }
 
-  const c = data.campaign;
-  const p = data.today_progress;
-  const ps = data.pipeline_summary;
+  const c = campaignInfo;
+  const p = todayProgress ?? { applications_sent: 0, applications_goal: 0, evaluations_done: 0, evaluations_goal: 0, outreaches_sent: 0, outreaches_goal: 0 };
+  const ps = pipelineSummary ?? { total_applications: 0, interviews: 0, offers: 0 };
 
   const totalGoal = p.applications_goal + p.evaluations_goal + p.outreaches_goal;
   const totalDone = p.applications_sent + p.evaluations_done + p.outreaches_sent;

@@ -4,7 +4,7 @@ import { Job, JobPortal } from "@/lib/types";
 import {
   MapPin, Building2, Clock, ArrowUpRight, CheckCircle2,
   ExternalLink, TrendingUp, Bookmark, BookmarkCheck,
-  ChevronUp, Zap, DollarSign
+  ChevronUp, Zap, DollarSign, AlertTriangle, Flame, Shield,
 } from "lucide-react";
 import Link from "next/link";
 import { getSavedJobIds, toggleSavedJob, loadProfile } from "@/lib/profile";
@@ -90,13 +90,52 @@ function ScoreRing({ score, onClick }: { score: number; onClick: (e: React.Mouse
   );
 }
 
+// ── Fit badge ─────────────────────────────────────────────────────────────────
+function FitBadge({ score, badge }: { score: number; badge: string }) {
+  const color = score >= 85 ? "#10b981" : score >= 70 ? "#6366f1" : score >= 55 ? "#f59e0b" : "#94a3b8";
+  const bg = score >= 85 ? "rgba(16,185,129,0.12)" : score >= 70 ? "rgba(99,102,241,0.12)" : score >= 55 ? "rgba(245,158,11,0.12)" : "rgba(148,163,184,0.08)";
+  return (
+    <span
+      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold"
+      style={{ background: bg, color, border: `1px solid ${color}30` }}
+    >
+      <Zap className="w-2.5 h-2.5" /> {score}% · {badge}
+    </span>
+  );
+}
+
+// ── Intelligence flags ────────────────────────────────────────────────────────
+function IntelFlags({ job }: { job: Job }) {
+  const flags = [];
+  if (job.ghostJobRisk === "high")
+    flags.push({ icon: <AlertTriangle className="w-2.5 h-2.5" />, label: "Ghost risk", color: "#f43f5e" });
+  if (job.hiringVelocity === "fast")
+    flags.push({ icon: <Flame className="w-2.5 h-2.5" />, label: "Hiring fast", color: "#f59e0b" });
+  if (job.competitionLevel === "low")
+    flags.push({ icon: <Shield className="w-2.5 h-2.5" />, label: "Low competition", color: "#10b981" });
+  if (job.repostDetected)
+    flags.push({ icon: <Clock className="w-2.5 h-2.5" />, label: "Repost", color: "#94a3b8" });
+  if (!flags.length) return null;
+  return (
+    <div className="flex flex-wrap gap-1 mt-1.5">
+      {flags.map((f, i) => (
+        <span key={i} className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-medium"
+          style={{ background: `${f.color}15`, color: f.color }}>
+          {f.icon} {f.label}
+        </span>
+      ))}
+    </div>
+  );
+}
+
 interface JobCardProps {
   job: Job;
   onSelect?: (job: Job) => void;
 }
 
 export default function JobCard({ job, onSelect }: JobCardProps) {
-  const matchScore = job.matchScore ?? 0;
+  const matchScore = job.fitScore ?? job.matchScore ?? 0;
+  const fitBadge = job.fitBadge;
   const [saved, setSaved] = useState(false);
   const [showBreakdown, setShowBreakdown] = useState(false);
   const [breakdown, setBreakdown] = useState<{ skills: number; experience: number; location: number; salary: number } | null>(null);
@@ -170,7 +209,9 @@ export default function JobCard({ job, onSelect }: JobCardProps) {
             )}
             <span className="badge badge-new">{job.workMode}</span>
             <SourceBadge source={job.source} />
+            {fitBadge && matchScore > 0 && <FitBadge score={matchScore} badge={fitBadge} />}
           </div>
+          <IntelFlags job={job} />
           <h3 className="text-base font-semibold text-white group-hover:text-indigo-300 transition-colors line-clamp-2">
             {job.title}
           </h3>

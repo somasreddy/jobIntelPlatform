@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 from sqlalchemy import (
-    String, Integer, Float, Boolean, Text, DateTime, ForeignKey, func
+    String, Integer, Float, Boolean, Text, DateTime, ForeignKey, func, Index
 )
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -160,3 +160,329 @@ class MasterStory(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# PHASE 1: CAREER GRAPH
+# ─────────────────────────────────────────────────────────────────────────────
+
+class CareerGraph(Base):
+    """One row per user — the persistent AI model of a user's career DNA."""
+    __tablename__ = "career_graphs"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False, unique=True, index=True)
+    health_score: Mapped[int] = mapped_column(Integer, default=0)
+    health_breakdown: Mapped[dict | None] = mapped_column(JSONB, default=dict)
+    market_position_score: Mapped[int] = mapped_column(Integer, default=0)
+    demand_score: Mapped[int] = mapped_column(Integer, default=0)
+    rarity_score: Mapped[int] = mapped_column(Integer, default=0)
+    percentile_rank: Mapped[int] = mapped_column(Integer, default=0)
+    onboarding_complete: Mapped[bool] = mapped_column(Boolean, default=False)
+    last_computed: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    skills: Mapped[list["CareerSkill"]] = relationship(back_populates="graph", cascade="all, delete-orphan")
+    goals: Mapped[list["CareerGoal"]] = relationship(back_populates="graph", cascade="all, delete-orphan")
+    milestones: Mapped[list["CareerMilestone"]] = relationship(back_populates="graph", cascade="all, delete-orphan")
+
+
+class CareerSkill(Base):
+    """Individual skills with proficiency level and market metadata."""
+    __tablename__ = "career_skills"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    graph_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("career_graphs.id"), nullable=False)
+    user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False, index=True)
+    skill_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    category: Mapped[str | None] = mapped_column(String(100))          # Frontend, Backend, DevOps, etc.
+    level: Mapped[int] = mapped_column(Integer, default=1)             # 1=Beginner … 5=Expert
+    verified: Mapped[bool] = mapped_column(Boolean, default=False)
+    last_used_year: Mapped[int | None] = mapped_column(Integer)
+    trending_score: Mapped[float] = mapped_column(Float, default=0.0)  # 0-1 market demand signal
+    years_experience: Mapped[float] = mapped_column(Float, default=0.0)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    graph: Mapped["CareerGraph"] = relationship(back_populates="skills")
+
+    __table_args__ = (Index("ix_career_skills_user_skill", "user_id", "skill_name"),)
+
+
+class CareerGoal(Base):
+    """What the user is targeting — role, company, salary, timeline."""
+    __tablename__ = "career_goals"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    graph_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("career_graphs.id"), nullable=False)
+    user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False, index=True)
+    target_role: Mapped[str | None] = mapped_column(String(255))
+    target_company: Mapped[str | None] = mapped_column(String(255))
+    target_salary_min: Mapped[int | None] = mapped_column(Integer)
+    target_salary_max: Mapped[int | None] = mapped_column(Integer)
+    target_location: Mapped[str | None] = mapped_column(String(255))
+    timeline_months: Mapped[int | None] = mapped_column(Integer)
+    work_mode: Mapped[str | None] = mapped_column(String(50))
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    graph: Mapped["CareerGraph"] = relationship(back_populates="goals")
+
+
+class CareerMilestone(Base):
+    """Key career events — promotions, certifications, projects, pivots."""
+    __tablename__ = "career_milestones"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    graph_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("career_graphs.id"), nullable=False)
+    user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False, index=True)
+    type: Mapped[str] = mapped_column(String(50), nullable=False)       # job_change, promotion, cert, project, education
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    company: Mapped[str | None] = mapped_column(String(255))
+    milestone_date: Mapped[str | None] = mapped_column(String(20))     # YYYY-MM
+    impact_statement: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    graph: Mapped["CareerGraph"] = relationship(back_populates="milestones")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# PHASE 2: COMPANY INTELLIGENCE
+# ─────────────────────────────────────────────────────────────────────────────
+
+class Company(Base):
+    """Company intelligence database — enriched company profiles."""
+    __tablename__ = "companies"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    name: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    domain: Mapped[str | None] = mapped_column(String(255), unique=True)
+    industry: Mapped[str | None] = mapped_column(String(100))
+    size_range: Mapped[str | None] = mapped_column(String(50))          # 1-10, 11-50, 51-200, 201-1000, 1000+
+    founded_year: Mapped[int | None] = mapped_column(Integer)
+    hq_location: Mapped[str | None] = mapped_column(String(255))
+    remote_policy: Mapped[str | None] = mapped_column(String(50))       # Remote, Hybrid, On-site, Flexible
+    description: Mapped[str | None] = mapped_column(Text)
+    website: Mapped[str | None] = mapped_column(Text)
+    linkedin_url: Mapped[str | None] = mapped_column(Text)
+
+    # Funding & financials
+    funding_stage: Mapped[str | None] = mapped_column(String(50))       # Seed, Series A-E, Public, PE, Bootstrapped
+    last_funding_amount: Mapped[int | None] = mapped_column(Integer)    # USD thousands
+    last_funding_date: Mapped[str | None] = mapped_column(String(20))
+
+    # Scores (0-100)
+    glassdoor_rating: Mapped[float | None] = mapped_column(Float)
+    glassdoor_review_count: Mapped[int | None] = mapped_column(Integer)
+    culture_score: Mapped[int | None] = mapped_column(Integer)
+    growth_score: Mapped[int | None] = mapped_column(Integer)
+    layoff_risk_score: Mapped[int | None] = mapped_column(Integer)      # 0=low risk, 100=high risk
+    interview_difficulty_avg: Mapped[float | None] = mapped_column(Float)  # 1-5
+
+    # Rich data as JSONB
+    tech_stack: Mapped[list | None] = mapped_column(JSONB, default=list)
+    salary_ranges: Mapped[dict | None] = mapped_column(JSONB, default=dict)  # {role: {min, max, currency}}
+    interview_process: Mapped[dict | None] = mapped_column(JSONB, default=dict)
+    insider_report: Mapped[str | None] = mapped_column(Text)            # AI-synthesised brief
+
+    last_updated: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    interview_reports: Mapped[list["CompanyInterviewReport"]] = relationship(
+        back_populates="company", cascade="all, delete-orphan"
+    )
+
+
+class CompanyInterviewReport(Base):
+    """Crowdsourced interview experience reports."""
+    __tablename__ = "company_interview_reports"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    company_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("companies.id"), nullable=False)
+    submitted_by: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
+    role: Mapped[str] = mapped_column(String(255), nullable=False)
+    interview_rounds: Mapped[int | None] = mapped_column(Integer)
+    difficulty: Mapped[int | None] = mapped_column(Integer)            # 1-5
+    outcome: Mapped[str | None] = mapped_column(String(50))            # Offer, Rejected, Withdrew, Pending
+    questions: Mapped[list | None] = mapped_column(JSONB, default=list)
+    process_description: Mapped[str | None] = mapped_column(Text)
+    tips: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    company: Mapped["Company"] = relationship(back_populates="interview_reports")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# PHASE 3: LEARNING ENGINE
+# ─────────────────────────────────────────────────────────────────────────────
+
+class LearningPath(Base):
+    """A structured learning path generated for a user to close a skill gap."""
+    __tablename__ = "learning_paths"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False, index=True)
+    skill_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    target_level: Mapped[int] = mapped_column(Integer, default=3)       # 1-5
+    current_level: Mapped[int] = mapped_column(Integer, default=0)
+    estimated_hours: Mapped[int | None] = mapped_column(Integer)
+    status: Mapped[str] = mapped_column(String(50), default="active")   # active, paused, completed
+    progress_pct: Mapped[int] = mapped_column(Integer, default=0)
+    resources: Mapped[list | None] = mapped_column(JSONB, default=list) # ordered list of resource IDs/URLs
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    completions: Mapped[list["LearningCompletion"]] = relationship(
+        back_populates="path", cascade="all, delete-orphan"
+    )
+
+
+class LearningResource(Base):
+    """Curated learning resource catalogue (courses, articles, videos, projects)."""
+    __tablename__ = "learning_resources"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    skill_name: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    title: Mapped[str] = mapped_column(String(500), nullable=False)
+    provider: Mapped[str | None] = mapped_column(String(100))           # Coursera, Udemy, YouTube, etc.
+    url: Mapped[str] = mapped_column(Text, nullable=False)
+    type: Mapped[str] = mapped_column(String(50), default="course")     # video, article, course, project, book
+    duration_minutes: Mapped[int | None] = mapped_column(Integer)
+    difficulty: Mapped[str | None] = mapped_column(String(50))         # Beginner, Intermediate, Advanced
+    is_free: Mapped[bool] = mapped_column(Boolean, default=False)
+    rating: Mapped[float | None] = mapped_column(Float)
+    tags: Mapped[list | None] = mapped_column(JSONB, default=list)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class LearningCompletion(Base):
+    """Tracks which resources a user has completed."""
+    __tablename__ = "learning_completions"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False, index=True)
+    path_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("learning_paths.id"))
+    resource_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("learning_resources.id"))
+    resource_url: Mapped[str | None] = mapped_column(Text)              # fallback if resource not in catalogue
+    skill_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    rating_given: Mapped[int | None] = mapped_column(Integer)           # 1-5 user rating
+    notes: Mapped[str | None] = mapped_column(Text)
+    completed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    path: Mapped["LearningPath | None"] = relationship(back_populates="completions")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# PHASE 7: NOTIFICATIONS
+# ─────────────────────────────────────────────────────────────────────────────
+
+class Notification(Base):
+    """In-app notification system."""
+    __tablename__ = "notifications"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False, index=True)
+    type: Mapped[str] = mapped_column(String(50), nullable=False)
+    # new_job_match | interview_reminder | application_followup |
+    # skill_completed | health_score_change | autopilot_approval
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    body: Mapped[str] = mapped_column(Text, nullable=False)
+    action_url: Mapped[str | None] = mapped_column(Text)
+    extra_data: Mapped[dict | None] = mapped_column(JSONB, default=dict)
+    read: Mapped[bool] = mapped_column(Boolean, default=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# PHASE 6: PORTFOLIO
+# ─────────────────────────────────────────────────────────────────────────────
+
+class Portfolio(Base):
+    """Public portfolio — one per user."""
+    __tablename__ = "portfolios"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False, unique=True, index=True)
+    slug: Mapped[str] = mapped_column(String(100), unique=True, nullable=False)
+    headline: Mapped[str | None] = mapped_column(String(255))
+    bio: Mapped[str | None] = mapped_column(Text)
+    ai_bio: Mapped[str | None] = mapped_column(Text)
+    avatar_url: Mapped[str | None] = mapped_column(Text)
+    linkedin_url: Mapped[str | None] = mapped_column(Text)
+    github_url: Mapped[str | None] = mapped_column(Text)
+    website_url: Mapped[str | None] = mapped_column(Text)
+    theme: Mapped[str] = mapped_column(String(50), default="dark")
+    is_public: Mapped[bool] = mapped_column(Boolean, default=False)
+    view_count: Mapped[int] = mapped_column(Integer, default=0)
+    skills: Mapped[list | None] = mapped_column(JSONB, default=list)
+    certifications: Mapped[list | None] = mapped_column(JSONB, default=list)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    projects: Mapped[list["PortfolioProject"]] = relationship(
+        back_populates="portfolio", cascade="all, delete-orphan"
+    )
+
+
+class PortfolioProject(Base):
+    """A project entry in the portfolio."""
+    __tablename__ = "portfolio_projects"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    portfolio_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("portfolios.id"), nullable=False)
+    user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False, index=True)
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    description: Mapped[str | None] = mapped_column(Text)
+    ai_impact: Mapped[str | None] = mapped_column(Text)       # AI-rewritten impact statement
+    tech_stack: Mapped[list | None] = mapped_column(JSONB, default=list)
+    demo_url: Mapped[str | None] = mapped_column(Text)
+    github_url: Mapped[str | None] = mapped_column(Text)
+    image_url: Mapped[str | None] = mapped_column(Text)
+    featured: Mapped[bool] = mapped_column(Boolean, default=False)
+    sort_order: Mapped[int] = mapped_column(Integer, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    portfolio: Mapped["Portfolio"] = relationship(back_populates="projects")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# PHASE 5: AUTOPILOT
+# ─────────────────────────────────────────────────────────────────────────────
+
+class AutopilotSettings(Base):
+    """Per-user autopilot configuration."""
+    __tablename__ = "autopilot_settings"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False, unique=True, index=True)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+    min_fit_score: Mapped[int] = mapped_column(Integer, default=75)
+    max_per_day: Mapped[int] = mapped_column(Integer, default=5)
+    exclude_companies: Mapped[list | None] = mapped_column(JSONB, default=list)
+    require_approval: Mapped[bool] = mapped_column(Boolean, default=True)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+
+class AutopilotQueueItem(Base):
+    """A job queued for autopilot application (pending approval or already sent)."""
+    __tablename__ = "autopilot_queue"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False, index=True)
+    job_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    job_title: Mapped[str] = mapped_column(String(255), nullable=False)
+    job_org: Mapped[str | None] = mapped_column(String(255))
+    job_location: Mapped[str | None] = mapped_column(String(255))
+    fit_score: Mapped[int] = mapped_column(Integer, default=0)
+    status: Mapped[str] = mapped_column(String(50), default="pending")
+    # pending | approved | skipped | applied | failed
+    generated_resume: Mapped[str | None] = mapped_column(Text)
+    generated_cover_letter: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    actioned_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
