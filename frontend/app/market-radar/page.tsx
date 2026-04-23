@@ -1,6 +1,7 @@
 "use client";
 import { useState, useEffect, useCallback } from "react";
 import { useAuth } from "@/lib/AuthContext";
+import { useProfile } from "@/lib/ProfileContext";
 import {
   TrendingUp, TrendingDown, Minus, BarChart3, DollarSign,
   Zap, Loader2, RefreshCw, ArrowUpRight, ArrowDownRight, Target,
@@ -49,16 +50,25 @@ function TrendIcon({ trend }: { trend: string }) {
 
 export default function MarketRadarPage() {
   const { token } = useAuth();
+  const { profile } = useProfile();
   const [radar, setRadar] = useState<RadarData | null>(null);
   const [salary, setSalary] = useState<SalaryBenchmark | null>(null);
   const [loading, setLoading] = useState(true);
   const [salaryLoading, setSalaryLoading] = useState(false);
   const [activeTab, setActiveTab] = useState<"radar" | "salary" | "skills">("radar");
 
-  // Salary benchmark form
+  // Salary benchmark form — seeded from profile
   const [role, setRole] = useState("");
   const [location, setLocation] = useState("");
   const [years, setYears] = useState(5);
+
+  // Pre-fill form from profile when it loads
+  useEffect(() => {
+    if (!profile) return;
+    setRole(r => r || profile.currentRole || "");
+    setLocation(l => l || profile.preferredLocations?.[0] || profile.currentLocation || "");
+    setYears(profile.experienceYears || 5);
+  }, [profile]);
 
   const fetchRadar = useCallback(async () => {
     setLoading(true);
@@ -76,7 +86,15 @@ export default function MarketRadarPage() {
       const res = await fetch(`${API}/api/market/salary-benchmark`, {
         method: "POST",
         headers: authHeaders(token),
-        body: JSON.stringify({ role, location, experience_years: years, skills: [] }),
+        body: JSON.stringify({
+          role,
+          location,
+          experience_years: years,
+          skills: [
+            ...(profile?.skills || []),
+            ...(profile?.frameworks || []),
+          ],
+        }),
       });
       if (res.ok) setSalary(await res.json());
     } catch (e) { console.error(e); }

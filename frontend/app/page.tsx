@@ -131,7 +131,7 @@ export default function DashboardPage() {
       const [healthRes, funnelRes, jobsRes, pathsRes, todosRes] = await Promise.allSettled([
         fetch(`${API}/api/career-graph/`, { headers: h }).then(r => r.ok ? r.json() : null),
         fetch(`${API}/api/insights/funnel`, { headers: h }).then(r => r.ok ? r.json() : null),
-        fetch(`${API}/api/jobs?limit=5`, { headers: h }).then(r => r.ok ? r.json() : null),
+        fetch(`${API}/api/jobs/?limit=5`, { headers: h }).then(r => r.ok ? r.json() : null),
         fetch(`${API}/api/learning/paths`, { headers: h }).then(r => r.ok ? r.json() : null),
         fetch(`${API}/api/campaign/daily-todos`, { method: "POST", headers: { ...h, "Content-Type": "application/json" }, body: "{}" }).then(r => r.ok ? r.json() : null),
       ]);

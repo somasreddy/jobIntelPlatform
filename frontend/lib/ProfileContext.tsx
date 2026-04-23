@@ -150,6 +150,23 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
     } catch (err) {
       console.warn("Profile DB save failed, stored in localStorage only:", err);
     }
+    // Sync all profile skills → Career Graph so both stay in lockstep
+    try {
+      const skillEntries = [
+        ...(p.skills || []).map(s => ({ skill_name: s, category: "Skills", level: 3 })),
+        ...(p.frameworks || []).map(s => ({ skill_name: s, category: "Frameworks", level: 3 })),
+        ...(p.languages || []).map(s => ({ skill_name: s, category: "Languages", level: 3 })),
+        ...(p.cicdTools || []).map(s => ({ skill_name: s, category: "CI/CD", level: 3 })),
+        ...(p.aiTools || []).map(s => ({ skill_name: s, category: "AI Tools", level: 3 })),
+      ];
+      if (skillEntries.length > 0) {
+        await fetch(`${API}/api/career-graph/skills`, {
+          method: "PUT",
+          headers: getAuthHeaders(),
+          body: JSON.stringify(skillEntries),
+        });
+      }
+    } catch { /* best-effort */ }
   }, []);
 
   return (

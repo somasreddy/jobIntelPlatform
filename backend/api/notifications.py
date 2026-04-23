@@ -31,55 +31,63 @@ class NotificationCreate(BaseModel):
 
 # ─── Endpoints ───────────────────────────────────────────────────────────────
 
-@router.get("/")
+@router.get("")
 async def list_notifications(
     unread_only: bool = Query(False),
     limit: int = Query(50, le=100),
     user_id: uuid.UUID = Depends(get_current_user_id),
     db: AsyncSession = Depends(get_db),
 ):
-    query = (
-        select(Notification)
-        .where(Notification.user_id == user_id)
-        .order_by(Notification.created_at.desc())
-        .limit(limit)
-    )
-    if unread_only:
-        query = query.where(Notification.read == False)
+    try:
+        query = (
+            select(Notification)
+            .where(Notification.user_id == user_id)
+            .order_by(Notification.created_at.desc())
+            .limit(limit)
+        )
+        if unread_only:
+            query = query.where(Notification.read == False)
 
-    result = await db.execute(query)
-    notifications = result.scalars().all()
+        result = await db.execute(query)
+        notifications = result.scalars().all()
 
-    unread_count_r = await db.execute(
-        select(Notification)
-        .where(Notification.user_id == user_id, Notification.read == False)
-    )
-    unread_count = len(unread_count_r.scalars().all())
+        unread_count_r = await db.execute(
+            select(Notification)
+            .where(Notification.user_id == user_id, Notification.read == False)
+        )
+        unread_count = len(unread_count_r.scalars().all())
 
-    return {
-        "notifications": [_notif_to_dict(n) for n in notifications],
-        "unread_count": unread_count,
-    }
+        return {
+            "notifications": [_notif_to_dict(n) for n in notifications],
+            "unread_count": unread_count,
+        }
+    except Exception as exc:
+        logger.warning(f"DB unavailable for GET /notifications, returning empty: {exc}")
+        return {"notifications": [], "unread_count": 0}
 
 
-@router.post("/")
+@router.post("")
 async def create_notification(
     payload: NotificationCreate,
     user_id: uuid.UUID = Depends(get_current_user_id),
     db: AsyncSession = Depends(get_db),
 ):
-    notif = Notification(
-        user_id=user_id,
-        type=payload.type,
-        title=payload.title,
-        body=payload.body,
-        action_url=payload.action_url,
-        extra_data=payload.metadata or {},
-        read=False,
-    )
-    db.add(notif)
-    await db.flush()
-    return _notif_to_dict(notif)
+    try:
+        notif = Notification(
+            user_id=user_id,
+            type=payload.type,
+            title=payload.title,
+            body=payload.body,
+            action_url=payload.action_url,
+            extra_data=payload.metadata or {},
+            read=False,
+        )
+        db.add(notif)
+        await db.flush()
+        return _notif_to_dict(notif)
+    except Exception as exc:
+        logger.warning(f"DB unavailable for POST /notifications: {exc}")
+        return {"error": "unavailable"}
 
 
 @router.post("/mark-all-read")
@@ -88,11 +96,14 @@ async def mark_all_read(
     user_id: uuid.UUID = Depends(get_current_user_id),
     db: AsyncSession = Depends(get_db),
 ):
-    await db.execute(
-        update(Notification)
-        .where(Notification.user_id == user_id, Notification.read == False)
-        .values(read=True)
-    )
+    try:
+        await db.execute(
+            update(Notification)
+            .where(Notification.user_id == user_id, Notification.read == False)
+            .values(read=True)
+        )
+    except Exception as exc:
+        logger.warning(f"DB unavailable for mark-all-read: {exc}")
     return {"marked_read": True}
 
 
@@ -103,11 +114,14 @@ async def mark_one_read(
     user_id: uuid.UUID = Depends(get_current_user_id),
     db: AsyncSession = Depends(get_db),
 ):
-    await db.execute(
-        update(Notification)
-        .where(Notification.id == notification_id, Notification.user_id == user_id)
-        .values(read=True)
-    )
+    try:
+        await db.execute(
+            update(Notification)
+            .where(Notification.id == notification_id, Notification.user_id == user_id)
+            .values(read=True)
+        )
+    except Exception as exc:
+        logger.warning(f"DB unavailable for mark-one-read: {exc}")
     return {"marked_read": str(notification_id)}
 
 

@@ -78,6 +78,12 @@ export const THEMES: Theme[] = [
     emoji: "🎆",
     colors: ["#d946ef", "#4ade80", "#060010"],
   },
+  {
+    id: "cinematic",
+    name: "Cinematic Amber",
+    emoji: "🎬",
+    colors: ["#F5A623", "#FF8A3D", "#07070A"],
+  },
 ];
 
-export const DEFAULT_THEME = "nebula";
+export const DEFAULT_THEME = "cinematic";

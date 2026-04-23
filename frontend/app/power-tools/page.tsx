@@ -103,7 +103,7 @@ const TOOLS = [
     glow: "rgba(14,165,233,0.3)",
     fields: [
       { key: "job_description", label: "Job Description", type: "textarea", placeholder: "Paste the full job description..." },
-      { key: "current_headline", label: "Current LinkedIn Headline", type: "text", placeholder: "e.g. Senior Engineer at Acme Corp" },
+      { key: "current_headline", label: "Current LinkedIn Headline", type: "text", placeholder: "e.g. Senior Engineer at Acme Corp", profileKey: "currentRole" },
       { key: "current_about", label: "Current About Section (optional)", type: "textarea", placeholder: "Paste your current LinkedIn About section..." },
     ],
     endpoint: "/api/intelligence-tools/linkedin-infiltrator",
@@ -170,7 +170,7 @@ const TOOLS = [
     glow: "rgba(16,185,129,0.3)",
     fields: [
       { key: "company", label: "Target Company", type: "text", placeholder: "e.g. Stripe" },
-      { key: "role", label: "Target Role", type: "text", placeholder: "e.g. Senior Engineer" },
+      { key: "role", label: "Target Role", type: "text", placeholder: "e.g. Senior Engineer", profileKey: "currentRole" },
     ],
     endpoint: "/api/intelligence-tools/cold-email-weapon",
     renderResult: (r: Record<string, unknown>) => {
@@ -211,7 +211,7 @@ const TOOLS = [
     fields: [
       { key: "role", label: "Role Title", type: "text", placeholder: "e.g. Staff Engineer", profileKey: "currentRole" },
       { key: "company", label: "Company", type: "text", placeholder: "e.g. Stripe" },
-      { key: "current_salary", label: "Current / Expected Salary", type: "text", placeholder: "e.g. $130,000" },
+      { key: "current_salary", label: "Current / Expected Salary", type: "text", placeholder: "e.g. $130,000", profileKey: "currentSalary" },
       { key: "offer_details", label: "Full Offer Details", type: "textarea", placeholder: "Base: $140k, Equity: 20k RSUs over 4 years, Bonus: 10%, PTO: 15 days..." },
     ],
     endpoint: "/api/intelligence-tools/offer-negotiator",
@@ -585,7 +585,13 @@ function ToolCard({
         if (f.profileKey && !next[f.key]) {
           const val = profile[f.profileKey];
           if (typeof val === "string" && val) next[f.key] = val;
-          else if (typeof val === "number" && val) next[f.key] = String(val);
+          else if (typeof val === "number" && val) {
+            // Format salary fields with currency symbol and commas
+            const isSalaryField = f.key.includes("salary") || f.key.includes("pay");
+            next[f.key] = isSalaryField
+              ? `${profile.currency || "$"}${val.toLocaleString()}`
+              : String(val);
+          }
         }
       });
       return next;

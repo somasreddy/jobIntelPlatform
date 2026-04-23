@@ -1,6 +1,8 @@
 "use client";
 import { useState, useEffect, useCallback } from "react";
 import { useAuth } from "@/lib/AuthContext";
+import { loadProfile } from "@/lib/profile";
+import { useProfile } from "@/lib/ProfileContext";
 import {
   Activity, Target, Award,
   Plus, Trash2, RefreshCw, Loader2, Zap,
@@ -85,6 +87,43 @@ const DIM_LABELS: Record<string, string> = {
 const SKILL_LEVELS = ["", "Beginner", "Novice", "Intermediate", "Advanced", "Expert"];
 const MILESTONE_TYPES = ["job_change", "promotion", "cert", "project", "education"];
 
+function buildLocalGraphFromStorage(): CareerGraph {
+  const skills: CareerSkill[] = [];
+  try {
+    const p = loadProfile();
+    if (p) {
+      const entries: Array<[string[], string]> = [
+        [p.skills || [], "Skills"],
+        [p.frameworks || [], "Frameworks"],
+        [p.languages || [], "Languages"],
+        [p.cicdTools || [], "CI/CD"],
+        [p.aiTools || [], "AI Tools"],
+      ];
+      entries.forEach(([arr, cat]) => {
+        arr.forEach((name, i) => skills.push({
+          id: `local-${cat}-${i}`,
+          skill_name: name,
+          category: cat,
+          level: 3,
+          verified: false,
+          last_used_year: new Date().getFullYear(),
+          trending_score: 0,
+        }));
+      });
+    }
+  } catch { /* ignore */ }
+  return {
+    graph_id: "local",
+    health_score: Math.min(60, skills.length * 6),
+    health_breakdown: {},
+    onboarding_complete: skills.length > 0,
+    last_computed: null,
+    skills,
+    goals: [],
+    milestones: [],
+  };
+}
+
 function ScoreRing({ score, size = 120 }: { score: number; size?: number }) {
   const r = (size - 16) / 2;
   const circ = 2 * Math.PI * r;
@@ -115,6 +154,7 @@ function ScoreRing({ score, size = 120 }: { score: number; size?: number }) {
 
 export default function CareerGraphPage() {
   const { token } = useAuth();
+  const { profile } = useProfile();
 
   const [graph, setGraph] = useState<CareerGraph | null>(null);
   const [insights, setInsights] = useState<Insight[]>([]);
@@ -134,21 +174,56 @@ export default function CareerGraphPage() {
   const [newMilestone, setNewMilestone] = useState({ type: "job_change", title: "", company: "", milestone_date: "", impact_statement: "" });
   const [savingMilestone, setSavingMilestone] = useState(false);
 
+  const [isOffline, setIsOffline] = useState(false);
+
   const fetchGraph = useCallback(async () => {
     setLoading(true);
     try {
       const res = await fetch(`${API}/api/career-graph/`, { headers: authHeaders(token) });
       if (res.ok) {
         const data: CareerGraph = await res.json();
+        // If API returns no skills, merge in profile skills so graph isn't empty
+        if (data.skills.length === 0) {
+          const local = buildLocalGraphFromStorage();
+          data.skills = local.skills;
+        }
         setGraph(data);
+        setIsOffline(false);
         if (data.goals?.[0]) setGoal(data.goals[0]);
+      } else {
+        setGraph(buildLocalGraphFromStorage());
+        setIsOffline(true);
       }
-    } catch (e) {
-      console.error("Failed to fetch career graph", e);
+    } catch {
+      setGraph(buildLocalGraphFromStorage());
+      setIsOffline(true);
     } finally {
       setLoading(false);
     }
   }, [token]);
+
+  const localRecompute = useCallback(() => {
+    const skills = graph?.skills ?? [];
+    const skillScore = Math.min(100, skills.length * 12);
+    const goalScore = (graph?.goals?.length ?? 0) > 0 ? 80 : 25;
+    const milestoneScore = (graph?.milestones?.length ?? 0) > 0 ? 75 : 30;
+    const healthScore = Math.round(skillScore * 0.5 + goalScore * 0.3 + milestoneScore * 0.2);
+    setGraph(prev => prev ? {
+      ...prev,
+      health_score: healthScore,
+      health_breakdown: {
+        skills_recency:       { score: skillScore, label: `${skills.length} skills in profile`, weight: 0.5 },
+        goal_alignment:       { score: goalScore, label: "Career goals set", weight: 0.3 },
+        interview_readiness:  { score: milestoneScore, label: "Career milestones", weight: 0.2 },
+      },
+      last_computed: new Date().toISOString(),
+    } : prev);
+    const newInsights: Insight[] = [];
+    if (skills.length < 5) newInsights.push({ dimension: "skills_recency", current_score: skillScore, label: "Skills", potential_gain: 100 - skillScore, action: "Add at least 5 skills to increase your health score" });
+    if ((graph?.goals?.length ?? 0) === 0) newInsights.push({ dimension: "goal_alignment", current_score: goalScore, label: "Goals", potential_gain: 80 - goalScore, action: "Set a career goal in the Goals tab" });
+    if ((graph?.milestones?.length ?? 0) === 0) newInsights.push({ dimension: "interview_readiness", current_score: milestoneScore, label: "Milestones", potential_gain: 75 - milestoneScore, action: "Add career milestones to strengthen your profile" });
+    setInsights(newInsights);
+  }, [graph]);
 
   const recomputeHealth = async () => {
     setComputing(true);
@@ -161,15 +236,30 @@ export default function CareerGraphPage() {
         const data = await res.json();
         setInsights(data.insights || []);
         await fetchGraph();
+      } else {
+        localRecompute();
       }
-    } catch (e) {
-      console.error(e);
+    } catch {
+      localRecompute();
     } finally {
       setComputing(false);
     }
   };
 
   useEffect(() => { fetchGraph(); }, [fetchGraph]);
+
+  // Seed the Goals form from profile whenever goal fields are still empty
+  useEffect(() => {
+    if (!profile) return;
+    setGoal(prev => ({
+      ...prev,
+      target_role:       prev.target_role       || profile.currentRole || undefined,
+      target_location:   prev.target_location   || profile.preferredLocations?.[0] || profile.currentLocation || undefined,
+      target_salary_min: prev.target_salary_min || (profile.currentSalary > 0 ? profile.currentSalary : undefined),
+      target_salary_max: prev.target_salary_max || (profile.currentSalary > 0 ? Math.round(profile.currentSalary * 1.3) : undefined),
+      work_mode:         prev.work_mode         || (profile.workMode !== "Any" ? profile.workMode : undefined) || undefined,
+    }));
+  }, [profile]);
 
   // ── Skill save ──────────────────────────────────────────────────────────────
   const saveSkill = async () => {
@@ -253,6 +343,15 @@ export default function CareerGraphPage() {
   return (
     <div className="flex min-h-screen bg-transparent">
       <main className="md:ml-64 flex-1 px-4 md:px-8 pt-20 md:pt-6 pb-8 max-w-5xl">
+
+        {/* Offline banner */}
+        {isOffline && (
+          <div className="mb-4 px-4 py-2.5 rounded-xl text-xs flex items-center gap-2"
+            style={{ background: "color-mix(in srgb, var(--accent) 12%, transparent)", border: "1px solid color-mix(in srgb, var(--accent) 30%, transparent)", color: "var(--accent-bright)" }}>
+            <Activity className="w-3.5 h-3.5 shrink-0" />
+            Showing profile data — backend database offline. Skills, goals and milestones need the backend running to persist.
+          </div>
+        )}
 
         {/* Header */}
         <div className="flex items-center justify-between mb-6">

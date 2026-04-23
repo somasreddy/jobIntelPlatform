@@ -25,9 +25,25 @@ logger = logging.getLogger(__name__)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Create all SQLAlchemy-managed tables on startup (idempotent)."""
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-    logger.info("Database tables ensured.")
+    db_url: str = settings.DATABASE_URL
+    is_local_dev = "localhost" in db_url or "127.0.0.1" in db_url
+    try:
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+        logger.info("Database tables ensured.")
+    except Exception as exc:
+        if is_local_dev:
+            # Local dev without PostgreSQL running — start in degraded mode
+            logger.warning(
+                f"No local database — starting in degraded mode: {exc}\n"
+                "DB-backed endpoints will fail. Run PostgreSQL locally or point "
+                "DATABASE_URL at a cloud DB (e.g. Neon.tech)."
+            )
+        else:
+            # Production: fail fast so the host (Render, Railway, etc.) knows
+            # the deployment is broken and won't route traffic to this instance.
+            logger.error(f"Database connection failed on startup: {exc}")
+            raise
     yield
 
 

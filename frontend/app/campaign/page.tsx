@@ -65,6 +65,7 @@ function CampaignSetup({ onCreated }: { onCreated: () => void }) {
     daily_goal_outreach: 2,
   });
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   // Pre-fill from profile once loaded
   useEffect(() => {
@@ -82,8 +83,39 @@ function CampaignSetup({ onCreated }: { onCreated: () => void }) {
   }, [profile]);
 
   const { authHeaders } = useAppData();
+
+  const saveLocally = () => {
+    const c = {
+      id: `local-${Date.now()}`,
+      name: form.name,
+      target_role: form.target_role || null,
+      target_salary: form.target_salary_min
+        ? `${form.target_currency} ${parseInt(form.target_salary_min).toLocaleString()}${form.target_salary_max ? `–${parseInt(form.target_salary_max).toLocaleString()}` : "+"}`
+        : null,
+      target_location: form.target_location || null,
+      work_mode: form.work_mode,
+      days_remaining: form.deadline_date
+        ? Math.max(0, Math.round((new Date(form.deadline_date).getTime() - Date.now()) / 86400000))
+        : null,
+      current_streak: 0,
+      longest_streak: 0,
+    };
+    const data = {
+      campaign: c,
+      today_progress: {
+        applications_sent: 0, applications_goal: form.daily_goal_apply,
+        evaluations_done: 0,  evaluations_goal: form.daily_goal_evaluate,
+        outreaches_sent: 0,   outreaches_goal: form.daily_goal_outreach,
+      },
+      pipeline_summary: { total_applications: 0, interviews: 0, offers: 0 },
+    };
+    localStorage.setItem("ji_campaign", JSON.stringify(data));
+  };
+
   const submit = async () => {
+    if (!form.target_role.trim()) { setError("Please enter a target role."); return; }
     setLoading(true);
+    setError(null);
     try {
       const res = await fetch(`${API}/api/campaign/`, {
         method: "POST",
@@ -94,20 +126,52 @@ function CampaignSetup({ onCreated }: { onCreated: () => void }) {
           target_salary_max: form.target_salary_max ? parseInt(form.target_salary_max) : undefined,
         }),
       });
-      if (res.ok) onCreated();
+      if (res.ok) {
+        onCreated();
+        return;
+      }
+      // Backend error (e.g. no DB) — fall back to localStorage so it still works
+      if (res.status >= 500) {
+        saveLocally();
+        onCreated();
+        return;
+      }
+      const body = await res.json().catch(() => ({}));
+      setError(body.detail ?? `Server error (${res.status})`);
+    } catch {
+      // Network unreachable — save locally so the campaign still works
+      saveLocally();
+      onCreated();
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="max-w-2xl mx-auto px-4 py-16">
-      <div className="text-center mb-10">
+    <div className="max-w-2xl mx-auto px-4 py-12">
+      <div className="text-center mb-8">
         <div className="w-16 h-16 rounded-2xl bg-linear-to-br from-cyan-500/20 to-violet-500/20 flex items-center justify-center mx-auto mb-4 border border-white/10">
           <Target className="w-8 h-8 text-cyan-400" />
         </div>
         <h1 className="text-3xl font-bold text-white mb-2">Start Your Campaign</h1>
         <p className="text-slate-400">Set a goal. Track every action. Land the offer.</p>
+      </div>
+
+      {/* How it works */}
+      <div className="grid grid-cols-3 gap-3 mb-8">
+        {[
+          { icon: Target,      color: "text-cyan-400",   bg: "bg-cyan-500/10",   title: "1. Set Your Goal",    desc: "Define target role, salary, location and deadline" },
+          { icon: CheckCircle2,color: "text-violet-400", bg: "bg-violet-500/10", title: "2. Track Daily",      desc: "Log applications, outreach & evaluations every day" },
+          { icon: Trophy,      color: "text-amber-400",  bg: "bg-amber-500/10",  title: "3. Build Momentum",  desc: "Maintain your streak — the AI generates your daily plan" },
+        ].map(({ icon: Icon, color, bg, title, desc }) => (
+          <div key={title} className="rounded-xl border border-white/8 p-3 text-center" style={{ background: "var(--bg-card)" }}>
+            <div className={`w-8 h-8 rounded-lg ${bg} flex items-center justify-center mx-auto mb-2`}>
+              <Icon className={`w-4 h-4 ${color}`} />
+            </div>
+            <p className={`text-xs font-semibold ${color} mb-1`}>{title}</p>
+            <p className="text-xs text-slate-500 leading-snug">{desc}</p>
+          </div>
+        ))}
       </div>
 
       <div className="glass-card p-8 space-y-5">
@@ -175,6 +239,12 @@ function CampaignSetup({ onCreated }: { onCreated: () => void }) {
           </div>
         </div>
 
+        {error && (
+          <div className="flex items-start gap-2 p-3 rounded-lg bg-rose-500/10 border border-rose-500/20">
+            <AlertCircle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
+            <p className="text-xs text-rose-300">{error}</p>
+          </div>
+        )}
         <button onClick={submit} disabled={loading}
           className="w-full bg-linear-to-r from-cyan-500 to-violet-500 text-white font-semibold py-3 rounded-xl hover:opacity-90 transition-opacity disabled:opacity-50 flex items-center justify-center gap-2">
           {loading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Target className="w-4 h-4" />}
@@ -196,14 +266,37 @@ export default function CampaignPage() {
   const [completedTodos, setCompletedTodos] = useState<Set<number>>(new Set());
   const [todosLoading, setTodosLoading] = useState(false);
 
+  const defaultTodos = useCallback((c: typeof campaignInfo) => ({
+    motivation: "Consistency beats intensity — even 2 focused hours a day compounds into results.",
+    todos: [
+      { task: `Research 5 companies hiring for ${c?.target_role || "your target role"} and evaluate fit`, type: "evaluate" as const, priority: "high" as const, time_minutes: 30 },
+      { task: `Apply to ${todayProgress?.applications_goal ?? 3} jobs that match your profile above 70%`, type: "apply" as const, priority: "high" as const, time_minutes: 45 },
+      { task: `Send ${todayProgress?.outreaches_goal ?? 2} personalized LinkedIn messages to hiring managers`, type: "outreach" as const, priority: "medium" as const, time_minutes: 20 },
+      { task: "Write or refine one STAR story for your most recent achievement", type: "prep" as const, priority: "medium" as const, time_minutes: 15 },
+      { task: "Follow up on applications older than 7 days with no response", type: "admin" as const, priority: "low" as const, time_minutes: 10 },
+    ],
+  }), [todayProgress]);
+
   const fetchTodos = useCallback(async (campaignId: string) => {
     setTodosLoading(true);
     try {
+      // Local campaigns can't call the API — show defaults immediately
+      if (campaignId.startsWith("local-")) {
+        setTodos(defaultTodos(campaignInfo));
+        return;
+      }
       const res = await fetch(`${API}/api/campaign/${campaignId}/daily-todos`, { headers: authHeaders() });
-      if (res.ok) setTodos(await res.json());
-    } catch {}
-    finally { setTodosLoading(false); }
-  }, [authHeaders]);
+      if (res.ok) {
+        setTodos(await res.json());
+      } else {
+        setTodos(defaultTodos(campaignInfo));
+      }
+    } catch {
+      setTodos(defaultTodos(campaignInfo));
+    } finally {
+      setTodosLoading(false);
+    }
+  }, [authHeaders, defaultTodos, campaignInfo]);
 
   useEffect(() => {
     if (campaignInfo?.id) fetchTodos(campaignInfo.id);
@@ -263,6 +356,18 @@ export default function CampaignPage() {
               <span className="text-slate-300 text-sm">Best: {c.longest_streak}</span>
             </div>
           )}
+          <button
+            onClick={() => {
+              if (confirm("Reset your campaign and start a new one?")) {
+                localStorage.removeItem("ji_campaign");
+                refreshCampaign();
+              }
+            }}
+            className="text-xs text-slate-500 hover:text-rose-400 transition-colors px-2 py-1 rounded-lg hover:bg-rose-500/10"
+            title="Reset campaign"
+          >
+            Reset
+          </button>
         </div>
       </div>
 

@@ -44,7 +44,7 @@ def _row_to_dict(job: VerifiedJob) -> dict:
     }
 
 
-@router.get("/")
+@router.get("")
 async def get_jobs(
     search: Optional[str] = Query(None),
     work_mode: Optional[str] = Query(None),
@@ -59,22 +59,26 @@ async def get_jobs(
 ):
     """Get all discovered jobs with optional filters. Only returns jobs from the last 7 days."""
     from collections import Counter
-    cutoff = datetime.now(timezone.utc) - timedelta(days=7)
-    stmt = select(VerifiedJob).where(VerifiedJob.created_at >= cutoff)
-    if verified_only:
-        stmt = stmt.where(VerifiedJob.verification_status == "VERIFIED")
-    if work_mode and work_mode != "All":
-        stmt = stmt.where(VerifiedJob.work_mode == work_mode)
-    if search:
-        q = f"%{search.lower()}%"
-        stmt = stmt.where(
-            func.lower(VerifiedJob.title).like(q)
-            | func.lower(VerifiedJob.organization).like(q)
-        )
-    stmt = stmt.order_by(VerifiedJob.created_at.desc()).offset(skip).limit(limit)
-    result = await db.execute(stmt)
-    job_objs = result.scalars().all()
-    rows = [_row_to_dict(j) for j in job_objs]
+    try:
+        cutoff = datetime.now(timezone.utc) - timedelta(days=7)
+        stmt = select(VerifiedJob).where(VerifiedJob.created_at >= cutoff)
+        if verified_only:
+            stmt = stmt.where(VerifiedJob.verification_status == "VERIFIED")
+        if work_mode and work_mode != "All":
+            stmt = stmt.where(VerifiedJob.work_mode == work_mode)
+        if search:
+            q = f"%{search.lower()}%"
+            stmt = stmt.where(
+                func.lower(VerifiedJob.title).like(q)
+                | func.lower(VerifiedJob.organization).like(q)
+            )
+        stmt = stmt.order_by(VerifiedJob.created_at.desc()).offset(skip).limit(limit)
+        result = await db.execute(stmt)
+        job_objs = result.scalars().all()
+        rows = [_row_to_dict(j) for j in job_objs]
+    except Exception as exc:
+        logger.warning(f"DB unavailable for GET /jobs, returning empty list: {exc}")
+        return []
 
     # Post-filter: tech tag
     if tech and tech != "All":
@@ -168,7 +172,10 @@ async def get_verified_jobs(
 
 
 @router.post("/discover")
-async def discover_jobs(payload: dict = Body(...)):
+async def discover_jobs(
+    payload: dict = Body(...),
+    db: AsyncSession = Depends(get_db),
+):
     """
     Live multi-portal job discovery.
 
@@ -210,7 +217,63 @@ async def discover_jobs(payload: dict = Body(...)):
         run_verification=bool(payload.get("run_verification", True)),
     )
 
-    return jobs
+    # Persist discovered jobs so GET /api/jobs/ returns them on next load
+    if jobs:
+        try:
+            existing_result = await db.execute(select(VerifiedJob.application_link))
+            existing_links: set[str] = {row[0] for row in existing_result if row[0]}
+
+            for job_data in jobs:
+                link = job_data.get("application_link", "")
+                if link and link in existing_links:
+                    continue
+                try:
+                    job_obj = VerifiedJob(
+                        title=job_data.get("title", ""),
+                        organization=job_data.get("organization", ""),
+                        location=job_data.get("location", ""),
+                        work_mode=job_data.get("work_mode", "Remote"),
+                        salary_min=job_data.get("salary_min"),
+                        salary_max=job_data.get("salary_max"),
+                        currency=job_data.get("currency", "USD"),
+                        description=job_data.get("description", ""),
+                        technologies=job_data.get("technologies", []),
+                        application_link=link or None,
+                        posted_date=job_data.get("posted_date"),
+                        verification_status=job_data.get("verification_status", "UNVERIFIED"),
+                    )
+                    db.add(job_obj)
+                    await db.flush()
+                    if link:
+                        existing_links.add(link)
+                except Exception as exc:
+                    logger.warning(f"Failed to persist discovered job '{job_data.get('title')}': {exc}")
+        except Exception as exc:
+            logger.warning(f"DB unavailable for job persistence, skipping: {exc}")
+
+    # Return camelCase format matching GET /api/jobs/ so the frontend Job type maps correctly
+    return [
+        {
+            "id": "",
+            "title": j.get("title", ""),
+            "organization": j.get("organization", ""),
+            "location": j.get("location", ""),
+            "workMode": j.get("work_mode", ""),
+            "salaryMin": j.get("salary_min"),
+            "salaryMax": j.get("salary_max"),
+            "currency": j.get("currency", "USD"),
+            "experienceRequired": j.get("experience_required"),
+            "description": j.get("description", ""),
+            "technologies": j.get("technologies") or [],
+            "applicationLink": j.get("application_link", ""),
+            "careerPageLink": j.get("career_page_link"),
+            "verificationStatus": j.get("verification_status", "UNVERIFIED"),
+            "postedDate": j.get("posted_date", ""),
+            "source": j.get("source"),
+            "matchScore": j.get("match_score"),
+        }
+        for j in jobs
+    ]
 
 
 @router.get("/{job_id}")
@@ -227,7 +290,7 @@ async def get_job_details(job_id: str, db: AsyncSession = Depends(get_db)):
     return _row_to_dict(job)
 
 
-@router.post("/")
+@router.post("")
 async def create_job(payload: JobCreate, db: AsyncSession = Depends(get_db)):
     """Create / ingest a new job (used by discovery worker)."""
     job = VerifiedJob(

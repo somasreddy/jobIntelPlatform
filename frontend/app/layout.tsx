@@ -9,6 +9,7 @@ import { AppDataProvider } from "@/lib/AppDataContext";
 import Footer from "@/components/Footer";
 import AnalyticsProvider from "@/components/AnalyticsProvider";
 import PWAProvider from "@/components/PWAProvider";
+import ScrollProgress from "@/components/ScrollProgress";
 
 export const metadata: Metadata = {
   title: "JobIntel AI – Career Intelligence Platform",
@@ -34,13 +35,13 @@ export default function RootLayout({
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="" />
         {/* eslint-disable-next-line @next/next/no-page-custom-font */}
         <link
-          href="https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,300;0,14..32,400;0,14..32,500;0,14..32,600;0,14..32,700;0,14..32,800;0,14..32,900;1,14..32,400&family=JetBrains+Mono:wght@400;500&display=swap"
+          href="https://fonts.googleapis.com/css2?family=Inter+Tight:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,400&family=Inter:ital,opsz,wght@0,14..32,300;0,14..32,400;0,14..32,500;0,14..32,600;0,14..32,700;0,14..32,800;0,14..32,900;1,14..32,400&family=JetBrains+Mono:wght@400;500&display=swap"
           rel="stylesheet"
         />
         {/* Anti-flash: apply saved theme before paint */}
         <script
           dangerouslySetInnerHTML={{
-            __html: `try{var t=localStorage.getItem('ji-theme')||'nebula';document.documentElement.setAttribute('data-theme',t);}catch(e){}`,
+            __html: `try{var t=localStorage.getItem('ji-theme')||'cinematic';document.documentElement.setAttribute('data-theme',t);}catch(e){}`,
           }}
         />
       </head>
@@ -55,6 +56,7 @@ export default function RootLayout({
             <ProfileProvider>
               <AppDataProvider>
                 <div style={{ position: "relative", zIndex: 1 }}>
+                  <ScrollProgress />
                   <AnalyticsProvider />
                   <PWAProvider />
                   <Navbar />

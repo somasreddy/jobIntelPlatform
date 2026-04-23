@@ -83,16 +83,17 @@ export default function Navbar() {
               boxShadow: "0 4px 14px -3px var(--glow-accent)",
             }}
           >
-            <Zap className="w-5 h-5 text-white" />
+            <Zap className="w-5 h-5" style={{ color: "var(--bg-base, #07070A)" }} />
           </div>
           <div className="min-w-0">
-            <p className="text-sm font-bold text-white leading-tight">JobIntel AI</p>
-            <p className="text-[10px] text-slate-400 font-medium">Career Optimizer</p>
+            <p className="text-sm font-bold leading-tight" style={{ fontFamily: "'Inter Tight','Inter',sans-serif", letterSpacing: "-0.02em", color: "var(--text-primary)" }}>JobIntel AI</p>
+            <p className="text-[10px] font-medium" style={{ color: "var(--text-muted)" }}>Career Optimizer</p>
           </div>
           {/* Close button - mobile only */}
           <button
             onClick={() => setMobileOpen(false)}
-            className="md:hidden ml-auto text-slate-400 hover:text-white p-1"
+            className="md:hidden ml-auto p-1 transition-colors"
+            style={{ color: "var(--text-secondary)" }}
           >
             <X className="w-5 h-5" />
           </button>
@@ -109,12 +110,12 @@ export default function Navbar() {
               href={href}
               className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all"
               style={active ? {
-                background: "color-mix(in srgb, var(--accent) 15%, transparent)",
+                background: "color-mix(in srgb, var(--accent) 12%, transparent)",
                 color: "var(--accent-bright)",
                 border: "1px solid var(--border-hover)",
                 boxShadow: "0 0 12px -4px var(--glow-accent)",
               } : {
-                color: "#94a3b8",
+                color: "var(--text-secondary)",
                 border: "1px solid transparent",
               }}
             >
@@ -152,7 +153,7 @@ export default function Navbar() {
               border: themeOpen
                 ? "1px solid var(--border-hover)"
                 : "1px solid var(--border)",
-              color: themeOpen ? "var(--accent-bright)" : "#94a3b8",
+              color: themeOpen ? "var(--accent-bright)" : "var(--text-secondary)",
             }}
           >
             <Palette className="w-4 h-4 shrink-0" />
@@ -188,13 +189,14 @@ export default function Navbar() {
               {initials}
             </div>
             <div className="min-w-0 flex-1">
-              <p className="text-xs font-semibold text-white truncate">{userName}</p>
-              <p className="text-[10px] text-slate-400">{user ? "Signed in" : "Demo mode"}</p>
+              <p className="text-xs font-semibold truncate" style={{ color: "var(--text-primary)" }}>{userName}</p>
+              <p className="text-[10px]" style={{ color: "var(--text-muted)" }}>{user ? "Signed in" : "Demo mode"}</p>
             </div>
             {user ? (
               <button
                 onClick={() => { logout(); router.push("/login"); }}
-                className="text-slate-500 hover:text-slate-300 transition-colors shrink-0"
+                className="transition-colors shrink-0"
+                style={{ color: "var(--text-muted)" }}
                 title="Sign out"
               >
                 <LogOut className="w-4 h-4" />
@@ -245,12 +247,12 @@ export default function Navbar() {
           >
             <Zap className="w-4 h-4 text-white" />
           </div>
-          <span className="text-sm font-bold text-white">JobIntel AI</span>
+          <span className="text-sm font-bold" style={{ fontFamily: "'Inter Tight','Inter',sans-serif", letterSpacing: "-0.02em", color: "var(--text-primary)" }}>JobIntel AI</span>
         </div>
         <button
           onClick={() => setMobileOpen(true)}
-          className="p-2 rounded-lg text-slate-400 hover:text-white transition-colors"
-          style={{ background: "var(--bg-elevated)" }}
+          className="p-2 rounded-lg transition-colors"
+          style={{ background: "var(--bg-elevated)", color: "var(--text-secondary)" }}
           aria-label="Open menu"
         >
           <Menu className="w-5 h-5" />

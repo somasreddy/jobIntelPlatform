@@ -23,8 +23,9 @@ async function getPostHog() {
 
   try {
     // posthog-js is optional — install with: npm i posthog-js
+    // webpackIgnore prevents the build from failing when the package is absent
     // @ts-expect-error — optional peer dep, not installed by default
-    const ph = (await import("posthog-js").catch(() => null))?.default;
+    const ph = (await import(/* webpackIgnore: true */ "posthog-js").catch(() => null))?.default;
     if (!ph) return null;
     ph.init(POSTHOG_KEY, {
       api_host: POSTHOG_HOST,

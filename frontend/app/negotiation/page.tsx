@@ -96,11 +96,13 @@ export default function NegotiationPage() {
   // Pre-fill from profile once loaded
   useEffect(() => {
     if (!profile) return;
+    const currencySymbol = profile.currency === "EUR" ? "€" : profile.currency === "GBP" ? "£" : profile.currency === "INR" ? "₹" : "$";
     setMarket(prev => ({
       ...prev,
       experience_years: prev.experience_years || String(profile.experienceYears || ""),
-      location: prev.location || profile.currentLocation || (profile.preferredLocations?.[0] ?? ""),
-      current_salary: prev.current_salary || (profile.currentSalary > 0 ? String(profile.currentSalary) : ""),
+      location:         prev.location         || profile.preferredLocations?.[0] || profile.currentLocation || "",
+      current_salary:   prev.current_salary   || (profile.currentSalary > 0 ? `${currencySymbol}${profile.currentSalary.toLocaleString()}` : ""),
+      target_salary:    prev.target_salary    || (profile.currentSalary > 0 ? `${currencySymbol}${Math.round(profile.currentSalary * 1.15).toLocaleString()}` : ""),
     }));
     setOffer(prev => ({
       ...prev,

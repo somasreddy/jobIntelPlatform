@@ -1,11 +1,20 @@
 "use client";
 import { useState, useEffect, useCallback } from "react";
 import { useAuth } from "@/lib/AuthContext";
+import { useProfile } from "@/lib/ProfileContext";
 import {
   Globe, Github, Linkedin, Plus, Trash2, Loader2,
   CheckCircle2, Eye, EyeOff, Zap, ExternalLink, Star,
-  Code2,
+  Code2, WifiOff,
 } from "lucide-react";
+
+const LS_KEY = "portfolio_data";
+function loadLocal(): PortfolioData | null {
+  try { const r = localStorage.getItem(LS_KEY); return r ? JSON.parse(r) : null; } catch { return null; }
+}
+function saveLocal(d: PortfolioData) {
+  try { localStorage.setItem(LS_KEY, JSON.stringify(d)); } catch {}
+}
 
 const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
@@ -44,11 +53,14 @@ interface PortfolioData {
 
 export default function PortfolioPage() {
   const { token } = useAuth();
+  const { profile } = useProfile();
   const [portfolio, setPortfolio] = useState<PortfolioData | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [generatingBio, setGeneratingBio] = useState(false);
   const [activeTab, setActiveTab] = useState<"editor" | "projects">("editor");
+  const [isOffline, setIsOffline] = useState(false);
+  const [saveMsg, setSaveMsg] = useState<string | null>(null);
 
   // Portfolio form
   const [form, setForm] = useState({
@@ -63,54 +75,114 @@ export default function PortfolioPage() {
   const [addingProject, setAddingProject] = useState(false);
   const [showProjectForm, setShowProjectForm] = useState(false);
 
+  const applyPortfolioData = useCallback((data: PortfolioData) => {
+    setPortfolio(data);
+    setForm({
+      headline: data.headline || "",
+      bio: data.bio || "",
+      linkedin_url: data.linkedin_url || "",
+      github_url: data.github_url || "",
+      website_url: data.website_url || "",
+      is_public: data.is_public,
+      skills: (data.skills || []).join(", "),
+      certifications: (data.certifications || []).join(", "),
+    });
+  }, []);
+
   const fetchPortfolio = useCallback(async () => {
     setLoading(true);
     try {
       const res = await fetch(`${API}/api/portfolio/`, { headers: authHeaders(token) });
       if (res.ok) {
         const data: PortfolioData = await res.json();
-        setPortfolio(data);
-        setForm({
-          headline: data.headline || "",
-          bio: data.bio || "",
-          linkedin_url: data.linkedin_url || "",
-          github_url: data.github_url || "",
-          website_url: data.website_url || "",
-          is_public: data.is_public,
-          skills: (data.skills || []).join(", "),
-          certifications: (data.certifications || []).join(", "),
-        });
+        saveLocal(data);
+        applyPortfolioData(data);
+        setIsOffline(false);
+      } else {
+        const local = loadLocal();
+        if (local) { applyPortfolioData(local); setIsOffline(true); }
       }
-    } catch (e) { console.error(e); }
+    } catch {
+      const local = loadLocal();
+      if (local) {
+        applyPortfolioData(local);
+      } else {
+        // First time offline — seed a blank local portfolio so the editor is usable
+        const blank: PortfolioData = {
+          id: "", slug: "", headline: null, bio: null, linkedin_url: null,
+          github_url: null, website_url: null, theme: "dark", is_public: false,
+          view_count: 0, skills: [], certifications: [], public_url: "", projects: [],
+        };
+        applyPortfolioData(blank);
+      }
+      setIsOffline(true);
+    }
     finally { setLoading(false); }
-  }, [token]);
+  }, [token, applyPortfolioData]);
 
   useEffect(() => { fetchPortfolio(); }, [fetchPortfolio]);
 
+  // Seed empty portfolio fields from profile — only fills what's still blank
+  useEffect(() => {
+    if (!profile) return;
+    setForm(prev => ({
+      ...prev,
+      headline: prev.headline || (profile.currentRole ? `${profile.name ? profile.name + " · " : ""}${profile.currentRole}` : ""),
+      skills: prev.skills || [
+        ...(profile.skills || []),
+        ...(profile.frameworks || []),
+        ...(profile.languages || []),
+      ].join(", "),
+      certifications: prev.certifications || (profile.certifications || []).join(", "),
+    }));
+  }, [profile]);
+
   const savePortfolio = async () => {
     setSaving(true);
+    setSaveMsg(null);
+    const payload = {
+      headline: form.headline || null,
+      bio: form.bio || null,
+      linkedin_url: form.linkedin_url || null,
+      github_url: form.github_url || null,
+      website_url: form.website_url || null,
+      is_public: form.is_public,
+      skills: form.skills.split(",").map(s => s.trim()).filter(Boolean),
+      certifications: form.certifications.split(",").map(s => s.trim()).filter(Boolean),
+    };
     try {
-      await fetch(`${API}/api/portfolio/`, {
+      const res = await fetch(`${API}/api/portfolio/`, {
         method: "PUT",
         headers: authHeaders(token),
-        body: JSON.stringify({
-          headline: form.headline || null,
-          bio: form.bio || null,
-          linkedin_url: form.linkedin_url || null,
-          github_url: form.github_url || null,
-          website_url: form.website_url || null,
-          is_public: form.is_public,
-          skills: form.skills.split(",").map(s => s.trim()).filter(Boolean),
-          certifications: form.certifications.split(",").map(s => s.trim()).filter(Boolean),
-        }),
+        body: JSON.stringify(payload),
       });
-      await fetchPortfolio();
-    } catch (e) { console.error(e); }
-    finally { setSaving(false); }
+      if (res.ok) {
+        await fetchPortfolio();
+        setSaveMsg("Saved");
+      } else {
+        throw new Error("API error");
+      }
+    } catch {
+      // Save locally so changes are not lost
+      const updated: PortfolioData = {
+        ...(portfolio || { id: "", slug: "", theme: "dark", view_count: 0, public_url: "" }),
+        ...payload,
+        projects: portfolio?.projects ?? [],
+      };
+      saveLocal(updated);
+      setPortfolio(updated);
+      setIsOffline(true);
+      setSaveMsg("Saved locally (offline)");
+    }
+    finally {
+      setSaving(false);
+      setTimeout(() => setSaveMsg(null), 3000);
+    }
   };
 
   const generateBio = async () => {
     setGeneratingBio(true);
+    setSaveMsg(null);
     try {
       const res = await fetch(`${API}/api/portfolio/generate-bio`, {
         method: "POST",
@@ -119,37 +191,77 @@ export default function PortfolioPage() {
       if (res.ok) {
         const data = await res.json();
         if (data.bio) setForm(p => ({ ...p, bio: data.bio }));
+        else setSaveMsg("AI bio generation unavailable");
+      } else {
+        setSaveMsg("AI generation requires the server to be online");
       }
-    } catch (e) { console.error(e); }
-    finally { setGeneratingBio(false); }
+    } catch {
+      setSaveMsg("AI generation requires the server to be online");
+    }
+    finally {
+      setGeneratingBio(false);
+      setTimeout(() => setSaveMsg(null), 4000);
+    }
   };
 
   const addProject = async () => {
     if (!newProject.title.trim()) return;
     setAddingProject(true);
+    const projectPayload = {
+      title: newProject.title,
+      description: newProject.description || null,
+      tech_stack: newProject.tech_stack.split(",").map(s => s.trim()).filter(Boolean),
+      demo_url: newProject.demo_url || null,
+      github_url: newProject.github_url || null,
+      featured: newProject.featured,
+    };
     try {
-      await fetch(`${API}/api/portfolio/projects`, {
+      const res = await fetch(`${API}/api/portfolio/projects`, {
         method: "POST",
         headers: authHeaders(token),
-        body: JSON.stringify({
-          title: newProject.title,
-          description: newProject.description || null,
-          tech_stack: newProject.tech_stack.split(",").map(s => s.trim()).filter(Boolean),
-          demo_url: newProject.demo_url || null,
-          github_url: newProject.github_url || null,
-          featured: newProject.featured,
-        }),
+        body: JSON.stringify(projectPayload),
       });
+      if (res.ok) {
+        setNewProject({ title: "", description: "", tech_stack: "", demo_url: "", github_url: "", featured: false });
+        setShowProjectForm(false);
+        await fetchPortfolio();
+      } else { throw new Error("API error"); }
+    } catch {
+      // Add project locally
+      const localProject: Project = {
+        id: `local-${Date.now()}`,
+        ai_impact: null,
+        ...projectPayload,
+      };
+      const updated: PortfolioData = {
+        ...(portfolio || { id: "", slug: "", headline: null, bio: null, linkedin_url: null, github_url: null, website_url: null, theme: "dark", is_public: false, view_count: 0, skills: [], certifications: [], public_url: "", projects: [] }),
+        projects: [...(portfolio?.projects ?? []), localProject],
+      };
+      saveLocal(updated);
+      setPortfolio(updated);
+      setIsOffline(true);
       setNewProject({ title: "", description: "", tech_stack: "", demo_url: "", github_url: "", featured: false });
       setShowProjectForm(false);
-      await fetchPortfolio();
-    } catch (e) { console.error(e); }
+      setSaveMsg("Project saved locally (offline)");
+      setTimeout(() => setSaveMsg(null), 3000);
+    }
     finally { setAddingProject(false); }
   };
 
   const deleteProject = async (id: string) => {
-    await fetch(`${API}/api/portfolio/projects/${id}`, { method: "DELETE", headers: authHeaders(token) });
-    await fetchPortfolio();
+    try {
+      await fetch(`${API}/api/portfolio/projects/${id}`, { method: "DELETE", headers: authHeaders(token) });
+      await fetchPortfolio();
+    } catch {
+      // Remove locally
+      const updated: PortfolioData = {
+        ...(portfolio!),
+        projects: (portfolio?.projects ?? []).filter(p => p.id !== id),
+      };
+      saveLocal(updated);
+      setPortfolio(updated);
+      setIsOffline(true);
+    }
   };
 
   if (loading) return (
@@ -161,6 +273,25 @@ export default function PortfolioPage() {
   return (
     <div className="flex min-h-screen bg-transparent">
       <main className="md:ml-64 flex-1 px-4 md:px-8 pt-20 md:pt-6 pb-8 max-w-4xl">
+
+        {/* Offline banner */}
+        {isOffline && (
+          <div className="flex items-center gap-2 mb-4 px-4 py-2.5 rounded-xl text-sm font-medium"
+            style={{ background: "rgba(245,158,11,0.1)", border: "1px solid rgba(245,158,11,0.25)", color: "#fbbf24" }}>
+            <WifiOff className="w-4 h-4 shrink-0" />
+            Working offline — changes are saved locally and will sync when the server is available.
+          </div>
+        )}
+
+        {/* Save feedback */}
+        {saveMsg && (
+          <div className="mb-4 px-4 py-2.5 rounded-xl text-sm font-medium"
+            style={saveMsg.includes("offline") || saveMsg.includes("requires")
+              ? { background: "rgba(245,158,11,0.1)", border: "1px solid rgba(245,158,11,0.25)", color: "#fbbf24" }
+              : { background: "rgba(16,185,129,0.1)", border: "1px solid rgba(16,185,129,0.25)", color: "#10b981" }}>
+            {saveMsg}
+          </div>
+        )}
 
         {/* Header */}
         <div className="flex items-center justify-between mb-6">
@@ -283,11 +414,14 @@ export default function PortfolioPage() {
                 value={form.certifications} onChange={e => setForm(p => ({ ...p, certifications: e.target.value }))} />
             </div>
 
-            <button onClick={savePortfolio} disabled={saving}
-              className="btn-primary flex items-center gap-2 px-5 py-2.5 font-semibold">
-              {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
-              Save Portfolio
-            </button>
+            <div className="flex items-center gap-3">
+              <button onClick={savePortfolio} disabled={saving}
+                className="btn-primary flex items-center gap-2 px-5 py-2.5 font-semibold">
+                {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
+                Save Portfolio
+              </button>
+              {saveMsg && <span className="text-xs" style={{ color: saveMsg.includes("offline") || saveMsg.includes("requires") ? "#fbbf24" : "#10b981" }}>{saveMsg}</span>}
+            </div>
           </div>
         )}
 

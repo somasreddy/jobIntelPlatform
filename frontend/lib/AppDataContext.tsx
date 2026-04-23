@@ -148,6 +148,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   // ── Fetch: campaign ───────────────────────────────────────────────────────
   const fetchCampaign = useCallback(async () => {
     setCampaignLoading(true);
+    let loaded = false;
     try {
       const res = await fetch(`${API}/api/campaign/active`, { headers: authHeaders() });
       if (res.ok) {
@@ -157,14 +158,38 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
           setTodayProgress(data.today_progress);
           setPipelineSummary(data.pipeline_summary);
           campaignIdRef.current = data.campaign.id;
+          // Keep localStorage in sync as cache
+          try { localStorage.setItem("ji_campaign", JSON.stringify(data)); } catch {}
+          loaded = true;
         } else {
           setCampaign(null);
           setTodayProgress(null);
           setPipelineSummary(null);
           campaignIdRef.current = null;
+          loaded = true;
         }
       }
-    } catch { /* no campaign — that's fine */ }
+    } catch { /* fall through to localStorage */ }
+
+    // Fallback to localStorage (works in demo/offline mode)
+    if (!loaded) {
+      try {
+        const raw = typeof window !== "undefined" ? localStorage.getItem("ji_campaign") : null;
+        if (raw) {
+          const data = JSON.parse(raw);
+          if (data.campaign) {
+            setCampaign(data.campaign);
+            setTodayProgress(data.today_progress ?? {
+              applications_sent: 0, applications_goal: 3,
+              evaluations_done: 0,  evaluations_goal: 5,
+              outreaches_sent: 0,   outreaches_goal: 2,
+            });
+            setPipelineSummary(data.pipeline_summary ?? { total_applications: 0, interviews: 0, offers: 0 });
+            campaignIdRef.current = data.campaign.id;
+          }
+        }
+      } catch {}
+    }
     setCampaignLoading(false);
   }, [authHeaders]);
 
@@ -205,23 +230,39 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   const _logActionRaw = useCallback(async (type: ActionType) => {
     const cid = campaignIdRef.current;
     if (!cid) return;
+
+    const progressMap: Partial<Record<ActionType, keyof TodayProgress>> = {
+      apply:    "applications_sent",
+      evaluate: "evaluations_done",
+      outreach: "outreaches_sent",
+    };
+
+    // Optimistic update immediately
+    setTodayProgress(prev => {
+      if (!prev) return prev;
+      const key = progressMap[type];
+      if (!key) return prev;
+      const updated = { ...prev, [key]: (prev[key] as number) + 1 };
+      // Persist to localStorage for local campaigns or as cache
+      try {
+        const raw = localStorage.getItem("ji_campaign");
+        if (raw) {
+          const data = JSON.parse(raw);
+          data.today_progress = updated;
+          localStorage.setItem("ji_campaign", JSON.stringify(data));
+        }
+      } catch {}
+      return updated;
+    });
+
+    // Skip API call for local (offline) campaigns
+    if (cid.startsWith("local-")) return;
+
     try {
       await fetch(`${API}/api/campaign/${cid}/log-action`, {
         method: "POST",
         headers: authHeaders(),
         body: JSON.stringify({ action_type: type, count: 1 }),
-      });
-      // Optimistic update — don't wait for re-fetch
-      setTodayProgress(prev => {
-        if (!prev) return prev;
-        const map: Partial<Record<ActionType, keyof TodayProgress>> = {
-          apply:    "applications_sent",
-          evaluate: "evaluations_done",
-          outreach: "outreaches_sent",
-        };
-        const key = map[type];
-        if (!key) return prev;
-        return { ...prev, [key]: (prev[key] as number) + 1 };
       });
     } catch { /* best-effort */ }
   }, [authHeaders]);

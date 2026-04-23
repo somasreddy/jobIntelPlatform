@@ -458,26 +458,26 @@ function ProfileTab({ onTabChange }: { onTabChange: (t: TabId) => void }) {
             <div className="card">
               <h2 className="text-base font-semibold text-white mb-4 flex items-center gap-2"><User className="w-4 h-4 text-indigo-400" /> Personal Information</h2>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div><label className="block text-xs font-medium text-slate-400 mb-1.5">Full Name</label><input className="input" placeholder="Enter your full name" value={form.name} onChange={e => setForm(p => ({ ...p, name: e.target.value }))} /></div>
-                <div><label className="block text-xs font-medium text-slate-400 mb-1.5">Current Role</label><input className="input" placeholder="e.g. Software Engineer, Product Manager" value={form.currentRole} onChange={e => setForm(p => ({ ...p, currentRole: e.target.value }))} required /></div>
+                <div className="min-w-0"><label className="block text-xs font-medium text-slate-400 mb-1.5">Full Name</label><input className="input w-full" placeholder="Enter your full name" value={form.name} onChange={e => setForm(p => ({ ...p, name: e.target.value }))} /></div>
+                <div className="min-w-0"><label className="block text-xs font-medium text-slate-400 mb-1.5">Current Role</label><input className="input w-full" placeholder="e.g. Software Engineer, Product Manager" value={form.currentRole} onChange={e => setForm(p => ({ ...p, currentRole: e.target.value }))} required /></div>
               </div>
             </div>
             <div className="card">
               <h2 className="text-base font-semibold text-white mb-4 flex items-center gap-2"><Briefcase className="w-4 h-4 text-indigo-400" /> Career Details</h2>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div>
+                <div className="min-w-0">
                   <label className="block text-xs font-medium text-slate-400 mb-1.5"><DollarSign className="w-3 h-3 inline mr-0.5" /> Current Salary</label>
-                  <div className="flex gap-2">
+                  <div className="flex gap-2 w-full">
                     <select className="input w-20 shrink-0" value={form.currency} onChange={e => setForm(p => ({ ...p, currency: e.target.value }))}>
                       {["USD","INR","GBP","EUR","AUD"].map(c => <option key={c} value={c}>{c}</option>)}
                     </select>
-                    <input className="input flex-1 min-w-0" type="number" placeholder="e.g. 80000" value={form.currentSalary} onChange={e => setForm(p => ({ ...p, currentSalary: e.target.value }))} />
+                    <input className="input w-0 flex-1" type="number" placeholder="e.g. 80000" value={form.currentSalary} onChange={e => setForm(p => ({ ...p, currentSalary: e.target.value }))} />
                   </div>
                 </div>
-                <div><label className="block text-xs font-medium text-slate-400 mb-1.5"><Clock className="w-3 h-3 inline mr-0.5" /> Experience (years)</label><input className="input" type="number" placeholder="e.g. 5" value={form.experienceYears} onChange={e => setForm(p => ({ ...p, experienceYears: e.target.value }))} required /></div>
-                <div>
+                <div className="min-w-0"><label className="block text-xs font-medium text-slate-400 mb-1.5"><Clock className="w-3 h-3 inline mr-0.5" /> Experience (years)</label><input className="input w-full" type="number" placeholder="e.g. 5" value={form.experienceYears} onChange={e => setForm(p => ({ ...p, experienceYears: e.target.value }))} required /></div>
+                <div className="min-w-0">
                   <label className="block text-xs font-medium text-slate-400 mb-1.5">Preferred Work Mode</label>
-                  <select className="input" value={form.workMode} onChange={e => setForm(p => ({ ...p, workMode: e.target.value }))}>
+                  <select className="input w-full" value={form.workMode} onChange={e => setForm(p => ({ ...p, workMode: e.target.value }))}>
                     {["Any","Remote","Hybrid","On-site"].map(m => <option key={m} value={m}>{m}</option>)}
                   </select>
                 </div>
@@ -486,8 +486,8 @@ function ProfileTab({ onTabChange }: { onTabChange: (t: TabId) => void }) {
             <div className="card">
               <h2 className="text-base font-semibold text-white mb-4 flex items-center gap-2"><MapPin className="w-4 h-4 text-indigo-400" /> Location Preferences</h2>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div><label className="block text-xs font-medium text-slate-400 mb-1.5">Current Location</label><LocationAutocomplete value={form.currentLocation} onChange={v => setForm(p => ({ ...p, currentLocation: v }))} placeholder="e.g. Bangalore, India" /></div>
-                <div>
+                <div className="min-w-0"><label className="block text-xs font-medium text-slate-400 mb-1.5">Current Location</label><LocationAutocomplete value={form.currentLocation} onChange={v => setForm(p => ({ ...p, currentLocation: v }))} placeholder="e.g. Bangalore, India" /></div>
+                <div className="min-w-0">
                   <label className="block text-xs font-medium text-slate-400 mb-1.5">Preferred Job Locations</label>
                   <div className="flex gap-2 mb-2">
                     <LocationAutocomplete value={form.preferredLocation} onChange={v => setForm(p => ({ ...p, preferredLocation: v }))} onSelect={v => { if (v && !form.preferredLocations.includes(v)) setForm(p => ({ ...p, preferredLocations: [...p.preferredLocations, v], preferredLocation: "" })); }} placeholder="Type city and select or press +" className="flex-1" />
