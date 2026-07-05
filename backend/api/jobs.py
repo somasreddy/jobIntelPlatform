@@ -277,6 +277,8 @@ async def discover_jobs(
             "postedDate": j.get("posted_date", ""),
             "source": j.get("source"),
             "matchScore": j.get("match_score"),
+            "aiRelevanceScore": j.get("ai_relevance_score"),
+            "matchReasons": j.get("match_reasons") or [],
         }
         for j in jobs
     ]

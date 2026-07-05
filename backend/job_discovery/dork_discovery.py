@@ -62,6 +62,12 @@ NEGATIVE_TERMS = [
     "Sample Resume", "CV template",
 ]
 
+ROLE_STOP_WORDS = {
+    "senior", "lead", "principal", "staff", "engineer", "developer", "specialist",
+    "manager", "analyst", "consultant", "remote", "hybrid", "job", "jobs", "role",
+    "opening", "position",
+}
+
 ROLE_SYNONYMS = {
     "qa": ["Senior QA Engineer", "QA Automation Engineer", "Test Automation Engineer", "SDET"],
     "sdet": ["SDET", "Senior SDET", "QA Automation Engineer", "Test Automation Engineer"],
@@ -380,6 +386,85 @@ def _matches_profile(job: dict, titles: list[str], skills: list[str], locations:
     return title_match and skill_match
 
 
+def _term_tokens(value: str) -> list[str]:
+    tokens = re.findall(r"[a-z0-9+#.]+", (value or "").lower())
+    return [token for token in tokens if len(token) > 2 and token not in ROLE_STOP_WORDS]
+
+
+def _job_text(job: dict) -> str:
+    return " ".join(
+        str(job.get(k, ""))
+        for k in ("title", "organization", "description", "location", "work_mode", "technologies", "application_link")
+    ).lower()
+
+
+def _ai_relevance_score(job: dict, role: str, skills: list[str], location: str, exp_years: int) -> tuple[int, list[str]]:
+    """Deterministic AI-style relevance gate for noisy web dork results."""
+    combined = _job_text(job)
+    if any(term.lower() in combined for term in NEGATIVE_TERMS):
+        return 0, []
+
+    score = 0
+    reasons: list[str] = []
+    title_text = str(job.get("title", "")).lower()
+    role_titles = [t.lower() for t in _role_titles(role)]
+    if any(title and title in title_text for title in role_titles):
+        score += 35
+        reasons.append("Title matches target role")
+    else:
+        role_hits = [token for token in _term_tokens(role) if token in combined]
+        if role_hits:
+            score += min(30, 12 + len(role_hits) * 6)
+            reasons.append(f"Role terms: {', '.join(role_hits[:3])}")
+
+    skill_hits: list[str] = []
+    for skill in skills:
+        skill_lower = skill.lower().strip()
+        if not skill_lower:
+            continue
+        if skill_lower in combined or any(token in combined for token in _term_tokens(skill_lower)):
+            skill_hits.append(skill)
+    if skills:
+        if skill_hits:
+            score += min(28, 10 + len(skill_hits) * 5)
+            reasons.append(f"Skills: {', '.join(skill_hits[:3])}")
+        else:
+            score -= 10
+
+    loc_terms = _location_terms(location)
+    loc_hits = [term for term in loc_terms if term.lower() in combined]
+    wants_remote = any(term.lower() == "remote" for term in loc_terms)
+    if loc_hits:
+        score += 18
+        reasons.append(f"Location: {', '.join(loc_hits[:3])}")
+    elif wants_remote and "remote" in combined:
+        score += 18
+        reasons.append("Remote match")
+    elif location:
+        score += 4
+
+    exp_req = int(job.get("experience_required") or 0)
+    if exp_req and exp_years:
+        if exp_years >= exp_req:
+            score += 10
+            reasons.append(f"Experience fit: {exp_req}+ yrs")
+        elif exp_req > exp_years + 2:
+            score -= 12
+    elif exp_years >= 5 and re.search(r"\b(senior|lead|principal|staff|architect)\b", combined):
+        score += 8
+        reasons.append("Seniority fit")
+
+    parsed = urlparse(str(job.get("application_link", "")))
+    url_text = f"{parsed.netloc} {parsed.path}".lower()
+    if any(term in url_text for term in ("job", "jobs", "career", "careers", "position", "opening", "viewjob")):
+        score += 7
+        reasons.append("Job page signal")
+
+    if not reasons and score > 0:
+        reasons.append("Related search result")
+    return max(0, min(100, score)), reasons[:4]
+
+
 def _compute_match_score(job: dict, profile_skills: set[str], exp_years: int) -> int:
     techs = [t.lower() for t in (job.get("technologies") or [])]
     if techs:
@@ -396,19 +481,11 @@ def _compute_match_score(job: dict, profile_skills: set[str], exp_years: int) ->
     return max(10, min(99, score))
 
 
-async def _enrich_hit(client: httpx.AsyncClient, hit: SearchHit) -> dict | None:
-    try:
-        resp = await client.get(hit.url, follow_redirects=True)
-        if resp.status_code >= 400:
-            return None
-        page_html = resp.text[:350000]
-    except Exception:
-        page_html = ""
-
+def _job_from_hit(hit: SearchHit, page_html: str = "") -> dict:
     company = _company_from_url(hit.url)
     page_title = _page_title(page_html, hit.title)
     title = _clean_title(page_title, company)
-    description = _meta_description(page_html) or _strip_html(page_html)[:2000] or hit.snippet
+    description = _meta_description(page_html) or _strip_html(page_html)[:2000] or hit.snippet or hit.title
     text = f"{title} {company} {description} {hit.url}"
     return {
         "title": title,
@@ -430,6 +507,16 @@ async def _enrich_hit(client: httpx.AsyncClient, hit: SearchHit) -> dict | None:
     }
 
 
+async def _enrich_hit(client: httpx.AsyncClient, hit: SearchHit) -> dict | None:
+    try:
+        resp = await client.get(hit.url, follow_redirects=True)
+        if resp.status_code >= 400:
+            return _job_from_hit(hit)
+        return _job_from_hit(hit, resp.text[:350000])
+    except Exception:
+        return _job_from_hit(hit)
+
+
 async def discover_jobs_from_dorks(
     role: str,
     location: str,
@@ -447,16 +534,17 @@ async def discover_jobs_from_dorks(
 
     hits: list[SearchHit] = []
     async with httpx.AsyncClient(timeout=_SEARCH_TIMEOUT, headers=headers) as client:
+        providers = (_search_duckduckgo, _search_bing, _search_google)
         for query in queries:
-            providers = (_search_duckduckgo, _search_bing, _search_google)
-            for provider in providers:
-                try:
-                    batch = await provider(client, query)
+            batches = await asyncio.gather(
+                *[provider(client, query) for provider in providers],
+                return_exceptions=True,
+            )
+            for batch in batches:
+                if isinstance(batch, list):
                     hits.extend(batch)
-                    if batch:
-                        break
-                except Exception as exc:
-                    logger.debug("Dork search provider failed: %s", exc)
+                else:
+                    logger.debug("Dork search provider failed: %s", batch)
 
     dedup_hits: list[SearchHit] = []
     seen_urls: set[str] = set()
@@ -469,22 +557,23 @@ async def discover_jobs_from_dorks(
     async with httpx.AsyncClient(timeout=_PAGE_TIMEOUT, headers=headers) as client:
         enriched = await asyncio.gather(*[_enrich_hit(client, hit) for hit in dedup_hits], return_exceptions=True)
 
-    titles = _role_titles(role)
     skill_terms = _skill_terms(skills)
-    loc_terms = _location_terms(location)
     profile_skill_set = {s.lower() for s in skills}
     jobs: list[dict] = []
     seen_jobs: set[tuple[str, str]] = set()
     for item in enriched:
         if not isinstance(item, dict):
             continue
-        if not _matches_profile(item, titles, skill_terms, loc_terms):
+        ai_score, match_reasons = _ai_relevance_score(item, role, skill_terms, location, exp_years)
+        if ai_score < 45:
             continue
         key = (item.get("title", "").lower()[:70], item.get("organization", "").lower()[:50])
         if key in seen_jobs:
             continue
         seen_jobs.add(key)
-        item["match_score"] = _compute_match_score(item, profile_skill_set, exp_years)
+        item["ai_relevance_score"] = ai_score
+        item["match_reasons"] = match_reasons
+        item["match_score"] = max(_compute_match_score(item, profile_skill_set, exp_years), ai_score)
         if min_match_score and item["match_score"] < min_match_score:
             continue
         jobs.append(item)

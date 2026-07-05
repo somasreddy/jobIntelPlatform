@@ -52,6 +52,8 @@ export interface Job {
   verificationStatus: VerificationStatus;
   postedDate: string;
   matchScore?: number;
+  aiRelevanceScore?: number;
+  matchReasons?: string[];
   fitScore?: number;
   fitBadge?: string;
   levelUp: boolean;

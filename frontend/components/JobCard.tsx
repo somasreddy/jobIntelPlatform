@@ -282,6 +282,20 @@ export default function JobCard({ job, onSelect }: JobCardProps) {
       {/* Description preview */}
       <p className="text-xs text-slate-400 line-clamp-2 mb-3 leading-relaxed">{job.description}</p>
 
+      {job.matchReasons && job.matchReasons.length > 0 && (
+        <div className="flex flex-wrap gap-1.5 mb-3">
+          {job.matchReasons.slice(0, 3).map((reason) => (
+            <span
+              key={reason}
+              className="inline-flex items-center gap-1 rounded-full border border-emerald-400/20 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold text-emerald-300"
+            >
+              <CheckCircle2 className="h-3 w-3" />
+              {reason}
+            </span>
+          ))}
+        </div>
+      )}
+
       {/* Tech tags */}
       <div className="flex flex-wrap gap-1.5 mb-4">
         {job.technologies.slice(0, 5).map((t) => (

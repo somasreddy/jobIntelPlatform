@@ -133,6 +133,8 @@ function normalizeJob(raw: Partial<Job>, index: number, profile: CandidateProfil
     verificationStatus: validVerification(raw.verificationStatus),
     postedDate: raw.postedDate || new Date().toISOString().slice(0, 10),
     matchScore: Number(raw.matchScore ?? 0) || undefined,
+    aiRelevanceScore: Number(raw.aiRelevanceScore ?? 0) || undefined,
+    matchReasons: Array.isArray(raw.matchReasons) ? raw.matchReasons.filter(Boolean) : [],
     fitScore: raw.fitScore,
     fitBadge: raw.fitBadge,
     levelUp: Boolean(raw.levelUp),
@@ -206,6 +208,16 @@ export default function JobsPage() {
     };
   };
 
+  const resetResultFilters = () => {
+    setSearchQuery("");
+    setWorkMode("All");
+    setTechFilter("All");
+    setPortalFilter("All");
+    setLevelFilter("All");
+    setMinScore(0);
+    setStrictMode(false);
+  };
+
   const loadJobs = async (currentProfile: CandidateProfile | null, autoDiscover = false) => {
     setLoading(true);
     try {
@@ -245,6 +257,7 @@ export default function JobsPage() {
       return;
     }
 
+    if (!silent) resetResultFilters();
     setDiscovering(true);
     if (!silent) setDiscoverError(null);
     try {
@@ -312,7 +325,6 @@ export default function JobsPage() {
     profileRef.current = profile;
     if (profile && !profileDefaultsApplied.current) {
       setDorkSearch((current) => applyProfileDefaults(profile, current));
-      if (profile.workMode && profile.workMode !== "Any") setWorkMode(profile.workMode);
       profileDefaultsApplied.current = true;
     }
     void loadJobs(profile, Boolean(profile));
@@ -338,6 +350,8 @@ export default function JobsPage() {
     const matchesScore = (j.fitScore ?? j.matchScore ?? 0) >= minScore;
     return matchesQ && matchesMode && matchesTech && matchesLevel && matchesPortal && matchesScore;
   });
+
+  const filtersAreHidingJobs = jobs.length > 0 && filtered.length === 0;
 
   const upliftCount = jobs.filter((j) => j.levelUp).length;
   const verifiedCount = jobs.filter((j) => j.verificationStatus === "VERIFIED").length;
@@ -509,8 +523,18 @@ export default function JobsPage() {
             </button>
 
             <span className="text-xs text-slate-500 whitespace-nowrap">
-              <Filter className="w-3 h-3 inline mr-1" />{filtered.length} results
+              <Filter className="w-3 h-3 inline mr-1" />{filtered.length} of {jobs.length} shown
             </span>
+
+            {jobs.length > 0 && (
+              <button
+                onClick={resetResultFilters}
+                className="px-3 py-1.5 rounded-lg text-xs font-medium text-slate-300 hover:text-white"
+                style={{ background: "var(--bg-base)", border: "1px solid var(--border)" }}
+              >
+                Show all results
+              </button>
+            )}
           </div>
 
           <div className="flex flex-wrap gap-3 items-center">
@@ -558,8 +582,19 @@ export default function JobsPage() {
         ) : filtered.length === 0 ? (
           <div className="card text-center py-16 text-slate-400">
             <Search className="w-10 h-10 mx-auto mb-3 text-slate-600" />
-            <p className="font-medium">No jobs match the current filters</p>
-            <p className="text-sm mt-1">Enter a title, experience, location, and country, then run Search Dork Jobs.</p>
+            <p className="font-medium">
+              {filtersAreHidingJobs ? `${jobs.length} openings are loaded but hidden by filters` : "No jobs loaded yet"}
+            </p>
+            <p className="text-sm mt-1">
+              {filtersAreHidingJobs
+                ? "Click Show all results to display every opening returned by the dork search."
+                : "Enter a title, experience, location, and country, then run Search Dork Jobs."}
+            </p>
+            {filtersAreHidingJobs && (
+              <button onClick={resetResultFilters} className="btn-primary text-sm mt-5 px-5 py-2">
+                Show all results
+              </button>
+            )}
           </div>
         ) : (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">

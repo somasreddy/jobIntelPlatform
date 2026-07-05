@@ -6,7 +6,7 @@ import re
 import asyncio
 from typing import Optional
 import httpx
-from job_discovery.dork_discovery import discover_jobs_from_dorks, build_dork_queries, google_search_urls
+from job_discovery.dork_discovery import discover_jobs_from_dorks, build_dork_queries, google_search_urls, _ai_relevance_score, _skill_terms
 
 logger = logging.getLogger(__name__)
 
@@ -295,22 +295,18 @@ class JobDiscoveryService:
 
         seen: set[tuple[str, str]] = set()
         final: list[dict] = []
-        profile_skill_set = {s.lower() for s in profile_skills}
+        skill_terms = _skill_terms(profile_skills)
         for job in all_jobs:
+            ai_score, match_reasons = _ai_relevance_score(job, role, skill_terms, location, exp_years)
+            if ai_score < 45:
+                continue
             key = (job.get("title", "").lower()[:70], job.get("organization", "").lower()[:50])
             if key in seen:
                 continue
             seen.add(key)
-            techs = [t.lower() for t in (job.get("technologies") or [])]
-            if techs:
-                overlap = sum(1 for t in techs if t in profile_skill_set or any(t in s or s in t for s in profile_skill_set))
-                score = 45 + int((overlap / len(techs)) * 45)
-            else:
-                score = 55
-            exp_req = job.get("experience_required") or 0
-            if exp_years and exp_req:
-                score += 8 if exp_years >= exp_req else -12
-            job["match_score"] = max(10, min(99, score))
+            job["ai_relevance_score"] = ai_score
+            job["match_reasons"] = match_reasons
+            job["match_score"] = max(job.get("match_score") or 0, ai_score)
             if min_match_score and job["match_score"] < min_match_score:
                 continue
             final.append(job)
