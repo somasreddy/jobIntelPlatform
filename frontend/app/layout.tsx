@@ -41,7 +41,7 @@ export default function RootLayout({
         {/* Anti-flash: apply saved theme before paint */}
         <script
           dangerouslySetInnerHTML={{
-            __html: `try{var t=localStorage.getItem('ji-theme')||'cinematic';document.documentElement.setAttribute('data-theme',t);}catch(e){}`,
+            __html: `try{var a=['executive','graphite','pacific','ember'];var t=localStorage.getItem('ji-theme');if(a.indexOf(t)<0)t='executive';document.documentElement.setAttribute('data-theme',t);}catch(e){}`,
           }}
         />
       </head>

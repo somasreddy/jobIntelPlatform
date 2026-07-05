@@ -1,6 +1,6 @@
 "use client";
 import { createContext, useContext, useEffect, useState } from "react";
-import { DEFAULT_THEME } from "@/lib/theme";
+import { DEFAULT_THEME, normalizeTheme } from "@/lib/theme";
 
 interface ThemeContextValue {
   theme: string;
@@ -18,15 +18,17 @@ export default function ThemeProvider({ children }: { children: React.ReactNode 
   const [theme, setThemeState] = useState(DEFAULT_THEME);
 
   useEffect(() => {
-    const saved = localStorage.getItem("ji-theme") || DEFAULT_THEME;
+    const saved = normalizeTheme(localStorage.getItem("ji-theme"));
     setThemeState(saved);
+    localStorage.setItem("ji-theme", saved);
     document.documentElement.setAttribute("data-theme", saved);
   }, []);
 
   const setTheme = (id: string) => {
-    setThemeState(id);
-    localStorage.setItem("ji-theme", id);
-    document.documentElement.setAttribute("data-theme", id);
+    const nextTheme = normalizeTheme(id);
+    setThemeState(nextTheme);
+    localStorage.setItem("ji-theme", nextTheme);
+    document.documentElement.setAttribute("data-theme", nextTheme);
   };
 
   return (

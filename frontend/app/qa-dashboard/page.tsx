@@ -1,7 +1,5 @@
-"use client";
-
-import JobsPage from "../jobs/page";
+import { redirect } from "next/navigation";
 
 export default function QaDashboardPage() {
-  return <JobsPage />;
+  redirect("/jobs");
 }

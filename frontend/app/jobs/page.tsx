@@ -366,7 +366,7 @@ export default function JobsPage() {
           <div>
             <p className="text-xs text-slate-500 mb-1">Dork-powered job discovery</p>
             <h1 className="text-2xl font-bold text-white">
-              {dorkSearch.title || "Any Title"} <span className="gradient-text">Job Dashboard</span>
+              {dorkSearch.title || "Any Title"} <span className="gradient-text">Find Jobs</span>
             </h1>
             <p className="text-slate-400 text-sm mt-1">
               {dorkSearch.experience || "0"}+ yrs - {searchLocation} - profile score is calculated from each JD before apply
@@ -392,7 +392,27 @@ export default function JobsPage() {
           </div>
         </div>
 
-        <div className="card mb-6 py-4 space-y-4">
+        <div className="card mb-6 py-4 space-y-5">
+          <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <p className="text-sm font-semibold text-white">Job search and filters</p>
+              <p className="text-xs text-slate-500 mt-0.5">One place to set search criteria, refine displayed openings, and control match strictness.</p>
+            </div>
+            <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
+              <Filter className="w-3.5 h-3.5" />
+              <span>{filtered.length} of {jobs.length} shown</span>
+              {jobs.length > 0 && (
+                <button
+                  onClick={resetResultFilters}
+                  className="px-3 py-1.5 rounded-lg text-xs font-medium text-slate-300 hover:text-white"
+                  style={{ background: "var(--bg-base)", border: "1px solid var(--border)" }}
+                >
+                  Reset filters
+                </button>
+              )}
+            </div>
+          </div>
+
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
             <label className="space-y-1.5">
               <span className="text-xs font-medium text-slate-400">Title</span>
@@ -433,8 +453,9 @@ export default function JobsPage() {
               />
             </label>
           </div>
+
           <label className="block space-y-1.5">
-            <span className="text-xs font-medium text-slate-400">Skills / technologies used for dork matching and profile fit</span>
+            <span className="text-xs font-medium text-slate-400">Skills / technologies</span>
             <input
               className="input"
               value={dorkSearch.skills}
@@ -442,6 +463,7 @@ export default function JobsPage() {
               placeholder="Playwright, Selenium WebDriver, API testing, Java"
             />
           </label>
+
           <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
             <UserCheck className="w-3.5 h-3.5 text-emerald-400" />
             {profile ? "Saved profile skills are merged into scoring automatically." : "No saved profile loaded; score uses the search skills until profile is available."}
@@ -455,6 +477,86 @@ export default function JobsPage() {
                 ))}
               </>
             )}
+          </div>
+
+          <div className="pt-4" style={{ borderTop: "1px solid var(--border)" }}>
+            <div className="grid grid-cols-1 xl:grid-cols-[minmax(220px,1fr)_auto_auto] gap-3 items-center">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
+                <input
+                  className="input pl-9"
+                  placeholder="Search displayed results by role, company, technology..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                />
+              </div>
+
+              <div className="flex gap-1 rounded-lg p-1" style={{ background: "var(--bg-base)" }}>
+                {(["All", "CareerUplift", "SameLevel"] as const).map((f) => (
+                  <button
+                    key={f}
+                    onClick={() => setLevelFilter(f)}
+                    className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
+                      levelFilter === f ? "bg-indigo-600 text-white" : "text-slate-400 hover:text-white"
+                    }`}
+                  >
+                    {f === "All" ? "All Jobs" : f === "CareerUplift" ? "Career Uplift" : "Same Level+"}
+                  </button>
+                ))}
+              </div>
+
+              <button
+                onClick={() => {
+                  setStrictMode((s) => !s);
+                  if (!strictMode) setMinScore((m) => Math.max(m, 70));
+                }}
+                className={`flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition-all ${
+                  strictMode
+                    ? "bg-indigo-600/20 border-indigo-500/50 text-indigo-300"
+                    : "bg-slate-800/60 border-slate-700/40 text-slate-400 hover:text-white"
+                }`}
+              >
+                <SlidersHorizontal className="w-3.5 h-3.5" />
+                Strict Match {strictMode ? "ON" : "OFF"}
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3 items-center mt-3">
+              <label className="flex items-center gap-2 text-slate-400 text-xs">
+                <MapPin className="w-3.5 h-3.5 shrink-0" />
+                <select className="input py-1.5 text-xs" value={workMode} onChange={(e) => setWorkMode(e.target.value)}>
+                  {WORK_MODES.map((m) => <option key={m}>{m}</option>)}
+                </select>
+              </label>
+
+              <label className="flex items-center gap-2 text-slate-400 text-xs">
+                <Sliders className="w-3.5 h-3.5 shrink-0" />
+                <select className="input py-1.5 text-xs" value={techFilter} onChange={(e) => setTechFilter(e.target.value)}>
+                  {TECH_FILTERS.map((t) => <option key={t}>{t}</option>)}
+                </select>
+              </label>
+
+              <label className="flex items-center gap-2 text-slate-400 text-xs">
+                <Globe className="w-3.5 h-3.5 shrink-0" />
+                <select className="input py-1.5 text-xs" value={portalFilter} onChange={(e) => setPortalFilter(e.target.value)}>
+                  {PORTAL_FILTERS.map((p) => <option key={p}>{p}</option>)}
+                </select>
+              </label>
+
+              <div className="flex items-center gap-2 text-xs text-slate-400">
+                <TrendingUp className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
+                <span className="whitespace-nowrap">Min score</span>
+                <input
+                  type="range" min={0} max={95} step={5}
+                  value={minScore}
+                  onChange={(e) => setMinScore(Number(e.target.value))}
+                  className="min-w-24 flex-1 accent-indigo-500"
+                />
+                <span className={`font-semibold w-8 ${minScore >= 80 ? "text-emerald-400" : minScore >= 60 ? "text-indigo-400" : "text-slate-400"}`}>
+                  {minScore > 0 ? `${minScore}%` : "Any"}
+                </span>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -481,99 +583,7 @@ export default function JobsPage() {
           ))}
         </div>
 
-        <div className="card mb-6 py-4 space-y-3">
-          <div className="flex flex-wrap gap-3 items-center">
-            <div className="flex-1 min-w-56 relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
-              <input
-                className="input pl-9"
-                placeholder="Filter displayed results by role, company, technology..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-              />
-            </div>
 
-            <div className="flex gap-1 rounded-lg p-1" style={{ background: "var(--bg-base)" }}>
-              {(["All", "CareerUplift", "SameLevel"] as const).map((f) => (
-                <button
-                  key={f}
-                  onClick={() => setLevelFilter(f)}
-                  className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
-                    levelFilter === f ? "bg-indigo-600 text-white" : "text-slate-400 hover:text-white"
-                  }`}
-                >
-                  {f === "All" ? "All Jobs" : f === "CareerUplift" ? "Career Uplift" : "Same Level+"}
-                </button>
-              ))}
-            </div>
-
-            <button
-              onClick={() => {
-                setStrictMode((s) => !s);
-                if (!strictMode) setMinScore((m) => Math.max(m, 70));
-              }}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition-all ${
-                strictMode
-                  ? "bg-indigo-600/20 border-indigo-500/50 text-indigo-300"
-                  : "bg-slate-800/60 border-slate-700/40 text-slate-400 hover:text-white"
-              }`}
-            >
-              <SlidersHorizontal className="w-3.5 h-3.5" />
-              Strict Match {strictMode ? "ON" : "OFF"}
-            </button>
-
-            <span className="text-xs text-slate-500 whitespace-nowrap">
-              <Filter className="w-3 h-3 inline mr-1" />{filtered.length} of {jobs.length} shown
-            </span>
-
-            {jobs.length > 0 && (
-              <button
-                onClick={resetResultFilters}
-                className="px-3 py-1.5 rounded-lg text-xs font-medium text-slate-300 hover:text-white"
-                style={{ background: "var(--bg-base)", border: "1px solid var(--border)" }}
-              >
-                Show all results
-              </button>
-            )}
-          </div>
-
-          <div className="flex flex-wrap gap-3 items-center">
-            <div className="flex items-center gap-1 text-slate-400 text-xs">
-              <MapPin className="w-3.5 h-3.5" />
-              <select className="input py-1.5 text-xs w-28" value={workMode} onChange={(e) => setWorkMode(e.target.value)}>
-                {WORK_MODES.map((m) => <option key={m}>{m}</option>)}
-              </select>
-            </div>
-
-            <div className="flex items-center gap-1 text-slate-400 text-xs">
-              <Sliders className="w-3.5 h-3.5" />
-              <select className="input py-1.5 text-xs w-40" value={techFilter} onChange={(e) => setTechFilter(e.target.value)}>
-                {TECH_FILTERS.map((t) => <option key={t}>{t}</option>)}
-              </select>
-            </div>
-
-            <div className="flex items-center gap-1 text-slate-400 text-xs">
-              <Globe className="w-3.5 h-3.5" />
-              <select className="input py-1.5 text-xs w-44" value={portalFilter} onChange={(e) => setPortalFilter(e.target.value)}>
-                {PORTAL_FILTERS.map((p) => <option key={p}>{p}</option>)}
-              </select>
-            </div>
-
-            <div className="flex items-center gap-2 text-xs text-slate-400">
-              <TrendingUp className="w-3.5 h-3.5 text-indigo-400" />
-              <span className="whitespace-nowrap">Min score:</span>
-              <input
-                type="range" min={0} max={95} step={5}
-                value={minScore}
-                onChange={(e) => setMinScore(Number(e.target.value))}
-                className="w-24 accent-indigo-500"
-              />
-              <span className={`font-semibold w-8 ${minScore >= 80 ? "text-emerald-400" : minScore >= 60 ? "text-indigo-400" : "text-slate-400"}`}>
-                {minScore > 0 ? `${minScore}%` : "Any"}
-              </span>
-            </div>
-          </div>
-        </div>
 
         {loading || discovering ? (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
@@ -587,12 +597,12 @@ export default function JobsPage() {
             </p>
             <p className="text-sm mt-1">
               {filtersAreHidingJobs
-                ? "Click Show all results to display every opening returned by the dork search."
+                ? "Click Reset filters to display every opening returned by the dork search."
                 : "Enter a title, experience, location, and country, then run Search Dork Jobs."}
             </p>
             {filtersAreHidingJobs && (
               <button onClick={resetResultFilters} className="btn-primary text-sm mt-5 px-5 py-2">
-                Show all results
+                Reset filters
               </button>
             )}
           </div>

@@ -30,26 +30,46 @@ import {
   PieChart,
   Bot,
   Globe,
-  ClipboardList,
+  UserRound,
 } from "lucide-react";
 
-const navItems = [
-  { href: "/jobs",          icon: Briefcase,       label: "Find Jobs"        },
-  { href: "/qa-dashboard",  icon: ClipboardList,   label: "Job Dashboard"     },
-  { href: "/profile",       icon: LayoutDashboard, label: "Profile & Resume" },
-  { href: "/career-graph",  icon: Activity,        label: "Career Graph"     },
-  { href: "/applications",  icon: Layers,          label: "Pipeline"         },
-  { href: "/campaign",      icon: Target,          label: "Campaign"         },
-  { href: "/autopilot",     icon: Bot,             label: "Autopilot"        },
-  { href: "/learn",         icon: BookOpen,        label: "Learning Engine"  },
-  { href: "/market-radar",  icon: BarChart3,       label: "Market Radar"     },
-  { href: "/insights",      icon: PieChart,        label: "Insights"         },
-  { href: "/intelligence",  icon: Crosshair,       label: "Intelligence"     },
-  { href: "/interview",     icon: Brain,           label: "Interview Prep"   },
-  { href: "/linkedin",      icon: Linkedin,        label: "LinkedIn Enhancer"},
-  { href: "/negotiation",   icon: DollarSign,      label: "Negotiation"      },
-  { href: "/portfolio",     icon: Globe,           label: "Portfolio"        },
-  { href: "/power-tools",   icon: Radar,           label: "Power Tools"      },
+const navGroups = [
+  {
+    label: "Start",
+    items: [
+      { href: "/",              icon: LayoutDashboard, label: "Command Center"  },
+      { href: "/profile",       icon: UserRound,       label: "Profile & Resume" },
+      { href: "/career-graph",  icon: Activity,        label: "Career Graph"     },
+    ],
+  },
+  {
+    label: "Search & Apply",
+    items: [
+      { href: "/jobs",          icon: Briefcase,       label: "Find Jobs"        },
+      { href: "/applications",  icon: Layers,          label: "Pipeline"         },
+      { href: "/campaign",      icon: Target,          label: "Campaign"         },
+      { href: "/autopilot",     icon: Bot,             label: "Autopilot"        },
+    ],
+  },
+  {
+    label: "Prepare",
+    items: [
+      { href: "/learn",         icon: BookOpen,        label: "Learning Engine"  },
+      { href: "/interview",     icon: Brain,           label: "Interview Prep"   },
+      { href: "/linkedin",      icon: Linkedin,        label: "LinkedIn Enhancer"},
+      { href: "/negotiation",   icon: DollarSign,      label: "Negotiation"      },
+    ],
+  },
+  {
+    label: "Insights & Tools",
+    items: [
+      { href: "/market-radar",  icon: BarChart3,       label: "Market Radar"     },
+      { href: "/insights",      icon: PieChart,        label: "Insights"         },
+      { href: "/intelligence",  icon: Crosshair,       label: "Intelligence"     },
+      { href: "/portfolio",     icon: Globe,           label: "Portfolio"        },
+      { href: "/power-tools",   icon: Radar,           label: "Power Tools"      },
+    ],
+  },
 ];
 
 export default function Navbar() {
@@ -103,38 +123,45 @@ export default function Navbar() {
       </div>
 
       {/* Nav items */}
-      <nav className="flex-1 py-4 px-3 space-y-1 overflow-y-auto">
-        {navItems.map(({ href, icon: Icon, label }) => {
-          const active = path === href || (href !== "/" && path.startsWith(href));
-          return (
-            <Link
-              key={href}
-              href={href}
-              className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all"
-              style={active ? {
-                background: "color-mix(in srgb, var(--accent) 12%, transparent)",
-                color: "var(--accent-bright)",
-                border: "1px solid var(--border-hover)",
-                boxShadow: "0 0 12px -4px var(--glow-accent)",
-              } : {
-                color: "var(--text-secondary)",
-                border: "1px solid transparent",
-              }}
-            >
-              <Icon
-                className="w-5 h-5 shrink-0"
-                style={active ? { color: "var(--accent-bright)" } : {}}
-              />
-              {label}
-              {active && (
-                <div
-                  className="ml-auto w-1.5 h-1.5 rounded-full shrink-0"
-                  style={{ background: "var(--accent-bright)" }}
-                />
-              )}
-            </Link>
-          );
-        })}
+      <nav className="flex-1 py-4 px-3 space-y-4 overflow-y-auto">
+        {navGroups.map((group) => (
+          <div key={group.label} className="space-y-1">
+            <p className="px-3 text-[10px] font-bold uppercase tracking-wider" style={{ color: "var(--text-muted)" }}>
+              {group.label}
+            </p>
+            {group.items.map(({ href, icon: Icon, label }) => {
+              const active = path === href || (href !== "/" && path.startsWith(href));
+              return (
+                <Link
+                  key={href}
+                  href={href}
+                  className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all"
+                  style={active ? {
+                    background: "color-mix(in srgb, var(--accent) 12%, transparent)",
+                    color: "var(--accent-bright)",
+                    border: "1px solid var(--border-hover)",
+                    boxShadow: "0 0 12px -4px var(--glow-accent)",
+                  } : {
+                    color: "var(--text-secondary)",
+                    border: "1px solid transparent",
+                  }}
+                >
+                  <Icon
+                    className="w-5 h-5 shrink-0"
+                    style={active ? { color: "var(--accent-bright)" } : {}}
+                  />
+                  {label}
+                  {active && (
+                    <div
+                      className="ml-auto w-1.5 h-1.5 rounded-full shrink-0"
+                      style={{ background: "var(--accent-bright)" }}
+                    />
+                  )}
+                </Link>
+              );
+            })}
+          </div>
+        ))}
       </nav>
 
       {/* Footer */}
@@ -160,7 +187,7 @@ export default function Navbar() {
           >
             <Palette className="w-4 h-4 shrink-0" />
             <span className="flex-1 text-left text-xs font-medium">
-              {currentTheme?.emoji} {currentTheme?.name || "Theme"}
+              {currentTheme?.name || "Appearance"}
             </span>
             <div className="flex gap-1">
               {(currentTheme?.colors ?? []).map((c, i) => (

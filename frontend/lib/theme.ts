@@ -1,89 +1,40 @@
 export interface Theme {
   id: string;
   name: string;
-  emoji: string;
-  colors: [string, string, string]; // preview swatches: accent, secondary, base
+  description: string;
+  colors: [string, string, string];
 }
 
 export const THEMES: Theme[] = [
   {
-    id: "nebula",
-    name: "Nebula",
-    emoji: "🌌",
-    colors: ["#6366f1", "#06b6d4", "#030711"],
+    id: "executive",
+    name: "Executive",
+    description: "Balanced dark interface for daily work",
+    colors: ["#7c8cff", "#22d3ee", "#080b14"],
   },
   {
-    id: "aurora",
-    name: "Aurora",
-    emoji: "🌿",
-    colors: ["#10b981", "#14b8a6", "#021008"],
+    id: "graphite",
+    name: "Graphite",
+    description: "Neutral low-glare workspace",
+    colors: ["#a3aab8", "#6ee7b7", "#090a0c"],
   },
   {
-    id: "solar",
-    name: "Solar Flare",
-    emoji: "☀️",
-    colors: ["#f59e0b", "#f97316", "#100500"],
+    id: "pacific",
+    name: "Pacific",
+    description: "Calm blue analytics surface",
+    colors: ["#38bdf8", "#5eead4", "#07111f"],
   },
   {
-    id: "ocean",
-    name: "Ocean Depth",
-    emoji: "🌊",
-    colors: ["#3b82f6", "#06b6d4", "#010d1a"],
-  },
-  {
-    id: "rose-noir",
-    name: "Rose Noir",
-    emoji: "🌹",
-    colors: ["#f43f5e", "#ec4899", "#0f0408"],
-  },
-  {
-    id: "matrix",
-    name: "Matrix",
-    emoji: "💚",
-    colors: ["#22c55e", "#4ade80", "#000800"],
-  },
-  {
-    id: "midnight",
-    name: "Midnight",
-    emoji: "🌙",
-    colors: ["#2563eb", "#818cf8", "#01020f"],
-  },
-  {
-    id: "crimson",
-    name: "Crimson",
-    emoji: "🔴",
-    colors: ["#ef4444", "#f43f5e", "#0f0002"],
-  },
-  {
-    id: "cyber-gold",
-    name: "Cyber Gold",
-    emoji: "⚡",
-    colors: ["#eab308", "#f97316", "#090700"],
-  },
-  {
-    id: "glacier",
-    name: "Glacier",
-    emoji: "🧊",
-    colors: ["#0ea5e9", "#67e8f9", "#010a14"],
-  },
-  {
-    id: "violet-storm",
-    name: "Violet Storm",
-    emoji: "🔮",
-    colors: ["#8b5cf6", "#c084fc", "#050012"],
-  },
-  {
-    id: "neon-punk",
-    name: "Neon Punk",
-    emoji: "🎆",
-    colors: ["#d946ef", "#4ade80", "#060010"],
-  },
-  {
-    id: "cinematic",
-    name: "Cinematic Amber",
-    emoji: "🎬",
-    colors: ["#F5A623", "#FF8A3D", "#07070A"],
+    id: "ember",
+    name: "Ember",
+    description: "Warm focused command mode",
+    colors: ["#f5b85b", "#fb7185", "#100c08"],
   },
 ];
 
-export const DEFAULT_THEME = "cinematic";
+export const DEFAULT_THEME = "executive";
+export const THEME_IDS = THEMES.map((theme) => theme.id);
+
+export function normalizeTheme(id?: string | null) {
+  return id && THEME_IDS.includes(id) ? id : DEFAULT_THEME;
+}
