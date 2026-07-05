@@ -5,6 +5,7 @@ Each tool uses smart_chat() for consolidated multi-LLM output + fallback chain.
 import json
 import re
 from core.llm import smart_chat
+from knowledge.resume_guidelines import resume_guidance_block
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 1. THE HIRING MANAGER DECODER
@@ -31,6 +32,10 @@ _RESUME_SURGEON_SYSTEM = """You are a senior executive recruiter who has placed 
 You do NOT give advice. You REWRITE the entire resume for the exact role in the JD.
 Every bullet MUST: start with a strong power verb, be specific and measurable, end with a number (impact/scale/metric).
 Use the hiring manager's language from the JD wherever appropriate.
+
+Apply this shared resume knowledge base:
+""" + resume_guidance_block() + """
+
 Return ONLY valid JSON:
 {
   "summary": "rewritten professional summary (3-4 sentences, uses JD language, quantified)",

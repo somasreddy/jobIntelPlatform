@@ -1,7 +1,6 @@
-from anthropic import AsyncAnthropic
-from openai import AsyncOpenAI
-from groq import AsyncGroq
-from google import genai
+from __future__ import annotations
+
+from typing import Any
 import httpx
 import hashlib
 import json
@@ -13,13 +12,13 @@ from core.config import settings
 logger = logging.getLogger(__name__)
 
 # --- Client Singletons ---
-_anthropic_client: AsyncAnthropic | None = None
-_openai_client: AsyncOpenAI | None = None
-_groq_client: AsyncGroq | None = None
-_google_client: genai.Client | None = None
-_perplexity_client: AsyncOpenAI | None = None
-_deepseek_client: AsyncOpenAI | None = None
-_openrouter_client: AsyncOpenAI | None = None
+_anthropic_client: Any | None = None
+_openai_client: Any | None = None
+_groq_client: Any | None = None
+_google_client: Any | None = None
+_perplexity_client: Any | None = None
+_deepseek_client: Any | None = None
+_openrouter_client: Any | None = None
 _redis_client = None
 
 
@@ -57,41 +56,52 @@ async def _cache_set(key: str, value: str, ttl: int = 900) -> None:
     except Exception:
         pass
 
-def get_anthropic_client() -> AsyncAnthropic:
+def get_anthropic_client() -> Any:
     global _anthropic_client
-    if _anthropic_client is None: _anthropic_client = AsyncAnthropic(api_key=settings.ANTHROPIC_API_KEY)
+    if _anthropic_client is None:
+        from anthropic import AsyncAnthropic
+        _anthropic_client = AsyncAnthropic(api_key=settings.ANTHROPIC_API_KEY)
     return _anthropic_client
 
-def get_openai_client() -> AsyncOpenAI:
+def get_openai_client() -> Any:
     global _openai_client
-    if _openai_client is None: _openai_client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
+    if _openai_client is None:
+        from openai import AsyncOpenAI
+        _openai_client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
     return _openai_client
 
-def get_groq_client() -> AsyncGroq:
+def get_groq_client() -> Any:
     global _groq_client
-    if _groq_client is None: _groq_client = AsyncGroq(api_key=settings.GROQ_API_KEY)
+    if _groq_client is None:
+        from groq import AsyncGroq
+        _groq_client = AsyncGroq(api_key=settings.GROQ_API_KEY)
     return _groq_client
 
-def get_google_client() -> genai.Client:
+def get_google_client() -> Any:
     global _google_client
-    if _google_client is None: _google_client = genai.Client(api_key=settings.GOOGLE_API_KEY)
+    if _google_client is None:
+        from google import genai
+        _google_client = genai.Client(api_key=settings.GOOGLE_API_KEY)
     return _google_client
 
-def get_perplexity_client() -> AsyncOpenAI:
+def get_perplexity_client() -> Any:
     global _perplexity_client
     if _perplexity_client is None:
+        from openai import AsyncOpenAI
         _perplexity_client = AsyncOpenAI(api_key=settings.PERPLEXITY_API_KEY, base_url="https://api.perplexity.ai")
     return _perplexity_client
 
-def get_deepseek_client() -> AsyncOpenAI:
+def get_deepseek_client() -> Any:
     global _deepseek_client
     if _deepseek_client is None:
+        from openai import AsyncOpenAI
         _deepseek_client = AsyncOpenAI(api_key=settings.DEEPSEEK_API_KEY, base_url="https://api.deepseek.com")
     return _deepseek_client
 
-def get_openrouter_client() -> AsyncOpenAI:
+def get_openrouter_client() -> Any:
     global _openrouter_client
     if _openrouter_client is None:
+        from openai import AsyncOpenAI
         _openrouter_client = AsyncOpenAI(api_key=settings.OPENROUTER_API_KEY, base_url="https://openrouter.ai/api/v1")
     return _openrouter_client
 

@@ -1,11 +1,15 @@
 import io
 import logging
+from knowledge.resume_guidelines import resume_guidance_block
 
 logger = logging.getLogger(__name__)
 
-_SYSTEM_PROMPT = """You are a World-Class ATS Resume Optimization Specialist.
+_SYSTEM_PROMPT = f"""You are a World-Class ATS Resume Optimization Specialist.
 Transform the candidate's profile into a high-impact, professionally tailored resume for the specific job description.
 This must work for ANY role — engineering, product, design, sales, marketing, finance, or any other.
+
+Shared resume knowledge base:
+{resume_guidance_block()}
 
 REQUIRED OUTPUT (JSON):
 1. summary: A 3-line powerful professional summary using JD language. Formula: "Years experience + Key Skills + Major Achievement".
@@ -18,6 +22,7 @@ REQUIRED OUTPUT (JSON):
 Rules:
 - Mirror the JD's exact technical/domain terminology.
 - Prioritize keywords that appear multiple times in the JD.
+- Use only truthful, defensible accomplishments. If evidence is missing, write conservative bullets that can be edited rather than fabricating impact.
 - Output ONLY the JSON object, no markdown, no preamble.
 """
 
@@ -462,13 +467,16 @@ def _build_master_docx(
         return b""
 
 
-_MASTER_SUMMARY_PROMPT = """You are a professional resume writer.
+_MASTER_SUMMARY_PROMPT = f"""You are a professional resume writer.
 Given a candidate profile, write a 3-4 sentence professional summary for their master resume.
 The summary should highlight years of experience, core expertise, key tools/technologies, and value proposition.
 Write in first-person implied style (no "I"). Be specific and impactful.
+Apply this knowledge base:
+{resume_guidance_block()}
 IMPORTANT: Return ONLY the plain summary paragraph text. No JSON. No code blocks. No labels. No quotes."""
 
 _RESUME_PARSE_PROMPT = """You are an expert resume parser. Extract all structured sections from the provided resume text.
+Normalize the resume into the five-section NxtJob structure where possible: Personal Details, Summary, Skills, Professional Experience, Education and Certifications.
 Return ONLY a valid JSON object with exactly this shape (use empty arrays if a section is not found):
 {
   "experience": [
@@ -496,6 +504,7 @@ Return ONLY a valid JSON object with exactly this shape (use empty arrays if a s
   }
 }
 Each experience entry should have 3-5 bullets capturing projects and accomplishments.
+Prefer impact bullets that preserve specific tools, skills, before/after context, and measurable outcomes.
 Return valid JSON only — no markdown, no code blocks, no preamble."""
 
 

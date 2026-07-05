@@ -33,7 +33,6 @@ from typing import Optional
 import httpx
 
 logger = logging.getLogger(__name__)
-print("--- [DEBUG] JobDiscoveryService Module Loaded from:", __file__)
 
 _TIMEOUT = 15.0
 _VERIFY_TIMEOUT = 8.0

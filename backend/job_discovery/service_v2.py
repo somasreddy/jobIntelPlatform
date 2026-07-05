@@ -4,13 +4,11 @@ Job Discovery Service V2 - Clean Load - Fixed Arbeitnow and New Freelance Source
 import logging
 import re
 import asyncio
-import os
-import sys
 from typing import Optional
 import httpx
+from job_discovery.dork_discovery import discover_jobs_from_dorks, build_dork_queries, google_search_urls
 
 logger = logging.getLogger(__name__)
-print("--- [DEBUG] JobDiscoveryService V2 Module Loaded from:", __file__)
 
 _TIMEOUT = 15.0
 _VERIFY_TIMEOUT = 8.0
@@ -88,9 +86,9 @@ def _parse_salary(salary_str: Optional[str]) -> tuple:
     if not salary_str: return None, None, "USD"
     currency = "USD"
     s = salary_str.lower()
-    if "£" in salary_str or "gbp" in s: currency = "GBP"
-    elif "€" in salary_str or "eur" in s: currency = "EUR"
-    elif "₹" in salary_str or "inr" in s or "lpa" in s: currency = "INR"
+    if "\u00a3" in salary_str or "gbp" in s: currency = "GBP"
+    elif "\u20ac" in salary_str or "eur" in s: currency = "EUR"
+    elif "\u20b9" in salary_str or "inr" in s or "lpa" in s: currency = "INR"
     clean = salary_str.replace(",", "")
     nums = [int(n) for n in re.findall(r"\d+", clean) if int(n) > 1000]
     if len(nums) >= 2: return nums[0], nums[1], currency
@@ -240,33 +238,41 @@ async def _fetch_hn_hiring(query: str) -> list[dict]:
     except Exception as e: logger.warning(f"HN: {e}")
     return jobs
 
-async def _fetch_adzuna(query: str, location: str, app_id: str, app_key: str) -> list[dict]:
-    if not app_id or not app_key: return []
-    jobs: list[dict] = []
-    try:
-        async with httpx.AsyncClient(timeout=_TIMEOUT) as c:
-            r = await c.get(f"https://api.adzuna.com/v1/api/jobs/us/search/1", params={"app_id": app_id, "app_key": app_key, "results_per_page": 20, "what": query})
-            for item in r.json().get("results", []):
-                desc = item.get("description", "")
-                jobs.append({
-                    "title": item.get("title", ""), "organization": (item.get("company") or {}).get("display_name", ""),
-                    "location": (item.get("location") or {}).get("display_name", "Remote"), "work_mode": "Remote",
-                    "salary_min": item.get("salary_min"), "salary_max": item.get("salary_max"), "currency": "USD",
-                    "description": desc[:2000], "technologies": _extract_technologies(desc),
-                    "application_link": item.get("redirect_url", ""), "posted_date": (item.get("created") or "")[:10],
-                    "verification_status": "UNVERIFIED", "source": "Adzuna",
-                })
-    except Exception as e: logger.warning(f"Adzuna: {e}")
-    return jobs
-
 # --- Public service -----------------------------------------------------------
 class JobDiscoveryService:
-    def __init__(self, adzuna_app_id: str = "", adzuna_app_key: str = "", jsearch_api_key: str = ""):
-        self.adzuna_app_id = adzuna_app_id
-        self.adzuna_app_key = adzuna_app_key
-        self.jsearch_api_key = jsearch_api_key
+    def __init__(self):
+        self.last_dork_queries: list[str] = []
+        self.last_google_urls: list[str] = []
 
     async def discover_jobs(self, role: str = "", location: str = "Remote", profile_skills: Optional[list[str]] = None, exp_years: int = 0, min_match_score: int = 0, run_verification: bool = True) -> list[dict]:
+        """Discover jobs using no-key dork search as the primary source.
+
+        This replaces API-key dependent discovery. The service builds generic
+        Google-style dork queries from the user role, skills, experience, and
+        preferred location, searches public results, scrapes the landing pages,
+        normalizes them into the existing job shape, deduplicates, scores, and
+        persists through the existing API layer.
+        """
+        profile_skills = profile_skills or []
+        self.last_dork_queries = build_dork_queries(role, profile_skills, location, exp_years)
+        self.last_google_urls = google_search_urls(self.last_dork_queries)
+
+        dork_jobs, queries = await discover_jobs_from_dorks(
+            role=role,
+            location=location,
+            profile_skills=profile_skills,
+            exp_years=exp_years,
+            min_match_score=min_match_score,
+        )
+        self.last_dork_queries = queries
+        self.last_google_urls = google_search_urls(queries)
+        if dork_jobs:
+            if run_verification:
+                dork_jobs = await _verify_batch(dork_jobs)
+            return dork_jobs
+
+        # No-key fallback: public feeds and direct public career-board APIs only.
+        # Do not call Adzuna/JSearch/Apify/LinkedIn/LLM-backed providers here.
         from job_discovery.connectors_v3 import _fetch_greenhouse, _fetch_lever, _fetch_wellfound
         search_terms = _get_search_terms(role) if role else _DEFAULT_TERMS
         primary = search_terms[0]
@@ -275,24 +281,41 @@ class JobDiscoveryService:
             _fetch_arbeitnow(primary),
             _fetch_weworkremotely(primary),
             _fetch_hn_hiring(primary),
-            _fetch_adzuna(primary, location, self.adzuna_app_id, self.adzuna_app_key),
             _fetch_authentic_jobs(primary),
             _fetch_greenhouse(primary),
             _fetch_lever(primary),
             _fetch_wellfound(primary),
-            return_exceptions=True
+            return_exceptions=True,
         )
-        all_jobs = []
-        for r in results:
-            if isinstance(r, list): all_jobs.extend(r)
-        
-        seen = set()
-        final = []
-        for j in all_jobs:
-            key = (j.get("title", "").lower()[:40], j.get("organization", "").lower()[:30])
-            if key not in seen:
-                seen.add(key)
-                final.append(j)
-        
-        if run_verification and final: final = await _verify_batch(final)
+
+        all_jobs: list[dict] = []
+        for batch in results:
+            if isinstance(batch, list):
+                all_jobs.extend(batch)
+
+        seen: set[tuple[str, str]] = set()
+        final: list[dict] = []
+        profile_skill_set = {s.lower() for s in profile_skills}
+        for job in all_jobs:
+            key = (job.get("title", "").lower()[:70], job.get("organization", "").lower()[:50])
+            if key in seen:
+                continue
+            seen.add(key)
+            techs = [t.lower() for t in (job.get("technologies") or [])]
+            if techs:
+                overlap = sum(1 for t in techs if t in profile_skill_set or any(t in s or s in t for s in profile_skill_set))
+                score = 45 + int((overlap / len(techs)) * 45)
+            else:
+                score = 55
+            exp_req = job.get("experience_required") or 0
+            if exp_years and exp_req:
+                score += 8 if exp_years >= exp_req else -12
+            job["match_score"] = max(10, min(99, score))
+            if min_match_score and job["match_score"] < min_match_score:
+                continue
+            final.append(job)
+
+        if run_verification and final:
+            final = await _verify_batch(final)
+        final.sort(key=lambda j: (-(j.get("match_score") or 0), j.get("title", "")))
         return final

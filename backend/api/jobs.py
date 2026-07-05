@@ -7,11 +7,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 
 from core.database import get_db
-from core.config import settings
 from core.auth import get_current_user_id
 from models.database import VerifiedJob, CandidateProfile, CareerGoal
 from models.schemas import JobCreate
 from job_discovery.service_v2 import JobDiscoveryService
+from job_discovery.dork_discovery import build_dork_queries, google_search_urls
 from services.fit_score import compute_fit_score
 from services.job_intel import compute_intel_flags
 
@@ -177,29 +177,24 @@ async def discover_jobs(
     db: AsyncSession = Depends(get_db),
 ):
     """
-    Live multi-portal job discovery.
+    Live no-key job discovery.
 
-    Accepts a profile payload and returns best-matched jobs scraped from
-    Remotive, Arbeitnow, The Muse, Adzuna (free) and optionally JSearch
-    (RapidAPI — aggregates LinkedIn / Indeed / Glassdoor / Naukri).
+    Accepts a profile payload and returns best-matched jobs discovered through
+    generic Google-style dork queries plus no-key public feeds and ATS APIs.
 
     Payload fields (all optional):
-      role           – candidate's current / target role
-      skills         – list of skill strings
-      frameworks     – list of framework strings
-      cicd_tools     – list of CI/CD tool strings
-      languages      – list of language strings
-      experience_years – integer
-      location       – preferred location string
-      work_mode      – "Remote" | "Hybrid" | "On-site" | "Any"
-      min_match_score  – 0-100, default 60
-      run_verification – bool, default true (HEAD-ping every app link)
+      role             - candidate's current / target role
+      skills           - list of skill strings
+      frameworks       - list of framework strings
+      cicd_tools       - list of CI/CD tool strings
+      languages        - list of language strings
+      experience_years - integer
+      location         - preferred location string
+      work_mode        - "Remote" | "Hybrid" | "On-site" | "Any"
+      min_match_score  - 0-100, default 60
+      run_verification - bool, default true (HEAD-ping every app link)
     """
-    svc = JobDiscoveryService(
-        adzuna_app_id=settings.ADZUNA_APP_ID,
-        adzuna_app_key=settings.ADZUNA_APP_KEY,
-        jsearch_api_key=settings.JSEARCH_API_KEY,
-    )
+    svc = JobDiscoveryService()
 
     profile_skills = (
         (payload.get("skills") or [])
@@ -274,6 +269,28 @@ async def discover_jobs(
         }
         for j in jobs
     ]
+
+
+@router.post("/dork-query")
+async def generate_dork_query(payload: dict = Body(...)):
+    """Return the generic Google-style dork queries generated for a profile."""
+    profile_skills = (
+        (payload.get("skills") or [])
+        + (payload.get("frameworks") or [])
+        + (payload.get("cicd_tools") or [])
+        + (payload.get("languages") or [])
+    )
+    queries = build_dork_queries(
+        role=payload.get("role", ""),
+        skills=profile_skills,
+        location=payload.get("location", ""),
+        exp_years=int(payload.get("experience_years") or 0),
+    )
+    return {
+        "queries": queries,
+        "google_urls": google_search_urls(queries),
+        "source": "no-key-dork-builder",
+    }
 
 
 @router.get("/{job_id}")

@@ -5,11 +5,11 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 
 from core.config import settings
 from core.database import engine
-from models import database as _models   # noqa: F401 — ensures all models are registered
+from models import database as _models   # noqa: F401 - ensures all models are registered
 from models.database import Base
 from api import (
     jobs, resume, applications, skill_gap, salary,
@@ -20,6 +20,28 @@ from api import (
 )
 
 logger = logging.getLogger(__name__)
+
+def _allowed_cors_origin(origin: str | None) -> str | None:
+    if not origin:
+        return None
+    allowed = settings.CORS_ORIGINS
+    if isinstance(allowed, str):
+        allowed = [allowed]
+    if "*" in allowed or origin in allowed:
+        return origin
+    return None
+
+
+def _apply_cors_headers(response: Response, origin: str | None) -> Response:
+    allowed_origin = _allowed_cors_origin(origin)
+    if allowed_origin:
+        response.headers["Access-Control-Allow-Origin"] = allowed_origin
+        response.headers["Access-Control-Allow-Credentials"] = "true"
+        response.headers["Vary"] = "Origin"
+    response.headers.setdefault("Access-Control-Allow-Methods", "GET,POST,PUT,PATCH,DELETE,OPTIONS")
+    response.headers.setdefault("Access-Control-Allow-Headers", "Authorization,Content-Type,Accept,Origin,X-Requested-With")
+    response.headers.setdefault("Access-Control-Max-Age", "600")
+    return response
 
 
 @asynccontextmanager
@@ -33,9 +55,9 @@ async def lifespan(app: FastAPI):
         logger.info("Database tables ensured.")
     except Exception as exc:
         if is_local_dev:
-            # Local dev without PostgreSQL running — start in degraded mode
+            # Local dev without PostgreSQL running - start in degraded mode
             logger.warning(
-                f"No local database — starting in degraded mode: {exc}\n"
+                f"No local database - starting in degraded mode: {exc}\n"
                 "DB-backed endpoints will fail. Run PostgreSQL locally or point "
                 "DATABASE_URL at a cloud DB (e.g. Neon.tech)."
             )
@@ -56,7 +78,7 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# ── CORS ──────────────────────────────────────────────────────────────────────
+# CORS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.CORS_ORIGINS,
@@ -65,7 +87,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ── In-process rate limiter ───────────────────────────────────────────────────
+# In-process rate limiter
 # LLM-heavy: 10 req/min | General: 60 req/min
 _rate_store: dict[str, list[float]] = defaultdict(list)
 _LLM_PATHS = {
@@ -143,7 +165,7 @@ async def rate_limit_middleware(request: Request, call_next):
     return await call_next(request)
 
 
-# ── Routers ───────────────────────────────────────────────────────────────────
+# Routers
 app.include_router(auth.router,              prefix="/api/auth",              tags=["Auth"])
 app.include_router(jobs.router,              prefix="/api/jobs",              tags=["Jobs"])
 app.include_router(resume.router,            prefix="/api/resume",            tags=["Resume"])
@@ -171,7 +193,19 @@ app.include_router(autopilot.router,            prefix="/api/autopilot",        
 app.include_router(digest.router,               prefix="/api/digest",               tags=["Digest"])
 
 
-# ── Health check ──────────────────────────────────────────────────────────────
+# Health check
 @app.get("/health", tags=["Health"])
 async def health_check():
     return {"status": "healthy", "version": "3.0.0"}
+
+@app.middleware("http")
+async def browser_cors_middleware(request: Request, call_next):
+    origin = request.headers.get("origin")
+    if request.method == "OPTIONS":
+        return _apply_cors_headers(Response(status_code=204), origin)
+    try:
+        response = await call_next(request)
+    except Exception as exc:
+        logger.exception("Unhandled API error while processing %s %s", request.method, request.url.path)
+        response = JSONResponse(status_code=500, content={"detail": "Internal server error"})
+    return _apply_cors_headers(response, origin)

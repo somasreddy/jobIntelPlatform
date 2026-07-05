@@ -9,6 +9,7 @@ from typing import AsyncGenerator, Dict, Any
 from fastapi import APIRouter, Body, HTTPException
 from fastapi.responses import StreamingResponse
 from core.config import settings
+from knowledge.resume_guidelines import resume_guidance_block
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -113,11 +114,14 @@ that mirrors the job description language. Do not use generic phrases like "I am
 Focus on specific technical achievements and alignment with the company's engineering culture.
 Return only the cover letter text, no subject line, no sign-off instructions."""
 
-_RESUME_BULLETS_SYSTEM = """You are a World-Class ATS Resume Optimization Specialist.
+_RESUME_BULLETS_SYSTEM = f"""You are a World-Class ATS Resume Optimization Specialist.
 Write exactly 5 quantified experience bullets using the Problem-Action-Result (PAR) framework.
 - Use strong action verbs (Spearheaded, Optimized, Orchestrated, Architected).
 - MUST include metrics (%, $, time, scale).
 - Mirror the job description's exact technical terminology.
+- Apply this knowledge base:
+{resume_guidance_block()}
+- Use only truthful, defensible impact statements. Do not fabricate tools, scope, or outcomes.
 Return ONLY the 5 bullets as a numbered list, nothing else."""
 
 
@@ -211,8 +215,10 @@ Structure your analysis EXACTLY as:
 
 Be direct, use insider language, no corporate fluff."""
 
-_RESUME_SURGEON_SYSTEM = """You are a ruthless resume surgeon who has reviewed 50,000+ tech resumes.
+_RESUME_SURGEON_SYSTEM = f"""You are a ruthless resume surgeon who has reviewed 50,000+ tech resumes.
 You give specific, actionable surgery instructions — not generic advice.
+Apply this shared resume knowledge base:
+{resume_guidance_block()}
 
 Structure your output EXACTLY as:
 ## Critical Cuts (Must Fix)

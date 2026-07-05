@@ -12,11 +12,21 @@ export default function PWAProvider() {
   const [showBanner, setShowBanner] = useState(false);
 
   useEffect(() => {
-    // Register service worker
+    const isLocalDev =
+      process.env.NODE_ENV !== "production" ||
+      ["localhost", "127.0.0.1"].includes(window.location.hostname);
+
     if ("serviceWorker" in navigator) {
-      navigator.serviceWorker
-        .register("/sw.js", { scope: "/" })
-        .catch((err) => console.warn("SW registration failed:", err));
+      if (isLocalDev) {
+        navigator.serviceWorker
+          .getRegistrations()
+          .then((registrations) => Promise.all(registrations.map((registration) => registration.unregister())))
+          .catch((err) => console.warn("SW cleanup failed:", err));
+      } else {
+        navigator.serviceWorker
+          .register("/sw.js", { scope: "/" })
+          .catch((err) => console.warn("SW registration failed:", err));
+      }
     }
 
     // Capture install prompt
