@@ -152,8 +152,6 @@ def _role_titles(role: str) -> list[str]:
 
 def _skill_terms(skills: list[str]) -> list[str]:
     terms = [s for s in skills if s]
-    if not terms:
-        return ["Playwright", "Selenium WebDriver", "API testing"]
     return list(dict.fromkeys(terms))[:8]
 
 
@@ -203,14 +201,16 @@ def _experience_terms(exp_years: int) -> list[str]:
 def build_dork_queries(role: str, skills: list[str], location: str, exp_years: int) -> list[str]:
     """Build generic Google-style dork queries from profile values."""
     titles = _role_titles(role)
-    skill_group = _quote_group(_skill_terms(skills), limit=8)
+    skill_terms = _skill_terms(skills)
+    skill_group = _quote_group(skill_terms, limit=8) if skill_terms else ""
     title_group = f'(intitle:{_quote_group(titles, limit=8)} OR {_quote_group(titles, limit=8)})'
     loc_group = _quote_group(_location_terms(location), limit=8)
     exp_group = _quote_group(_experience_terms(exp_years), limit=8)
     inurl_group = _or_group(INURL_TERMS, limit=8)
     negative = " ".join(f'-"{term}"' for term in NEGATIVE_TERMS)
+    optional_skill = f" AND {skill_group}" if skill_group else ""
 
-    base = f"{title_group} AND {skill_group} AND {loc_group} AND {exp_group} AND {inurl_group} {negative}"
+    base = f"{title_group}{optional_skill} AND {loc_group} AND {exp_group} AND {inurl_group} {negative}"
     queries = [
         f"{_or_group(ATS_SITES, limit=24)} AND {base}",
         f"{_or_group(JOB_BOARD_SITES, limit=34)} AND {base}",
@@ -219,10 +219,11 @@ def build_dork_queries(role: str, skills: list[str], location: str, exp_years: i
     if any(term in loc_lower for term in ("ireland", "dublin", "cork", "galway", "limerick")):
         queries.insert(0, f"{_or_group(IRELAND_SITES, limit=8)} AND {base}")
     else:
-        queries.append(f"{_or_group(IRELAND_SITES, limit=8)} AND {title_group} AND {skill_group} AND (\"Ireland\" OR \"Dublin\" OR \"Remote\") AND {inurl_group} {negative}")
+        queries.append(f"{_or_group(IRELAND_SITES, limit=8)} AND {title_group}{optional_skill} AND (\"Ireland\" OR \"Dublin\" OR \"Remote\") AND {inurl_group} {negative}")
 
     # A shorter fallback query helps when search engines reject very long dorks.
-    queries.append(f"{_quote_group(titles, limit=4)} {_quote_group(_skill_terms(skills), limit=4)} {_quote_group(_location_terms(location), limit=4)} jobs careers {negative}")
+    fallback_skill = f" {_quote_group(skill_terms, limit=4)}" if skill_terms else ""
+    queries.append(f"{_quote_group(titles, limit=4)}{fallback_skill} {_quote_group(_location_terms(location), limit=4)} jobs careers {negative}")
     return queries[:_MAX_QUERIES]
 
 
@@ -373,8 +374,10 @@ def _matches_profile(job: dict, titles: list[str], skills: list[str], locations:
         return False
     title_match = any(t.lower() in combined for t in titles)
     skill_match = any(s.lower() in combined for s in skills) if skills else True
-    loc_match = any(l.lower() in combined for l in locations) if locations else True
-    return title_match and skill_match and loc_match
+    # Location and country are already embedded in the dork query. Many ATS pages
+    # omit city text from result snippets, so a second strict location filter drops
+    # valid openings before users can review them.
+    return title_match and skill_match
 
 
 def _compute_match_score(job: dict, profile_skills: set[str], exp_years: int) -> int:

@@ -8,7 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response
 
 from core.config import settings
-from core.database import engine
+from core.database import database_url, engine
 from models import database as _models   # noqa: F401 - ensures all models are registered
 from models.database import Base
 from api import (
@@ -47,7 +47,7 @@ def _apply_cors_headers(response: Response, origin: str | None) -> Response:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Create all SQLAlchemy-managed tables on startup (idempotent)."""
-    db_url: str = settings.DATABASE_URL
+    db_url: str = database_url
     is_local_dev = "localhost" in db_url or "127.0.0.1" in db_url
     try:
         async with engine.begin() as conn:

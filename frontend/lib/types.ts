@@ -55,7 +55,7 @@ export interface Job {
   fitScore?: number;
   fitBadge?: string;
   levelUp: boolean;
-  source?: JobPortal;
+  source?: string;
   recruiterName?: string;
   recruiterLinkedIn?: string;
   // Intelligence flags

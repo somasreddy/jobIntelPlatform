@@ -3,12 +3,16 @@ from sqlalchemy.orm import DeclarativeBase
 
 from core.config import settings
 
+connect_args = {"ssl": True} if settings.DATABASE_SSL_REQUIRED else {}
+database_url = settings.DATABASE_URL
+
 engine = create_async_engine(
-    settings.DATABASE_URL,
+    database_url,
     echo=False,
     pool_pre_ping=True,
     pool_size=10,
     max_overflow=20,
+    connect_args=connect_args,
 )
 
 AsyncSessionLocal = async_sessionmaker(

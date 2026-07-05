@@ -1,6 +1,43 @@
 from typing import List, Union
-from pydantic import field_validator
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
+
+from pydantic import field_validator, model_validator
 from pydantic_settings import BaseSettings
+
+
+def _normalize_async_database_url(value: str) -> tuple[str, bool]:
+    """Return a SQLAlchemy asyncpg URL and whether SSL should be forced."""
+    url = (value or "").strip()
+    if not url:
+        return url, False
+
+    if url.startswith("postgres://"):
+        url = "postgresql+asyncpg://" + url[len("postgres://"):]
+    elif url.startswith("postgresql://"):
+        url = "postgresql+asyncpg://" + url[len("postgresql://"):]
+    elif url.startswith("postgresql+psycopg://") or url.startswith("postgresql+psycopg2://"):
+        url = "postgresql+asyncpg://" + url.split("://", 1)[1]
+
+    parts = urlsplit(url)
+    query_items: list[tuple[str, str]] = []
+    force_ssl = False
+    uses_pooler = parts.port == 6543
+
+    for key, val in parse_qsl(parts.query, keep_blank_values=True):
+        lower = key.lower()
+        if lower == "sslmode":
+            force_ssl = val.lower() in {"require", "verify-ca", "verify-full"}
+            continue
+        if lower in {"pgbouncer", "connection_limit", "pool_timeout"}:
+            uses_pooler = uses_pooler or lower == "pgbouncer"
+            continue
+        query_items.append((key, val))
+
+    if uses_pooler and not any(k == "prepared_statement_cache_size" for k, _ in query_items):
+        query_items.append(("prepared_statement_cache_size", "0"))
+
+    normalized = urlunsplit((parts.scheme, parts.netloc, parts.path, urlencode(query_items), parts.fragment))
+    return normalized, force_ssl
 
 class Settings(BaseSettings):
     PROJECT_NAME: str = "AI Job Intelligence API"
@@ -16,8 +53,30 @@ class Settings(BaseSettings):
             return json.loads(v)
         return v
 
+    @model_validator(mode="after")
+    def assemble_database_url(self):
+        default_url = "postgresql+asyncpg://postgres:postgres@localhost:5432/job_platform"
+        if not self.DATABASE_URL or self.DATABASE_URL == default_url:
+            self.DATABASE_URL = (
+                self.POSTGRES_URL
+                or self.POSTGRES_PRISMA_URL
+                or self.POSTGRES_URL_NON_POOLING
+                or self.DATABASE_URL
+            )
+        self.DATABASE_URL, self.DATABASE_SSL_REQUIRED = _normalize_async_database_url(self.DATABASE_URL)
+        if self.DIRECT_URL:
+            self.DIRECT_URL, _ = _normalize_async_database_url(self.DIRECT_URL)
+        return self
+
     # Database
+    # Vercel/Supabase integrations usually expose POSTGRES_URL variables.
+    # DATABASE_URL remains supported and wins when explicitly configured.
     DATABASE_URL: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/job_platform"
+    DIRECT_URL: str = ""
+    POSTGRES_URL: str = ""
+    POSTGRES_PRISMA_URL: str = ""
+    POSTGRES_URL_NON_POOLING: str = ""
+    DATABASE_SSL_REQUIRED: bool = False
 
     # Redis / Celery
     REDIS_URL: str = "redis://localhost:6379/0"
@@ -72,5 +131,6 @@ class Settings(BaseSettings):
         base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         env_file = os.path.join(base_dir, ".env")
         case_sensitive = True
+        extra = "ignore"
 
 settings = Settings()

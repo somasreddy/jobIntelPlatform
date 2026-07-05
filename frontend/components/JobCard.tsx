@@ -25,9 +25,9 @@ const PORTAL_STYLE: Record<JobPortal, { bg: string; text: string; label: string 
   Other:     { bg: "bg-slate-700/40",  text: "text-slate-400",  label: "other" },
 };
 
-function SourceBadge({ source }: { source?: JobPortal }) {
+function SourceBadge({ source }: { source?: string }) {
   if (!source) return null;
-  const s = PORTAL_STYLE[source] ?? PORTAL_STYLE.Other;
+  const s = PORTAL_STYLE[source as JobPortal] ?? { ...PORTAL_STYLE.Other, label: source.replace(/^Dork\//, "dork ").toLowerCase() };
   return (
     <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-wide border border-current/20 ${s.bg} ${s.text}`}>
       {s.label}
@@ -36,6 +36,7 @@ function SourceBadge({ source }: { source?: JobPortal }) {
 }
 
 function formatSalary(min: number, max: number, currency: string) {
+  if (!min || !max) return "Not disclosed";
   const fmt = (n: number) => {
     if (currency === "INR") return `₹${(n / 100000).toFixed(1)}L`;
     if (currency === "GBP") return `£${(n / 1000).toFixed(0)}K`;
@@ -158,16 +159,18 @@ export default function JobCard({ job, onSelect }: JobCardProps) {
       const skillScore = job.technologies.length > 0
         ? Math.round((matched.length / job.technologies.length) * 100)
         : 50;
-      const expScore = profile.experienceYears >= job.experienceRequired
-        ? 100
-        : Math.round((profile.experienceYears / job.experienceRequired) * 90);
+      const expScore = job.experienceRequired > 0
+        ? profile.experienceYears >= job.experienceRequired
+          ? 100
+          : Math.round((profile.experienceYears / job.experienceRequired) * 90)
+        : 75;
       // Location: rough match
       const wm = profile.workMode ?? "Any";
       const locScore = wm === "Any" || wm === job.workMode || job.workMode === "Remote" ? 95 : 70;
       // Salary: how close is current salary to job range
-      const mid = (job.salaryMin + job.salaryMax) / 2;
+      const mid = job.salaryMin && job.salaryMax ? (job.salaryMin + job.salaryMax) / 2 : 0;
       const curr = profile.currentSalary ?? 0;
-      const salScore = curr === 0 ? 75 : Math.min(100, Math.round((curr / mid) * 100));
+      const salScore = curr === 0 || mid === 0 ? 75 : Math.min(100, Math.round((curr / mid) * 100));
       setBreakdown({ skills: skillScore, experience: expScore, location: locScore, salary: salScore });
     }
   }, [showBreakdown, breakdown, job, matchScore]);
@@ -183,6 +186,10 @@ export default function JobCard({ job, onSelect }: JobCardProps) {
     e.preventDefault();
     setShowBreakdown(p => !p);
   };
+
+  const hasInternalDetails = Boolean(job.id) && !job.id.startsWith("dork-");
+  const detailsHref = hasInternalDetails ? `/jobs/${job.id}` : job.applicationLink;
+  const detailsLabel = hasInternalDetails ? "View & Generate" : "Open JD";
 
   return (
     <div
@@ -288,11 +295,13 @@ export default function JobCard({ job, onSelect }: JobCardProps) {
       {/* CTA */}
       <div className="flex gap-2">
         <Link
-          href={`/jobs/${job.id}`}
+          href={detailsHref}
+          target={hasInternalDetails ? undefined : "_blank"}
+          rel={hasInternalDetails ? undefined : "noopener noreferrer"}
           onClick={(e) => e.stopPropagation()}
           className="btn-primary flex-1 text-center text-sm flex items-center justify-center gap-1.5"
         >
-          View & Generate <ArrowUpRight className="w-4 h-4" />
+          {detailsLabel} <ArrowUpRight className="w-4 h-4" />
         </Link>
         <button
           onClick={(e) => { e.stopPropagation(); setShowAnalysis(true); }}

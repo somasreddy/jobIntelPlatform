@@ -19,6 +19,16 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
+def _combined_location(payload: dict) -> str:
+    location = str(payload.get("location") or "").strip()
+    country = str(payload.get("country") or "").strip()
+    if not country:
+        return location
+    if location and country.lower() in location.lower():
+        return location
+    return ", ".join(part for part in [location, country] if part)
+
+
 def _row_to_dict(job: VerifiedJob) -> dict:
     return {
         "id": str(job.id),
@@ -190,6 +200,7 @@ async def discover_jobs(
       languages        - list of language strings
       experience_years - integer
       location         - preferred location string
+      country          - preferred country string
       work_mode        - "Remote" | "Hybrid" | "On-site" | "Any"
       min_match_score  - 0-100, default 60
       run_verification - bool, default true (HEAD-ping every app link)
@@ -205,7 +216,7 @@ async def discover_jobs(
 
     jobs = await svc.discover_jobs(
         role=payload.get("role", ""),
-        location=payload.get("location", ""),
+        location=_combined_location(payload),
         profile_skills=profile_skills,
         exp_years=int(payload.get("experience_years") or 0),
         min_match_score=int(payload.get("min_match_score") or 60),
@@ -283,7 +294,7 @@ async def generate_dork_query(payload: dict = Body(...)):
     queries = build_dork_queries(
         role=payload.get("role", ""),
         skills=profile_skills,
-        location=payload.get("location", ""),
+        location=_combined_location(payload),
         exp_years=int(payload.get("experience_years") or 0),
     )
     return {

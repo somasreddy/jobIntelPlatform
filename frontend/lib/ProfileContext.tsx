@@ -142,8 +142,11 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
   const saveProfile = useCallback(async (p: CandidateProfile) => {
     // Optimistic update — all consumers see new profile immediately
     setProfile(p);
-    // Persist to localStorage cache (also triggers cross-tab storage event)
+    // Persist to localStorage cache and notify same-tab consumers.
     saveToLocalStorage(p);
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent("candidate-profile-updated", { detail: p }));
+    }
     // Persist to DB (best-effort — don't block UI on failure)
     try {
       await saveToDb(p);

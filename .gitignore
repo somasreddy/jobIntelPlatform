@@ -34,3 +34,6 @@ Thumbs.db
 backend/data/
 frontend/node_modules/
 backend/__pycache__/
+
+# Local startup probes
+startup.*.log

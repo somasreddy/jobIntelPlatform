@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import Link from "next/link";
 import {
   Activity, Briefcase, Target, BookOpen, BarChart3,
@@ -7,6 +7,8 @@ import {
   Users, Award, ChevronRight, RefreshCw,
 } from "lucide-react";
 import { useAuth } from "@/lib/AuthContext";
+import { useProfile } from "@/lib/ProfileContext";
+import { CandidateProfile } from "@/lib/types";
 
 const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
@@ -51,6 +53,67 @@ interface CampaignTodo {
   priority: string;
   category: string;
   done?: boolean;
+}
+
+function profileSkills(profile: CandidateProfile | null): string[] {
+  if (!profile) return [];
+  return Array.from(new Set([
+    ...(profile.skills ?? []),
+    ...(profile.frameworks ?? []),
+    ...(profile.languages ?? []),
+    ...(profile.cicdTools ?? []),
+    ...(profile.aiTools ?? []),
+  ].map((skill) => skill.trim()).filter(Boolean)));
+}
+
+function buildLocalHealth(profile: CandidateProfile | null): HealthData | null {
+  if (!profile) return null;
+  const skills = profileSkills(profile);
+  const skillScore = Math.min(100, Math.round((skills.length / 12) * 100));
+  const expScore = Math.min(100, Math.round(((profile.experienceYears || 0) / 10) * 100));
+  const completedFields = [profile.name, profile.currentRole, profile.currentLocation, profile.workMode, profile.currency].filter(Boolean).length;
+  const profileScore = Math.min(100, Math.round((completedFields / 5) * 70) + (profile.resumeText ? 30 : 0));
+  const aiScore = Math.min(100, Math.round(((profile.aiTools?.length || 0) / 5) * 100));
+  const total = Math.round(skillScore * 0.4 + expScore * 0.25 + profileScore * 0.25 + aiScore * 0.1);
+  const weakest = [
+    { dimension: "skills", score: skillScore, suggestion: "Add high-demand skills from your target job descriptions.", potential_gain: Math.max(0, 100 - skillScore) },
+    { dimension: "experience", score: expScore, suggestion: "Add quantified achievements and recent role milestones.", potential_gain: Math.max(0, 100 - expScore) },
+    { dimension: "profile", score: profileScore, suggestion: "Complete location, work mode, salary, and resume text for stronger matching.", potential_gain: Math.max(0, 100 - profileScore) },
+    { dimension: "ai_tools", score: aiScore, suggestion: "Add AI-assisted delivery tools you actively use.", potential_gain: Math.max(0, 100 - aiScore) },
+  ].sort((a, b) => a.score - b.score)[0];
+
+  return {
+    health_score: total,
+    breakdown: {
+      skills: { score: skillScore, label: `${skills.length} skills`, weight: 0.4 },
+      experience: { score: expScore, label: `${profile.experienceYears || 0} yrs experience`, weight: 0.25 },
+      profile: { score: profileScore, label: "Profile completeness", weight: 0.25 },
+      ai_tools: { score: aiScore, label: `${profile.aiTools?.length || 0} AI tools`, weight: 0.1 },
+    },
+    insights: [{ dimension: weakest.dimension, suggestion: weakest.suggestion, potential_gain: weakest.potential_gain }],
+  };
+}
+
+function buildProfileTodos(profile: CandidateProfile | null): CampaignTodo[] {
+  if (!profile) return [];
+  const role = profile.currentRole || "target role";
+  const location = profile.preferredLocations?.[0] || profile.currentLocation || "your target market";
+  return [
+    { id: "profile-search-jobs", text: `Search fresh ${role} openings in ${location}`, priority: "high", category: "jobs" },
+    { id: "profile-tailor-resume", text: "Tailor your resume against one high-fit JD", priority: "high", category: "resume" },
+    { id: "profile-interview-drill", text: `Practice 3 interview questions for ${role}`, priority: "medium", category: "interview" },
+  ];
+}
+
+function buildProfilePaths(profile: CandidateProfile | null): LearningPath[] {
+  if (!profile) return [];
+  return profileSkills(profile).slice(0, 3).map((skill, index) => ({
+    id: `profile-path-${skill.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`,
+    skill_name: skill,
+    progress_pct: Math.max(15, 35 - index * 5),
+    status: "active",
+    estimated_hours: 6 + index * 2,
+  }));
 }
 
 // ── Score Ring ────────────────────────────────────────────────────────────────
@@ -115,6 +178,7 @@ function FitBadge({ score, badge }: { score?: number; badge?: string }) {
 // ── Main Dashboard ────────────────────────────────────────────────────────────
 export default function DashboardPage() {
   const { authHeader } = useAuth();
+  const { profile, loading: profileLoading } = useProfile();
 
   const [health, setHealth] = useState<HealthData | null>(null);
   const [funnel, setFunnel] = useState<FunnelData | null>(null);
@@ -123,6 +187,25 @@ export default function DashboardPage() {
   const [todos, setTodos] = useState<CampaignTodo[]>([]);
   const [doneTodos, setDoneTodos] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
+
+  const profileKey = useMemo(() => {
+    if (!profile) return "no-profile";
+    return JSON.stringify({
+      name: profile.name,
+      role: profile.currentRole,
+      exp: profile.experienceYears,
+      location: profile.currentLocation,
+      preferred: profile.preferredLocations,
+      workMode: profile.workMode,
+      skills: profileSkills(profile),
+      certs: profile.certifications,
+      resume: Boolean(profile.resumeText),
+    });
+  }, [profile]);
+
+  const localHealth = useMemo(() => buildLocalHealth(profile), [profileKey, profile]);
+  const fallbackTodos = useMemo(() => buildProfileTodos(profile), [profileKey, profile]);
+  const fallbackPaths = useMemo(() => buildProfilePaths(profile), [profileKey, profile]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -145,10 +228,18 @@ export default function DashboardPage() {
     setLoading(false);
   }, [authHeader]);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    if (!profileLoading) void load();
+  }, [load, profileLoading, profileKey]);
 
-  const healthScore = health?.health_score ?? 0;
-  const topInsight = health?.insights?.[0];
+  const displayHealth = localHealth ?? health;
+  const displayTodos = todos.length > 0 ? todos : fallbackTodos;
+  const displayPaths = [
+    ...fallbackPaths,
+    ...paths.filter((path) => !fallbackPaths.some((fallback) => fallback.skill_name.toLowerCase() === path.skill_name.toLowerCase())),
+  ].slice(0, 3);
+  const healthScore = displayHealth?.health_score ?? 0;
+  const topInsight = displayHealth?.insights?.[0];
 
   // Funnel pipeline stages
   const stages = funnel?.stages ?? [];
@@ -188,8 +279,8 @@ export default function DashboardPage() {
             sub={`${funnel?.last_30_days ?? 0} this month`} icon={Briefcase} />
           <StatCard label="Response Rate" value={funnel ? `${funnel.response_rate}%` : "–"}
             sub="Replies received" icon={Users} />
-          <StatCard label="Active Paths" value={paths.length}
-            sub="Learning in progress" icon={BookOpen} />
+          <StatCard label="Active Paths" value={displayPaths.length}
+            sub={paths.length > 0 ? "Learning in progress" : "From profile skills"} icon={BookOpen} />
         </div>
 
         {/* Main grid */}
@@ -215,7 +306,7 @@ export default function DashboardPage() {
                   </div>
                 </div>
                 <div className="flex-1 space-y-2">
-                  {Object.entries(health?.breakdown ?? {}).slice(0, 4).map(([key, val]) => (
+                  {Object.entries(displayHealth?.breakdown ?? {}).slice(0, 4).map(([key, val]) => (
                     <div key={key}>
                       <div className="flex justify-between text-[10px] text-slate-400 mb-0.5">
                         <span>{val.label ?? key}</span>
@@ -248,7 +339,7 @@ export default function DashboardPage() {
                   Full plan <ChevronRight className="w-3 h-3" />
                 </Link>
               </div>
-              {todos.length === 0 ? (
+              {displayTodos.length === 0 ? (
                 <div className="text-center py-4">
                   <p className="text-xs text-slate-500">No tasks yet</p>
                   <Link href="/campaign" className="mt-2 inline-block text-xs"
@@ -258,7 +349,7 @@ export default function DashboardPage() {
                 </div>
               ) : (
                 <div className="space-y-3">
-                  {todos.map((todo) => {
+                  {displayTodos.map((todo) => {
                     const done = doneTodos.has(todo.id);
                     return (
                       <button key={todo.id}
@@ -366,11 +457,11 @@ export default function DashboardPage() {
                   All paths <ChevronRight className="w-3 h-3" />
                 </Link>
               </div>
-              {paths.length === 0 ? (
+              {displayPaths.length === 0 ? (
                 <p className="text-xs text-slate-500">No active paths. <Link href="/learn" style={{ color: "var(--accent-bright)" }}>Start learning →</Link></p>
               ) : (
                 <div className="space-y-3">
-                  {paths.map((p) => (
+                  {displayPaths.map((p) => (
                     <div key={p.id}>
                       <div className="flex justify-between text-xs mb-1">
                         <span className="text-slate-300 truncate max-w-[60%]">{p.skill_name}</span>

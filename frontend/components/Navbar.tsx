@@ -35,7 +35,7 @@ import {
 
 const navItems = [
   { href: "/jobs",          icon: Briefcase,       label: "Find Jobs"        },
-  { href: "/qa-dashboard",  icon: ClipboardList,   label: "QA Dashboard"     },
+  { href: "/qa-dashboard",  icon: ClipboardList,   label: "Job Dashboard"     },
   { href: "/profile",       icon: LayoutDashboard, label: "Profile & Resume" },
   { href: "/career-graph",  icon: Activity,        label: "Career Graph"     },
   { href: "/applications",  icon: Layers,          label: "Pipeline"         },
