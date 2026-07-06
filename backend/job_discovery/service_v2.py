@@ -298,7 +298,7 @@ class JobDiscoveryService:
         skill_terms = _skill_terms(profile_skills)
         for job in all_jobs:
             ai_score, match_reasons = _ai_relevance_score(job, role, skill_terms, location, exp_years)
-            if ai_score < 45:
+            if ai_score < 60:
                 continue
             key = (job.get("title", "").lower()[:70], job.get("organization", "").lower()[:50])
             if key in seen:

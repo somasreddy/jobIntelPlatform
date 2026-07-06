@@ -398,10 +398,75 @@ def _job_text(job: dict) -> str:
     ).lower()
 
 
+QA_ROLE_TERMS = (
+    "qa", "quality assurance", "quality engineer", "quality analyst", "test engineer",
+    "test automation", "automation tester", "sdet", "software development engineer in test",
+    "testing", "tester",
+)
+
+OTHER_COUNTRY_TERMS = {
+    "india": ["brazil", "usa", "united states", "canada", "germany", "france", "spain", "australia", "new zealand", "ireland", "uk", "united kingdom", "romania", "argentina", "mexico", "portugal", "colombia", "netherlands", "poland"],
+    "ireland": ["india", "brazil", "usa", "united states", "canada", "germany", "france", "spain", "australia", "new zealand", "uk", "united kingdom"],
+}
+
+
+def _role_family_matches(role: str, job: dict, combined: str) -> bool:
+    role_lower = (role or "").lower()
+    title = str(job.get("title", "")).lower()
+    if any(term in role_lower for term in ("qa", "quality", "test", "sdet")):
+        return any(term in title or term in combined for term in QA_ROLE_TERMS)
+
+    role_tokens = _term_tokens(role)
+    if not role_tokens:
+        return True
+    title_hits = [token for token in role_tokens if token in title]
+    combined_hits = [token for token in role_tokens if token in combined]
+    return len(title_hits) >= 1 or len(combined_hits) >= min(2, len(role_tokens))
+
+
+def _skill_matches(skills: list[str], combined: str) -> bool:
+    if not skills:
+        return True
+    for skill in skills:
+        skill_lower = skill.lower().strip()
+        if not skill_lower:
+            continue
+        if skill_lower in combined or any(token in combined for token in _term_tokens(skill_lower)):
+            return True
+    return False
+
+
+def _location_matches(location: str, combined: str) -> bool:
+    raw = (location or "").lower()
+    terms = [term.lower() for term in _location_terms(location)]
+    concrete_terms = [term for term in terms if term not in {"remote", "hybrid"}]
+
+    for country, blocked in OTHER_COUNTRY_TERMS.items():
+        if country in raw and country not in combined and any(other in combined for other in blocked):
+            return False
+
+    if concrete_terms:
+        return any(term in combined for term in concrete_terms)
+    if "remote" in terms:
+        return "remote" in combined
+    return True
+
+
+def _passes_user_constraints(job: dict, role: str, skills: list[str], location: str) -> bool:
+    combined = _job_text(job)
+    if any(term.lower() in combined for term in NEGATIVE_TERMS):
+        return False
+    return (
+        _role_family_matches(role, job, combined)
+        and _skill_matches(skills, combined)
+        and _location_matches(location, combined)
+    )
+
+
 def _ai_relevance_score(job: dict, role: str, skills: list[str], location: str, exp_years: int) -> tuple[int, list[str]]:
     """Deterministic AI-style relevance gate for noisy web dork results."""
     combined = _job_text(job)
-    if any(term.lower() in combined for term in NEGATIVE_TERMS):
+    if not _passes_user_constraints(job, role, skills, location):
         return 0, []
 
     score = 0
@@ -565,7 +630,7 @@ async def discover_jobs_from_dorks(
         if not isinstance(item, dict):
             continue
         ai_score, match_reasons = _ai_relevance_score(item, role, skill_terms, location, exp_years)
-        if ai_score < 45:
+        if ai_score < 60:
             continue
         key = (item.get("title", "").lower()[:70], item.get("organization", "").lower()[:50])
         if key in seen_jobs:

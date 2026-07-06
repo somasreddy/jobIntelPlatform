@@ -155,13 +155,15 @@ async def rate_limit_middleware(request: Request, call_next):
     now   = time.time()
     limit = 10 if path in _LLM_PATHS else 60
 
-    _rate_store[client_ip] = [t for t in _rate_store[client_ip] if now - t < 60]
-    if len(_rate_store[client_ip]) >= limit:
+    bucket_key = f"{client_ip}:{path}"
+    _rate_store[bucket_key] = [t for t in _rate_store[bucket_key] if now - t < 60]
+    if len(_rate_store[bucket_key]) >= limit:
         return JSONResponse(
             status_code=429,
+            headers={"Retry-After": "60"},
             content={"detail": f"Rate limit: max {limit} req/min for this endpoint."},
         )
-    _rate_store[client_ip].append(now)
+    _rate_store[bucket_key].append(now)
     return await call_next(request)
 
 

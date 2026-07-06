@@ -3,7 +3,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useAuth } from "@/lib/AuthContext";
 import {
   BookOpen, Plus, Trash2, CheckCircle2, Loader2,
-  ArrowRight, Clock, ExternalLink, TrendingUp, Zap,
+  ArrowRight, Clock, ExternalLink, TrendingUp, Zap, AlertCircle,
 } from "lucide-react";
 
 const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
@@ -33,6 +33,8 @@ interface Resource {
 interface Completion {
   id: string;
   skill_name: string;
+  path_id: string | null;
+  resource_url: string | null;
   completed_at: string;
 }
 
@@ -54,6 +56,7 @@ export default function LearnPage() {
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState<string | null>(null);
   const [selectedPath, setSelectedPath] = useState<LearningPath | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   const [newSkill, setNewSkill] = useState("");
   const [currentLevel, setCurrentLevel] = useState(0);
@@ -83,21 +86,49 @@ export default function LearnPage() {
   useEffect(() => { fetchData(); }, [fetchData]);
 
   const generatePath = async (skill: string, cur = 0, tgt = 3) => {
-    setGenerating(skill);
+    const skillName = skill.trim();
+    if (!skillName || generating) return;
+
+    const existing = paths.find((p) => p.skill_name.toLowerCase() === skillName.toLowerCase() && (p.resources?.length ?? 0) > 0);
+    if (existing) {
+      setSelectedPath(existing);
+      setNewSkill("");
+      setError(null);
+      return;
+    }
+
+    setGenerating(skillName);
+    setError(null);
     try {
       const res = await fetch(`${API}/api/learning/paths/generate`, {
         method: "POST",
         headers: authHeaders(token),
-        body: JSON.stringify({ skill_name: skill, current_level: cur, target_level: tgt }),
+        body: JSON.stringify({ skill_name: skillName, current_level: cur, target_level: tgt }),
       });
       if (res.ok) {
         const path: LearningPath = await res.json();
         setPaths(prev => [path, ...prev.filter(p => p.id !== path.id)]);
         setSelectedPath(path);
         setNewSkill("");
+        return;
       }
-    } catch (e) { console.error(e); }
-    finally { setGenerating(null); }
+
+      let detail = "Learning path generation failed.";
+      try {
+        const body = await res.json();
+        detail = body?.detail || detail;
+      } catch {
+        detail = await res.text() || detail;
+      }
+      setError(res.status === 429
+        ? "The generator is temporarily rate limited. Existing paths still work; wait a minute or try another skill after the current request window resets."
+        : detail);
+    } catch (e) {
+      console.error(e);
+      setError("Could not reach the learning service. Please check the backend connection and try again.");
+    } finally {
+      setGenerating(null);
+    }
   };
 
   const deletePath = async (id: string) => {
@@ -143,6 +174,13 @@ export default function LearnPage() {
           <p className="text-sm text-slate-400 mt-0.5">Close skill gaps with AI-curated learning paths</p>
         </div>
 
+        {error && (
+          <div className="mb-4 flex items-start gap-2 rounded-xl border border-amber-500/25 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
+            <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+            <span>{error}</span>
+          </div>
+        )}
+
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Left — paths list + generator */}
           <div className="space-y-4">
@@ -157,7 +195,7 @@ export default function LearnPage() {
                 placeholder="Skill name (e.g. Python)"
                 value={newSkill}
                 onChange={e => setNewSkill(e.target.value)}
-                onKeyDown={e => e.key === "Enter" && newSkill.trim() && generatePath(newSkill.trim(), currentLevel, targetLevel)}
+                onKeyDown={e => e.key === "Enter" && newSkill.trim() && !generating && generatePath(newSkill.trim(), currentLevel, targetLevel)}
               />
               <div className="grid grid-cols-2 gap-2 mb-3">
                 <div>
@@ -282,7 +320,7 @@ export default function LearnPage() {
                 <div className="space-y-3">
                   {(selectedPath.resources || []).map((r, i) => {
                     const done = completions.some(c =>
-                      c.skill_name.toLowerCase() === selectedPath.skill_name.toLowerCase()
+                      c.path_id === selectedPath.id && c.resource_url === r.url
                     );
                     return (
                       <div

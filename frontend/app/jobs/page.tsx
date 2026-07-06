@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import JobCard from "@/components/JobCard";
-import { mockJobs } from "@/lib/mockData";
 import { useAuth } from "@/lib/AuthContext";
 import { useProfile } from "@/lib/ProfileContext";
 import { CandidateProfile, Job, VerificationStatus, WorkMode } from "@/lib/types";
@@ -13,36 +12,12 @@ import {
   ExternalLink,
   Filter,
   Globe,
-  MapPin,
-  RefreshCw,
   Search,
-  Sliders,
-  SlidersHorizontal,
   Sparkles,
-  TrendingUp,
   UserCheck,
   Zap,
 } from "lucide-react";
 
-const WORK_MODES = ["All", "Remote", "Hybrid", "On-site"];
-const TECH_FILTERS = [
-  "All",
-  "Playwright", "Selenium", "Cypress", "K6",
-  "Python", "Java", "TypeScript", "JavaScript",
-  "AWS", "Azure", "Kubernetes", "Terraform", "Jenkins", "GitHub Actions", "Docker",
-  "webMethods", "webMethods.IO", "Trading Networks", "webMethods BPM",
-  "MuleSoft", "Dell Boomi", "IBM Sterling", "IBM MQ", "TIBCO",
-  "SAP CPI", "Axway", "Informatica",
-  "Kong", "Apigee", "Azure APIM", "IBM API Connect",
-  "EDI X12", "EDIFACT", "AS2", "FHIR", "HL7",
-  "PostgreSQL", "Oracle DB", "MongoDB", "Snowflake",
-];
-const PORTAL_FILTERS = [
-  "All", "Dork/Google", "Dork/Bing", "Dork/DuckDuckGo",
-  "LinkedIn", "Indeed", "Glassdoor", "Naukri", "Adzuna",
-  "Remotive", "Arbeitnow", "WeWorkRemotely", "HackerNews", "AuthenticJobs",
-  "Greenhouse", "Lever", "Wellfound", "Direct", "Other",
-];
 const AUTO_REFRESH_MS = 10 * 60 * 1000;
 const SEARCH_STORAGE = "job_dork_search_v1";
 
@@ -168,13 +143,6 @@ function applyProfileDefaults(profile: CandidateProfile | null, current: DorkSea
 export default function JobsPage() {
   const { authHeader } = useAuth();
   const { profile, loading: profileLoading } = useProfile();
-  const [searchQuery, setSearchQuery] = useState("");
-  const [workMode, setWorkMode] = useState("All");
-  const [techFilter, setTechFilter] = useState("All");
-  const [portalFilter, setPortalFilter] = useState("All");
-  const [levelFilter, setLevelFilter] = useState<"All" | "SameLevel" | "CareerUplift">("All");
-  const [minScore, setMinScore] = useState(0);
-  const [strictMode, setStrictMode] = useState(false);
   const [jobs, setJobs] = useState<Job[]>([]);
   const [loading, setLoading] = useState(false);
   const [discovering, setDiscovering] = useState(false);
@@ -192,30 +160,19 @@ export default function JobsPage() {
     items.map((job, index) => normalizeJob(job, index, activeProfile, searchSkills));
 
   const buildPayload = (activeProfile = profileRef.current) => {
-    const combinedSkills = Array.from(new Set([...searchSkills, ...profileSkillTerms(activeProfile)]));
     return {
       role: dorkSearch.title.trim(),
-      skills: combinedSkills,
-      frameworks: activeProfile?.frameworks ?? [],
-      cicd_tools: activeProfile?.cicdTools ?? [],
-      languages: activeProfile?.languages ?? [],
+      skills: searchSkills,
+      frameworks: [],
+      cicd_tools: [],
+      languages: [],
       experience_years: Number(dorkSearch.experience) || activeProfile?.experienceYears || 0,
       location: dorkSearch.location.trim(),
       country: dorkSearch.country.trim(),
       work_mode: activeProfile?.workMode ?? "Any",
-      min_match_score: strictMode ? Math.max(70, minScore) : minScore,
+      min_match_score: 60,
       run_verification: true,
     };
-  };
-
-  const resetResultFilters = () => {
-    setSearchQuery("");
-    setWorkMode("All");
-    setTechFilter("All");
-    setPortalFilter("All");
-    setLevelFilter("All");
-    setMinScore(0);
-    setStrictMode(false);
   };
 
   const loadJobs = async (currentProfile: CandidateProfile | null, autoDiscover = false) => {
@@ -237,17 +194,19 @@ export default function JobsPage() {
           return;
         }
       }
+      setJobs([]);
       if (autoDiscover && currentProfile) {
         void runDorkSearch(true, currentProfile);
-        return;
       }
     } catch {
-      // fall back below
+      setJobs([]);
+      if (autoDiscover && currentProfile) {
+        void runDorkSearch(true, currentProfile);
+      }
     } finally {
+      setLastRefresh(new Date());
       setLoading(false);
     }
-    setJobs(normalizeJobs(mockJobs, currentProfile));
-    setLastRefresh(new Date());
   };
 
   const runDorkSearch = async (silent = false, activeProfile = profileRef.current) => {
@@ -257,7 +216,6 @@ export default function JobsPage() {
       return;
     }
 
-    if (!silent) resetResultFilters();
     setDiscovering(true);
     if (!silent) setDiscoverError(null);
     try {
@@ -289,10 +247,11 @@ export default function JobsPage() {
     } catch (err) {
       if (!silent) {
         const msg = err instanceof Error ? err.message : String(err);
+        setJobs([]);
         setDiscoverError(
           msg.includes("Failed to fetch")
             ? "Backend is not reachable on http://localhost:8000. Start the backend and search again."
-            : `Discovery unavailable (${msg}). Cached/mock jobs are still shown below.`
+            : `Discovery unavailable (${msg}). No stale results are shown for this search.`
         );
       }
     } finally {
@@ -333,26 +292,7 @@ export default function JobsPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [profileLoading, profile, storageHydrated]);
 
-  const refresh = () => void loadJobs(profileRef.current, false);
-
-  const filtered = jobs.filter((j) => {
-    const q = searchQuery.toLowerCase();
-    const matchesQ =
-      !q ||
-      j.title.toLowerCase().includes(q) ||
-      j.organization.toLowerCase().includes(q) ||
-      j.technologies.some((t) => t.toLowerCase().includes(q)) ||
-      j.location.toLowerCase().includes(q);
-    const matchesMode = workMode === "All" || j.workMode === workMode;
-    const matchesTech = techFilter === "All" || j.technologies.includes(techFilter);
-    const matchesLevel = levelFilter === "All" ? true : levelFilter === "CareerUplift" ? j.levelUp : !j.levelUp;
-    const matchesPortal = portalFilter === "All" || j.source === portalFilter;
-    const matchesScore = (j.fitScore ?? j.matchScore ?? 0) >= minScore;
-    return matchesQ && matchesMode && matchesTech && matchesLevel && matchesPortal && matchesScore;
-  });
-
-  const filtersAreHidingJobs = jobs.length > 0 && filtered.length === 0;
-
+  const filtered = jobs;
   const upliftCount = jobs.filter((j) => j.levelUp).length;
   const verifiedCount = jobs.filter((j) => j.verificationStatus === "VERIFIED").length;
   const strongFitCount = jobs.filter((j) => (j.fitScore ?? j.matchScore ?? 0) >= 80).length;
@@ -378,16 +318,8 @@ export default function JobsPage() {
               disabled={discovering || loading}
               className="btn-primary flex items-center gap-2 text-sm"
             >
-              <Zap className={`w-4 h-4 ${discovering ? "animate-pulse" : ""}`} />
-              {discovering ? "Searching Dork Sites..." : "Search Dork Jobs"}
-            </button>
-            <button
-              onClick={refresh}
-              disabled={loading || discovering}
-              className="btn-secondary flex items-center gap-2 text-sm"
-            >
-              <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
-              Refresh
+              <Zap className={`w-4 h-4 ${discovering || loading ? "animate-pulse" : ""}`} />
+              {discovering || loading ? "Finding Latest Jobs..." : "Find Latest Jobs"}
             </button>
           </div>
         </div>
@@ -396,20 +328,11 @@ export default function JobsPage() {
           <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
             <div>
               <p className="text-sm font-semibold text-white">Job search and filters</p>
-              <p className="text-xs text-slate-500 mt-0.5">One place to set search criteria, refine displayed openings, and control match strictness.</p>
+              <p className="text-xs text-slate-500 mt-0.5">These values are used directly for dork discovery and AI relevance matching.</p>
             </div>
             <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
               <Filter className="w-3.5 h-3.5" />
-              <span>{filtered.length} of {jobs.length} shown</span>
-              {jobs.length > 0 && (
-                <button
-                  onClick={resetResultFilters}
-                  className="px-3 py-1.5 rounded-lg text-xs font-medium text-slate-300 hover:text-white"
-                  style={{ background: "var(--bg-base)", border: "1px solid var(--border)" }}
-                >
-                  Reset filters
-                </button>
-              )}
+              <span>{jobs.length} matched openings</span>
             </div>
           </div>
 
@@ -466,7 +389,7 @@ export default function JobsPage() {
 
           <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
             <UserCheck className="w-3.5 h-3.5 text-emerald-400" />
-            {profile ? "Saved profile skills are merged into scoring automatically." : "No saved profile loaded; score uses the search skills until profile is available."}
+            Search uses only the title, skill, experience, location, and country entered above. Your profile is used later for fit scoring.
             {dorkUrls.length > 0 && (
               <>
                 <span className="hidden sm:inline text-slate-700">|</span>
@@ -479,85 +402,7 @@ export default function JobsPage() {
             )}
           </div>
 
-          <div className="pt-4" style={{ borderTop: "1px solid var(--border)" }}>
-            <div className="grid grid-cols-1 xl:grid-cols-[minmax(220px,1fr)_auto_auto] gap-3 items-center">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
-                <input
-                  className="input pl-9"
-                  placeholder="Search displayed results by role, company, technology..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                />
-              </div>
 
-              <div className="flex gap-1 rounded-lg p-1" style={{ background: "var(--bg-base)" }}>
-                {(["All", "CareerUplift", "SameLevel"] as const).map((f) => (
-                  <button
-                    key={f}
-                    onClick={() => setLevelFilter(f)}
-                    className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
-                      levelFilter === f ? "bg-indigo-600 text-white" : "text-slate-400 hover:text-white"
-                    }`}
-                  >
-                    {f === "All" ? "All Jobs" : f === "CareerUplift" ? "Career Uplift" : "Same Level+"}
-                  </button>
-                ))}
-              </div>
-
-              <button
-                onClick={() => {
-                  setStrictMode((s) => !s);
-                  if (!strictMode) setMinScore((m) => Math.max(m, 70));
-                }}
-                className={`flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition-all ${
-                  strictMode
-                    ? "bg-indigo-600/20 border-indigo-500/50 text-indigo-300"
-                    : "bg-slate-800/60 border-slate-700/40 text-slate-400 hover:text-white"
-                }`}
-              >
-                <SlidersHorizontal className="w-3.5 h-3.5" />
-                Strict Match {strictMode ? "ON" : "OFF"}
-              </button>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3 items-center mt-3">
-              <label className="flex items-center gap-2 text-slate-400 text-xs">
-                <MapPin className="w-3.5 h-3.5 shrink-0" />
-                <select className="input py-1.5 text-xs" value={workMode} onChange={(e) => setWorkMode(e.target.value)}>
-                  {WORK_MODES.map((m) => <option key={m}>{m}</option>)}
-                </select>
-              </label>
-
-              <label className="flex items-center gap-2 text-slate-400 text-xs">
-                <Sliders className="w-3.5 h-3.5 shrink-0" />
-                <select className="input py-1.5 text-xs" value={techFilter} onChange={(e) => setTechFilter(e.target.value)}>
-                  {TECH_FILTERS.map((t) => <option key={t}>{t}</option>)}
-                </select>
-              </label>
-
-              <label className="flex items-center gap-2 text-slate-400 text-xs">
-                <Globe className="w-3.5 h-3.5 shrink-0" />
-                <select className="input py-1.5 text-xs" value={portalFilter} onChange={(e) => setPortalFilter(e.target.value)}>
-                  {PORTAL_FILTERS.map((p) => <option key={p}>{p}</option>)}
-                </select>
-              </label>
-
-              <div className="flex items-center gap-2 text-xs text-slate-400">
-                <TrendingUp className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
-                <span className="whitespace-nowrap">Min score</span>
-                <input
-                  type="range" min={0} max={95} step={5}
-                  value={minScore}
-                  onChange={(e) => setMinScore(Number(e.target.value))}
-                  className="min-w-24 flex-1 accent-indigo-500"
-                />
-                <span className={`font-semibold w-8 ${minScore >= 80 ? "text-emerald-400" : minScore >= 60 ? "text-indigo-400" : "text-slate-400"}`}>
-                  {minScore > 0 ? `${minScore}%` : "Any"}
-                </span>
-              </div>
-            </div>
-          </div>
         </div>
 
         {discoverError && (
@@ -593,18 +438,11 @@ export default function JobsPage() {
           <div className="card text-center py-16 text-slate-400">
             <Search className="w-10 h-10 mx-auto mb-3 text-slate-600" />
             <p className="font-medium">
-              {filtersAreHidingJobs ? `${jobs.length} openings are loaded but hidden by filters` : "No jobs loaded yet"}
+              {"No jobs loaded yet"}
             </p>
             <p className="text-sm mt-1">
-              {filtersAreHidingJobs
-                ? "Click Reset filters to display every opening returned by the dork search."
-                : "Enter a title, experience, location, and country, then run Search Dork Jobs."}
+              Enter a title, experience, location, and country, then run Find Latest Jobs.
             </p>
-            {filtersAreHidingJobs && (
-              <button onClick={resetResultFilters} className="btn-primary text-sm mt-5 px-5 py-2">
-                Reset filters
-              </button>
-            )}
           </div>
         ) : (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
@@ -613,7 +451,7 @@ export default function JobsPage() {
         )}
 
         <p className="text-xs text-slate-600 text-center mt-6" suppressHydrationWarning>
-          Last refreshed: {lastRefresh.toLocaleTimeString()} - Auto-refreshes every 10 minutes
+          Last checked: {lastRefresh.toLocaleTimeString()} - Auto-checks real sources every 10 minutes
         </p>
       </main>
     </div>

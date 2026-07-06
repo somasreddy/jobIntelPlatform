@@ -38,6 +38,51 @@ class CompleteResourceRequest(BaseModel):
     notes: Optional[str] = None
 
 
+def _fallback_learning_resources(skill_name: str, current_level: int = 0, target_level: int = 3) -> list[dict]:
+    skill = (skill_name or "Skill").strip() or "Skill"
+    key = skill.lower()
+
+    curated: list[dict] = []
+    if "playwright" in key:
+        curated = [
+            {"title": "Playwright Getting Started", "provider": "Playwright", "url": "https://playwright.dev/docs/intro", "type": "article", "duration_minutes": 45, "difficulty": "Beginner", "is_free": True, "description": "Install Playwright, run first tests, and understand the test runner."},
+            {"title": "Writing Playwright Tests", "provider": "Playwright", "url": "https://playwright.dev/docs/writing-tests", "type": "article", "duration_minutes": 75, "difficulty": "Beginner", "is_free": True, "description": "Learn locators, assertions, fixtures, and resilient UI test structure."},
+            {"title": "Playwright API Testing", "provider": "Playwright", "url": "https://playwright.dev/docs/api-testing", "type": "article", "duration_minutes": 90, "difficulty": "Intermediate", "is_free": True, "description": "Use Playwright request contexts for API tests and setup flows."},
+            {"title": "Trace Viewer and Debugging", "provider": "Playwright", "url": "https://playwright.dev/docs/trace-viewer", "type": "article", "duration_minutes": 60, "difficulty": "Intermediate", "is_free": True, "description": "Debug flaky tests with traces, screenshots, network, and action timeline."},
+            {"title": "Playwright Best Practices", "provider": "Playwright", "url": "https://playwright.dev/docs/best-practices", "type": "article", "duration_minutes": 60, "difficulty": "Advanced", "is_free": True, "description": "Enterprise patterns for reliable selectors, isolation, and maintainable suites."},
+        ]
+    elif "selenium" in key:
+        curated = [
+            {"title": "Selenium WebDriver Documentation", "provider": "Selenium", "url": "https://www.selenium.dev/documentation/webdriver/", "type": "article", "duration_minutes": 90, "difficulty": "Beginner", "is_free": True, "description": "Core WebDriver concepts, browser automation, waits, and element interactions."},
+            {"title": "Selenium Test Practices", "provider": "Selenium", "url": "https://www.selenium.dev/documentation/test_practices/", "type": "article", "duration_minutes": 90, "difficulty": "Intermediate", "is_free": True, "description": "Recommended practices for maintainable and reliable Selenium automation."},
+            {"title": "Selenium Grid", "provider": "Selenium", "url": "https://www.selenium.dev/documentation/grid/", "type": "article", "duration_minutes": 120, "difficulty": "Advanced", "is_free": True, "description": "Scale browser tests across environments with Selenium Grid."},
+        ]
+    elif "api" in key and "test" in key:
+        curated = [
+            {"title": "Postman API Testing Learning Path", "provider": "Postman", "url": "https://learning.postman.com/docs/writing-scripts/test-scripts/", "type": "article", "duration_minutes": 90, "difficulty": "Beginner", "is_free": True, "description": "Write assertions, validate responses, and organize API test collections."},
+            {"title": "REST Assured Usage Guide", "provider": "REST Assured", "url": "https://github.com/rest-assured/rest-assured/wiki/Usage", "type": "article", "duration_minutes": 120, "difficulty": "Intermediate", "is_free": True, "description": "Java-based API testing patterns with request specs, assertions, and auth."},
+            {"title": "OWASP API Security Top 10", "provider": "OWASP", "url": "https://owasp.org/API-Security/", "type": "article", "duration_minutes": 120, "difficulty": "Advanced", "is_free": True, "description": "Security-focused API risks every senior QA engineer should test for."},
+        ]
+
+    if not curated:
+        query = skill.replace(" ", "+")
+        curated = [
+            {"title": f"{skill} official documentation", "provider": "Official docs search", "url": f"https://www.google.com/search?q={query}+official+documentation", "type": "article", "duration_minutes": 60, "difficulty": "Beginner", "is_free": True, "description": f"Start with the official documentation and setup guide for {skill}."},
+            {"title": f"{skill} full course", "provider": "YouTube", "url": f"https://www.youtube.com/results?search_query={query}+full+course", "type": "video", "duration_minutes": 180, "difficulty": "Beginner", "is_free": True, "description": f"Find a recent end-to-end course and complete one practical walkthrough for {skill}."},
+            {"title": f"Build a {skill} portfolio project", "provider": "Portfolio project", "url": f"https://www.google.com/search?q={query}+project+tutorial", "type": "project", "duration_minutes": 240, "difficulty": "Intermediate", "is_free": True, "description": f"Create a small proof-of-skill project and add notes/screenshots to your portfolio."},
+            {"title": f"Advanced {skill} best practices", "provider": "Best-practice search", "url": f"https://www.google.com/search?q={query}+best+practices", "type": "article", "duration_minutes": 90, "difficulty": "Advanced", "is_free": True, "description": f"Study production patterns, pitfalls, and senior-level practices for {skill}."},
+        ]
+
+    if current_level >= 3:
+        curated = [r for r in curated if r.get("difficulty") != "Beginner"] + [r for r in curated if r.get("difficulty") == "Beginner"]
+    return curated[:6]
+
+
+def _estimated_hours(resources: list[dict], default: int = 20) -> int:
+    minutes = sum(int(r.get("duration_minutes") or 0) for r in resources)
+    return max(default, round(minutes / 60)) if minutes else default
+
+
 # ─── Learning Paths ──────────────────────────────────────────────────────────
 
 @router.get("/paths")
@@ -74,6 +119,13 @@ async def generate_learning_path(
     )
     existing = existing_r.scalar_one_or_none()
     if existing:
+        if not existing.resources:
+            fallback_resources = _fallback_learning_resources(payload.skill_name, payload.current_level, payload.target_level)
+            existing.resources = fallback_resources
+            existing.estimated_hours = _estimated_hours(fallback_resources)
+            existing.current_level = payload.current_level
+            existing.target_level = payload.target_level
+            await db.flush()
         return _path_to_dict(existing)
 
     # AI-generated learning path
@@ -123,6 +175,16 @@ Include 5-8 resources ordered from beginner to advanced. Use real, reputable pro
                 existing_urls.add(rr["url"])
     except Exception as e:
         logger.warning(f"Learning aggregator failed (non-critical): {e}")
+
+    fallback_resources = _fallback_learning_resources(payload.skill_name, payload.current_level, payload.target_level)
+    existing_urls = {r.get("url", "") for r in resources_data}
+    for resource in fallback_resources:
+        if resource.get("url") and resource["url"] not in existing_urls:
+            resources_data.append(resource)
+            existing_urls.add(resource["url"])
+    resources_data = resources_data[:8]
+    if resources_data:
+        estimated_hours = _estimated_hours(resources_data, estimated_hours)
 
     # Persist the path
     path = LearningPath(
