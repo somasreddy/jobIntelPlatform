@@ -403,7 +403,7 @@ export default function JobsPage() {
             Search uses only the title, skill, experience, location, and country entered above. Your profile is used later for fit scoring.
             {sourcePlan && (
               <span className="rounded-full border border-cyan-400/20 bg-cyan-500/10 px-2 py-0.5 font-medium text-cyan-300">
-                {sourcePlan.country_label}: {sourcePlan.include_ats ? "all supported sources" : "country boards only"} ({sourcePlan.job_boards.length} boards)
+                {sourcePlan.country_label}: {sourcePlan.include_ats ? "trusted ATS + selected boards" : "selected boards only"} ({sourcePlan.job_boards.length} boards)
               </span>
             )}
             {dorkUrls.length > 0 && (

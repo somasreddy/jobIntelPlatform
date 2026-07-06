@@ -15,7 +15,7 @@ import re
 from dataclasses import dataclass
 from html.parser import HTMLParser
 from typing import Iterable
-from urllib.parse import parse_qs, quote_plus, unquote, urlparse
+from urllib.parse import parse_qs, quote, quote_plus, unquote, urljoin, urlparse
 
 import httpx
 
@@ -195,12 +195,10 @@ def build_dork_queries(role: str, skills: list[str], location: str, exp_years: i
     loc_group = _quote_group(location_terms, limit=8)
     exp_group = _quote_group(_experience_terms(exp_years), limit=8)
     inurl_group = _or_group(INURL_TERMS, limit=8)
-    negative = " ".join(f'-"{term}"' for term in NEGATIVE_TERMS)
-
-    strict_base = f"{title_group}{f' AND {skill_group}' if skill_group else ''} AND {loc_group} AND {exp_group} AND {inurl_group} {negative}"
-    no_exp_base = f"{title_group}{f' AND {skill_group}' if skill_group else ''} AND {loc_group} AND {inurl_group} {negative}"
-    no_skill_base = f"{title_group} AND {loc_group} AND {exp_group} AND {inurl_group} {negative}"
-    broad_base = f"{title_phrase}{f' { _quote_group(skill_terms, limit=4)}' if skill_terms else ''} {loc_group} jobs careers {negative}"
+    strict_base = f"{title_group}{f' AND {skill_group}' if skill_group else ''} AND {loc_group} AND {exp_group} AND {inurl_group}"
+    no_exp_base = f"{title_group}{f' AND {skill_group}' if skill_group else ''} AND {loc_group} AND {inurl_group}"
+    no_skill_base = f"{title_group} AND {loc_group} AND {exp_group} AND {inurl_group}"
+    broad_base = f"{title_phrase}{f' { _quote_group(skill_terms, limit=4)}' if skill_terms else ''} {loc_group} jobs careers"
 
     source_plan = resolve_source_plan(location)
     board_sites = list(source_plan.job_boards) or JOB_BOARD_SITES
@@ -209,6 +207,7 @@ def build_dork_queries(role: str, skills: list[str], location: str, exp_years: i
 
     if source_plan.include_ats:
         queries.append(f"{_or_group(ATS_SITES, limit=24)} AND {strict_base}")
+        queries.append(f"{_or_group(ATS_SITES, limit=24)} AND {no_exp_base}")
 
     for base in (strict_base, no_exp_base, no_skill_base, broad_base):
         for chunk in site_chunks:
@@ -241,10 +240,12 @@ def google_search_urls(queries: list[str]) -> list[str]:
     return [f"https://www.google.com/search?q={quote_plus(q)}" for q in queries]
 
 
-def _normalize_result_url(href: str) -> str | None:
+def _normalize_result_url(href: str, base_url: str | None = None) -> str | None:
     href = html.unescape(href or "")
     if href.startswith("//"):
         href = "https:" + href
+    if base_url and href.startswith("/"):
+        href = urljoin(base_url, href)
     if href.startswith("/url?"):
         query = parse_qs(urlparse(href).query)
         href = query.get("q", [""])[0]
@@ -261,13 +262,130 @@ def _normalize_result_url(href: str) -> str | None:
     return href.split("#", 1)[0]
 
 
-def _extract_hits(html_text: str, provider: str) -> list[SearchHit]:
+
+
+def _board_domain(site: str) -> str:
+    return site.replace("site:", "").lower().strip()
+
+
+def _direct_board_search_urls(role: str, skills: list[str], location: str) -> list[str]:
+    plan = resolve_source_plan(location)
+    boards = [_board_domain(site) for site in plan.job_boards]
+    terms = " ".join([role, *skills[:3]]).strip() or role or "jobs"
+    loc_terms = _location_terms(location)
+    country_words = {"remote", "hybrid", "india", "ireland", "canada", "united states", "united kingdom", "worldwide remote", "global"}
+    city = next((term for term in loc_terms if term.lower() not in country_words), loc_terms[0] if loc_terms else "")
+    country_label = "" if plan.scope == "global_remote" else (plan.country_label or "")
+    loc_query = ", ".join(part for part in [city, country_label] if part)
+    q = quote_plus(terms)
+    l = quote_plus(loc_query or location or "Remote")
+    slug = quote(re.sub(r"[^a-z0-9]+", "-", terms.lower()).strip("-")) or "jobs"
+    city_slug = quote(re.sub(r"[^a-z0-9]+", "-", (city or loc_query or "remote").lower()).strip("-")) or "remote"
+
+    urls: list[str] = []
+    def add(domain: str, url: str) -> None:
+        if domain in boards and url not in urls:
+            urls.append(url)
+
+    add("naukri.com", f"https://www.naukri.com/jobs-in-{city_slug}?k={q}")
+    add("timesjobs.com", f"https://www.timesjobs.com/candidate/job-search.html?searchType=personalizedSearch&txtKeywords={q}&txtLocation={l}")
+    add("indeed.co.in", f"https://in.indeed.com/jobs?q={q}&l={l}")
+    add("linkedin.com/jobs", f"https://www.linkedin.com/jobs/search?keywords={q}&location={l}")
+    add("monsterindia.com", f"https://www.foundit.in/srp/results?query={q}&locations={l}")
+    add("foundit.in", f"https://www.foundit.in/srp/results?query={q}&locations={l}")
+    add("shine.com", f"https://www.shine.com/job-search/{slug}-jobs-in-{city_slug}")
+    add("cutshort.io", f"https://cutshort.io/jobs/{slug}-jobs-in-{city_slug}")
+    add("hirist.com", f"https://www.hirist.tech/search/{slug}-jobs?loc={quote_plus(city or loc_query)}")
+    add("iimjobs.com", f"https://www.iimjobs.com/search/{slug}.html")
+    add("apna.co", f"https://apna.co/jobs?location={quote_plus(city or loc_query)}&text={q}")
+    add("instahyre.com", f"https://www.instahyre.com/search-jobs/?q={q}&loc={quote_plus(city or loc_query)}")
+    add("jobsireland.ie", f"https://jobsireland.ie/en-US/Search?SearchBy=Keyword&SearchQuery={q}&Location={l}")
+    add("irishjobs.ie", f"https://www.irishjobs.ie/jobs/{slug}/in-{city_slug}")
+    add("jobs.ie", f"https://www.jobs.ie/jobs/{slug}/in-{city_slug}")
+    add("recruitireland.com", f"https://www.recruitireland.com/jobs?keywords={q}&location={l}")
+    add("publicjobs.ie", f"https://www.publicjobs.ie/en/index.php?search={q}")
+    add("ie.indeed.com", f"https://ie.indeed.com/jobs?q={q}&l={l}")
+    add("indeed.ca", f"https://ca.indeed.com/jobs?q={q}&l={l}")
+    add("jobbank.gc.ca", f"https://www.jobbank.gc.ca/jobsearch/jobsearch?searchstring={q}&locationstring={l}")
+    add("workopolis.com", f"https://www.workopolis.com/jobsearch/find-jobs?ak={q}&l={l}")
+    add("indeed.co.uk", f"https://uk.indeed.com/jobs?q={q}&l={l}")
+    add("reed.co.uk", f"https://www.reed.co.uk/jobs/{slug}-jobs-in-{city_slug}")
+    add("cv-library.co.uk", f"https://www.cv-library.co.uk/{slug}-jobs-in-{city_slug}")
+    add("totaljobs.com", f"https://www.totaljobs.com/jobs/{slug}/in-{city_slug}")
+    add("indeed.de", f"https://de.indeed.com/jobs?q={q}&l={l}")
+    add("stepstone.de", f"https://www.stepstone.de/jobs/{slug}/in-{city_slug}")
+    add("jobs.de", f"https://www.jobs.de/jobs?q={q}&l={l}")
+    add("xing.com", f"https://www.xing.com/jobs/search?keywords={q}&location={l}")
+    add("indeed.com", f"https://www.indeed.com/jobs?q={q}&l={l}")
+    add("monster.com", f"https://www.monster.com/jobs/search?q={q}&where={l}")
+    add("glassdoor.com", f"https://www.glassdoor.com/Job/jobs.htm?sc.keyword={q}&locKeyword={l}")
+    add("ziprecruiter.com", f"https://www.ziprecruiter.com/jobs-search?search={q}&location={l}")
+    add("careerbuilder.com", f"https://www.careerbuilder.com/jobs?keywords={q}&location={l}")
+    add("simplyhired.com", f"https://www.simplyhired.com/search?q={q}&l={l}")
+    add("weworkremotely.com", f"https://weworkremotely.com/remote-jobs/search?term={q}")
+    add("wellfound.com", f"https://wellfound.com/jobs?keywords={q}&location={l}")
+    return urls[:18]
+
+
+def _is_probable_job_url(url: str, board_domains: list[str]) -> bool:
+    parsed = urlparse(url)
+    host = parsed.netloc.lower().replace("www.", "")
+    path = parsed.path.lower()
+    query = parsed.query.lower()
+    if board_domains and not any(domain in host or host.endswith(domain) for domain in board_domains):
+        return False
+
+    # Search/filter/category pages look like jobs but are not actionable openings.
+    blocked = (
+        "/login", "/signin", "/register", "/companies", "/company/", "/salary",
+        "/career-advice", "/blog", "/faq", "/help/", "/legal/",
+        "/jobs/search", "/job-search", "/srp/results", "/search/", "/jobsearch/",
+        "jobs-in-", "jobs-by-", "/find-jobs", "free-job-alerts", "job-posting",
+    )
+    if any(part in path for part in blocked):
+        return False
+
+    if "linkedin.com" in host:
+        return "/jobs/view/" in path
+    if "shine.com" in host:
+        return path.startswith("/jobs/") and bool(re.search(r"/[0-9]+/?$", path))
+    if "foundit.in" in host:
+        return "/job/" in path or "/job-detail/" in path
+    if "naukri.com" in host:
+        return "/job-listings-" in path or bool(re.search(r"-[0-9]{8,}", path))
+    if "timesjobs.com" in host:
+        return "job-detail" in path or "jobid=" in query
+
+    return any(token in path for token in ("/job/", "/jobs/", "job-listing", "viewjob", "opening", "position", "vacancy"))
+
+
+def _extract_direct_job_hits(html_text: str, provider: str, base_url: str) -> list[SearchHit]:
+    hits = _extract_hits(html_text, provider, base_url, max_results=160)
+    patterns = (
+        r'https?://[^"\'<>\s]+linkedin\.com/jobs/view/[^"\'<>\s]+',
+        r'https?://www\.shine\.com/jobs/[^"\'<>\s]+',
+        r'https?://[^"\'<>\s]+naukri\.com/job-listings-[^"\'<>\s]+',
+        r'https?://[^"\'<>\s]+foundit\.in/[^"\'<>\s]+(?:job|jobs)[^"\'<>\s]+',
+    )
+    seen = {hit.url for hit in hits}
+    for pattern in patterns:
+        for raw in re.findall(pattern, html_text or "", flags=re.I):
+            url = _normalize_result_url(raw, base_url)
+            if not url or url in seen:
+                continue
+            seen.add(url)
+            title = re.sub(r"[-_]+", " ", urlparse(url).path.strip("/").split("/")[1] if len(urlparse(url).path.strip("/").split("/")) > 1 else urlparse(url).netloc)
+            hits.append(SearchHit(title=title[:180] or urlparse(url).netloc, url=url, provider=provider))
+    return hits
+
+
+def _extract_hits(html_text: str, provider: str, base_url: str | None = None, max_results: int = _MAX_RESULTS_PER_QUERY) -> list[SearchHit]:
     parser = LinkParser()
     parser.feed(html_text)
     hits: list[SearchHit] = []
     seen: set[str] = set()
     for href, title in parser.links:
-        url = _normalize_result_url(href)
+        url = _normalize_result_url(href, base_url)
         if not url or url in seen:
             continue
         seen.add(url)
@@ -275,7 +393,7 @@ def _extract_hits(html_text: str, provider: str) -> list[SearchHit]:
         if len(clean_title) < 4:
             clean_title = urlparse(url).netloc
         hits.append(SearchHit(title=clean_title[:180], url=url, provider=provider))
-        if len(hits) >= _MAX_RESULTS_PER_QUERY:
+        if len(hits) >= max_results:
             break
     return hits
 
@@ -321,6 +439,34 @@ def _page_title(page_html: str, fallback: str) -> str:
     if not m:
         return fallback
     return html.unescape(re.sub(r"\s+", " ", m.group(1))).strip() or fallback
+
+
+def _title_case_role(value: str) -> str:
+    text = re.sub(r"[-_]+", " ", value or "").strip()
+    replacements = {"qa": "QA", "sdet": "SDET", "api": "API", "ui": "UI", "ux": "UX", "devops": "DevOps"}
+    words = []
+    for part in text.split():
+        words.append(replacements.get(part.lower(), part if part.isupper() else part.capitalize()))
+    return " ".join(words)
+
+
+def _linkedin_title_company_location(page_title: str, url: str) -> tuple[str, str, str]:
+    title = company = location = ""
+    clean = re.sub(r"\s+", " ", html.unescape(page_title or "")).strip()
+    m = re.match(r"(.+?) hiring (.+?)(?: in (.+?))?(?: \| LinkedIn|$)", clean, flags=re.I)
+    if m:
+        company = m.group(1).strip()
+        title = m.group(2).strip()
+        location = (m.group(3) or "").strip()
+    if not title or not company:
+        parts = [p for p in urlparse(url).path.split("/") if p]
+        slug = parts[-1] if parts else ""
+        slug = re.sub(r"-[0-9]+$", "", slug)
+        if "-at-" in slug:
+            title_slug, company_slug = slug.rsplit("-at-", 1)
+            title = title or _title_case_role(title_slug)
+            company = company or _title_case_role(company_slug)
+    return title[:180], company[:120], location[:160]
 
 
 def _company_from_url(url: str) -> str:
@@ -403,7 +549,19 @@ def _job_text(job: dict) -> str:
 
 
 def _site_domain(site: str) -> str:
-    return site.replace("site:", "").lower().strip()
+    return site.replace("site:", "").lower().strip().split("/", 1)[0]
+
+
+def _site_domain_aliases(site: str) -> list[str]:
+    domain = _site_domain(site)
+    aliases = [domain]
+    if domain == "indeed.co.in":
+        aliases.append("in.indeed.com")
+    if domain == "ie.indeed.com":
+        aliases.append("indeed.ie")
+    if domain == "monsterindia.com":
+        aliases.append("foundit.in")
+    return list(dict.fromkeys(aliases))
 
 
 def _matches_selected_country_board(job: dict, location: str) -> bool:
@@ -413,7 +571,7 @@ def _matches_selected_country_board(job: dict, location: str) -> bool:
     host = urlparse(str(job.get("application_link") or "")).netloc.lower().replace("www.", "")
     if not host:
         return False
-    return any(_site_domain(site) in host or host.endswith(_site_domain(site)) for site in plan.job_boards)
+    return any(alias in host or host.endswith(alias) for site in plan.job_boards for alias in _site_domain_aliases(site))
 
 
 QA_ROLE_TERMS = (
@@ -567,13 +725,15 @@ def _compute_match_score(job: dict, profile_skills: set[str], exp_years: int) ->
 def _job_from_hit(hit: SearchHit, page_html: str = "") -> dict:
     company = _company_from_url(hit.url)
     page_title = _page_title(page_html, hit.title)
-    title = _clean_title(page_title, company)
+    linkedin_title, linkedin_company, linkedin_location = _linkedin_title_company_location(page_title, hit.url)
+    company = linkedin_company or company
+    title = linkedin_title or _clean_title(page_title, company)
     description = _meta_description(page_html) or _strip_html(page_html)[:2000] or hit.snippet or hit.title
     text = f"{title} {company} {description} {hit.url}"
     return {
         "title": title,
         "organization": company,
-        "location": "Remote" if "remote" in text.lower() else "",
+        "location": linkedin_location or ("Remote" if "remote" in text.lower() else ""),
         "work_mode": _detect_work_mode(text),
         "salary_min": None,
         "salary_max": None,
@@ -598,6 +758,79 @@ async def _enrich_hit(client: httpx.AsyncClient, hit: SearchHit) -> dict | None:
         return _job_from_hit(hit, resp.text[:350000])
     except Exception:
         return _job_from_hit(hit)
+
+
+
+async def discover_jobs_from_direct_boards(
+    role: str,
+    location: str,
+    profile_skills: list[str] | None = None,
+    exp_years: int = 0,
+    min_match_score: int = 0,
+) -> tuple[list[dict], list[str]]:
+    """Fetch country/job-board search pages directly when search engines return no hits."""
+    skills = profile_skills or []
+    search_urls = _direct_board_search_urls(role, _skill_terms(skills), location)
+    if not search_urls:
+        return [], []
+
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.9",
+    }
+    plan = resolve_source_plan(location)
+    board_domains = [alias for site in plan.job_boards for alias in _site_domain_aliases(site)]
+    hits: list[SearchHit] = []
+
+    async with httpx.AsyncClient(timeout=_SEARCH_TIMEOUT, headers=headers, follow_redirects=True) as client:
+        for search_url in search_urls:
+            try:
+                resp = await client.get(search_url)
+                if resp.status_code >= 400:
+                    logger.debug("Direct board search failed %s: %s", search_url, resp.status_code)
+                    continue
+                for hit in _extract_direct_job_hits(resp.text, "DirectBoard", search_url):
+                    if _is_probable_job_url(hit.url, board_domains):
+                        hits.append(hit)
+            except Exception as exc:
+                logger.debug("Direct board search failed %s: %s", search_url, exc)
+
+    dedup_hits: list[SearchHit] = []
+    seen_urls: set[str] = set()
+    for hit in hits:
+        if hit.url not in seen_urls:
+            seen_urls.add(hit.url)
+            dedup_hits.append(hit)
+    dedup_hits = dedup_hits[:_MAX_PAGES_TO_ENRICH]
+
+    async with httpx.AsyncClient(timeout=_PAGE_TIMEOUT, headers=headers, follow_redirects=True) as client:
+        enriched = await asyncio.gather(*[_enrich_hit(client, hit) for hit in dedup_hits], return_exceptions=True)
+
+    skill_terms = _skill_terms(skills)
+    profile_skill_set = {s.lower() for s in skills}
+    jobs: list[dict] = []
+    seen_jobs: set[tuple[str, str]] = set()
+    for item in enriched:
+        if not isinstance(item, dict):
+            continue
+        ai_score, match_reasons = _ai_relevance_score(item, role, skill_terms, location, exp_years)
+        if ai_score < 45:
+            continue
+        key = (item.get("title", "").lower()[:70], item.get("organization", "").lower()[:50])
+        if key in seen_jobs:
+            continue
+        seen_jobs.add(key)
+        item["ai_relevance_score"] = ai_score
+        item["match_reasons"] = match_reasons
+        item["match_score"] = max(_compute_match_score(item, profile_skill_set, exp_years), ai_score)
+        if min_match_score and item["match_score"] < min_match_score:
+            continue
+        jobs.append(item)
+
+    jobs.sort(key=lambda j: (-(j.get("match_score") or 0), j.get("title", "")))
+    logger.info("Direct board discovery produced %s jobs from %s hits", len(jobs), len(dedup_hits))
+    return jobs, search_urls
 
 
 async def discover_jobs_from_dorks(

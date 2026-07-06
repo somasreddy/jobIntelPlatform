@@ -173,8 +173,8 @@ def resolve_source_plan(location: str) -> SourcePlan:
                 country_code=group.code,
                 country_label=group.label,
                 job_boards=group.job_boards,
-                include_ats=False,
-                reason=f"Matched country from user search: {group.label}",
+                include_ats=True,
+                reason=f"Matched country from user search: {group.label}; using trusted ATS/company career portals plus country boards.",
             )
     for group in COUNTRY_SOURCE_GROUPS:
         if any(_contains_phrase(text, city) for city in group.default_locations):
@@ -183,8 +183,8 @@ def resolve_source_plan(location: str) -> SourcePlan:
                 country_code=group.code,
                 country_label=group.label,
                 job_boards=group.job_boards,
-                include_ats=False,
-                reason=f"Inferred country from city/location: {group.label}",
+                include_ats=True,
+                reason=f"Inferred country from city/location: {group.label}; using trusted ATS/company career portals plus country boards.",
             )
     is_remote = _contains_phrase(text, "remote") or not text
     return SourcePlan(

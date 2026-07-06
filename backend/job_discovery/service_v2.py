@@ -6,7 +6,7 @@ import re
 import asyncio
 from typing import Optional
 import httpx
-from job_discovery.dork_discovery import discover_jobs_from_dorks, build_dork_queries, google_search_urls, _ai_relevance_score, _skill_terms
+from job_discovery.dork_discovery import discover_jobs_from_dorks, discover_jobs_from_direct_boards, build_dork_queries, google_search_urls, _ai_relevance_score, _skill_terms
 from job_discovery.source_registry import resolve_source_plan
 
 logger = logging.getLogger(__name__)
@@ -272,9 +272,24 @@ class JobDiscoveryService:
                 dork_jobs = await _verify_batch(dork_jobs)
             return dork_jobs
 
+        direct_jobs, direct_urls = await discover_jobs_from_direct_boards(
+            role=role,
+            location=location,
+            profile_skills=profile_skills,
+            exp_years=exp_years,
+            min_match_score=min_match_score,
+        )
+        if direct_urls:
+            self.last_dork_queries = [*queries, *direct_urls]
+            self.last_google_urls = google_search_urls(queries)
+        if direct_jobs:
+            if run_verification:
+                direct_jobs = await _verify_batch(direct_jobs)
+            return direct_jobs
+
         source_plan = resolve_source_plan(location)
         if source_plan.scope == "country":
-            logger.info("No dork jobs found for %s; skipping global fallbacks for country-scoped search.", source_plan.country_label)
+            logger.info("No jobs found for %s after dork and direct-board search; skipping global fallbacks for country-scoped search.", source_plan.country_label)
             return []
 
         # No-key fallback: public feeds and direct public career-board APIs only.
