@@ -7,6 +7,7 @@ import asyncio
 from typing import Optional
 import httpx
 from job_discovery.dork_discovery import discover_jobs_from_dorks, build_dork_queries, google_search_urls, _ai_relevance_score, _skill_terms
+from job_discovery.source_registry import resolve_source_plan
 
 logger = logging.getLogger(__name__)
 
@@ -270,6 +271,11 @@ class JobDiscoveryService:
             if run_verification:
                 dork_jobs = await _verify_batch(dork_jobs)
             return dork_jobs
+
+        source_plan = resolve_source_plan(location)
+        if source_plan.scope == "country":
+            logger.info("No dork jobs found for %s; skipping global fallbacks for country-scoped search.", source_plan.country_label)
+            return []
 
         # No-key fallback: public feeds and direct public career-board APIs only.
         # Do not call Adzuna/JSearch/Apify/LinkedIn/LLM-backed providers here.

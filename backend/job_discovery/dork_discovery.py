@@ -19,6 +19,8 @@ from urllib.parse import parse_qs, quote_plus, unquote, urlparse
 
 import httpx
 
+from job_discovery.source_registry import ATS_SITES, GLOBAL_JOB_BOARD_SITES, resolve_source_plan
+
 logger = logging.getLogger(__name__)
 
 _SEARCH_TIMEOUT = 14.0
@@ -27,34 +29,7 @@ _MAX_QUERIES = 4
 _MAX_RESULTS_PER_QUERY = 12
 _MAX_PAGES_TO_ENRICH = 28
 
-ATS_SITES = [
-    "site:myworkdayjobs.com", "site:greenhouse.io", "site:boards.greenhouse.io",
-    "site:job-boards.greenhouse.io", "site:icims.com", "site:taleo.net",
-    "site:lever.co", "site:jobs.lever.co", "site:smartrecruiters.com",
-    "site:jobvite.com", "site:workforcenow.adp.com", "site:successfactors.com",
-    "site:brassring.com", "site:jazzhr.com", "site:breezy.hr", "site:jobdiva.com",
-    "site:bullhorn.com", "site:bamboohr.com", "site:linkedin.com/jobs",
-]
-
-JOB_BOARD_SITES = [
-    "site:naukri.com", "site:timesjobs.com", "site:indeed.co.in", "site:linkedin.com/jobs",
-    "site:monsterindia.com", "site:shine.com", "site:foundit.in", "site:cutshort.io",
-    "site:hirist.com", "site:iimjobs.com", "site:apna.co", "site:instahyre.com",
-    "site:indeed.com", "site:monster.com", "site:glassdoor.com", "site:ziprecruiter.com",
-    "site:careerbuilder.com", "site:simplyhired.com", "site:weworkremotely.com",
-    "site:wellfound.com", "site:indeed.ca", "site:jobbank.gc.ca", "site:workopolis.com",
-    "site:indeed.co.uk", "site:reed.co.uk", "site:cv-library.co.uk", "site:totaljobs.com",
-    "site:indeed.de", "site:stepstone.de", "site:jobs.de", "site:xing.com",
-    "site:indeed.fr", "site:monster.fr", "site:indeed.es", "site:infojobs.net",
-    "site:indeed.com.au", "site:seek.com.au", "site:seek.co.nz", "site:jobstreet.com",
-    "site:kalibrr.com", "site:rozee.pk", "site:indeed.com.mx", "site:indeed.com.br",
-    "site:computrabajo.com",
-]
-
-IRELAND_SITES = [
-    "site:jobsireland.ie", "site:irishjobs.ie", "site:jobs.ie", "site:recruitireland.com",
-    "site:publicjobs.ie", "site:ie.indeed.com", "site:ie.linkedin.com/jobs",
-]
+JOB_BOARD_SITES = GLOBAL_JOB_BOARD_SITES
 
 INURL_TERMS = ["inurl:jobs", "inurl:viewjob", "inurl:careers", "inurl:job-listing", "inurl:vacancy", "inurl:positions"]
 NEGATIVE_TERMS = [
@@ -140,6 +115,10 @@ def _or_group(values: Iterable[str], limit: int = 30) -> str:
     return "(" + " OR ".join(list(values)[:limit]) + ")"
 
 
+def _chunks(values: list[str], size: int) -> list[list[str]]:
+    return [values[index:index + size] for index in range(0, len(values), size)]
+
+
 def _role_titles(role: str) -> list[str]:
     role_clean = re.sub(r"\s+", " ", (role or "").strip())
     role_lower = role_clean.lower()
@@ -184,12 +163,9 @@ def _location_terms(location: str) -> list[str]:
         if len(split_parts) > 1:
             parts = split_parts
     if not parts:
-        parts = ["India", "Remote"]
-    if not any(p.lower() == "remote" for p in parts):
-        parts.append("Remote")
-    if not any(p.lower() == "hybrid" for p in parts):
-        parts.append("Hybrid")
+        parts = ["Remote"]
     return list(dict.fromkeys(parts))[:8]
+
 
 def _experience_terms(exp_years: int) -> list[str]:
     terms = ["senior", "lead"]
@@ -205,32 +181,58 @@ def _experience_terms(exp_years: int) -> list[str]:
 
 
 def build_dork_queries(role: str, skills: list[str], location: str, exp_years: int) -> list[str]:
-    """Build generic Google-style dork queries from profile values."""
+    """Build Google-style dork queries only from user-entered search values."""
     titles = _role_titles(role)
     skill_terms = _skill_terms(skills)
+    location_terms = _location_terms(location)
     skill_group = _quote_group(skill_terms, limit=8) if skill_terms else ""
     title_group = f'(intitle:{_quote_group(titles, limit=8)} OR {_quote_group(titles, limit=8)})'
-    loc_group = _quote_group(_location_terms(location), limit=8)
+    loc_group = _quote_group(location_terms, limit=8)
     exp_group = _quote_group(_experience_terms(exp_years), limit=8)
     inurl_group = _or_group(INURL_TERMS, limit=8)
     negative = " ".join(f'-"{term}"' for term in NEGATIVE_TERMS)
     optional_skill = f" AND {skill_group}" if skill_group else ""
-
     base = f"{title_group}{optional_skill} AND {loc_group} AND {exp_group} AND {inurl_group} {negative}"
-    queries = [
-        f"{_or_group(ATS_SITES, limit=24)} AND {base}",
-        f"{_or_group(JOB_BOARD_SITES, limit=34)} AND {base}",
-    ]
-    loc_lower = (location or "").lower()
-    if any(term in loc_lower for term in ("ireland", "dublin", "cork", "galway", "limerick")):
-        queries.insert(0, f"{_or_group(IRELAND_SITES, limit=8)} AND {base}")
-    else:
-        queries.append(f"{_or_group(IRELAND_SITES, limit=8)} AND {title_group}{optional_skill} AND (\"Ireland\" OR \"Dublin\" OR \"Remote\") AND {inurl_group} {negative}")
 
-    # A shorter fallback query helps when search engines reject very long dorks.
+    source_plan = resolve_source_plan(location)
+    board_sites = list(source_plan.job_boards) or JOB_BOARD_SITES
+    queries = []
+    if source_plan.include_ats:
+        queries.append(f"{_or_group(ATS_SITES, limit=24)} AND {base}")
+
+    if source_plan.scope in {"global", "global_remote"}:
+        for chunk in _chunks(board_sites, 24):
+            if len(queries) >= _MAX_QUERIES:
+                break
+            queries.append(f"{_or_group(chunk, limit=24)} AND {base}")
+    else:
+        queries.append(f"{_or_group(board_sites, limit=34)} AND {base}")
+
+    # Shorter fallbacks help when search engines reject very long dorks, but stay country-scoped when a country is known.
     fallback_skill = f" {_quote_group(skill_terms, limit=4)}" if skill_terms else ""
-    queries.append(f"{_quote_group(titles, limit=4)}{fallback_skill} {_quote_group(_location_terms(location), limit=4)} jobs careers {negative}")
-    return queries[:_MAX_QUERIES]
+    short_base = f"{_quote_group(titles, limit=4)}{fallback_skill} {_quote_group(location_terms, limit=4)} jobs careers {negative}"
+    if len(queries) < _MAX_QUERIES:
+        if source_plan.scope == "country":
+            queries.append(f"{_or_group(board_sites, limit=18)} AND {short_base}")
+        else:
+            queries.append(short_base)
+    return list(dict.fromkeys(queries))[:_MAX_QUERIES]
+
+
+def build_dork_search_plan(role: str, skills: list[str], location: str, exp_years: int) -> dict:
+    """Return auditable search intent, selected sources, and generated dork queries."""
+    source_plan = resolve_source_plan(location)
+    queries = build_dork_queries(role, skills, location, exp_years)
+    return {
+        "intent": {
+            "titles": _role_titles(role),
+            "skills": _skill_terms(skills),
+            "locations": _location_terms(location),
+            "experience_terms": _experience_terms(exp_years),
+        },
+        "source_plan": source_plan.as_dict(),
+        "queries": queries,
+    }
 
 
 def google_search_urls(queries: list[str]) -> list[str]:

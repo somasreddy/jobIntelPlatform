@@ -11,7 +11,7 @@ from core.auth import get_current_user_id
 from models.database import VerifiedJob, CandidateProfile, CareerGoal
 from models.schemas import JobCreate
 from job_discovery.service_v2 import JobDiscoveryService
-from job_discovery.dork_discovery import build_dork_queries, google_search_urls
+from job_discovery.dork_discovery import build_dork_search_plan, google_search_urls
 from services.fit_score import compute_fit_score
 from services.job_intel import compute_intel_flags
 
@@ -293,16 +293,19 @@ async def generate_dork_query(payload: dict = Body(...)):
         + (payload.get("cicd_tools") or [])
         + (payload.get("languages") or [])
     )
-    queries = build_dork_queries(
+    plan = build_dork_search_plan(
         role=payload.get("role", ""),
         skills=profile_skills,
         location=_combined_location(payload),
         exp_years=int(payload.get("experience_years") or 0),
     )
+    queries = plan["queries"]
     return {
         "queries": queries,
         "google_urls": google_search_urls(queries),
-        "source": "no-key-dork-builder",
+        "intent": plan["intent"],
+        "source_plan": plan["source_plan"],
+        "source": "country-aware-dork-builder",
     }
 
 

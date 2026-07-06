@@ -29,6 +29,15 @@ type DorkSearch = {
   skills: string;
 };
 
+type DorkSourcePlan = {
+  scope: string;
+  country_code: string | null;
+  country_label: string;
+  job_boards: string[];
+  include_ats: boolean;
+  reason: string;
+};
+
 const defaultDorkSearch: DorkSearch = {
   title: "QA Automation Engineer",
   experience: "7",
@@ -150,6 +159,7 @@ export default function JobsPage() {
   const [discoverError, setDiscoverError] = useState<string | null>(null);
   const [dorkSearch, setDorkSearch] = useState<DorkSearch>(defaultDorkSearch);
   const [dorkUrls, setDorkUrls] = useState<string[]>([]);
+  const [sourcePlan, setSourcePlan] = useState<DorkSourcePlan | null>(null);
   const [storageHydrated, setStorageHydrated] = useState(false);
   const profileRef = useRef<CandidateProfile | null>(null);
   const profileDefaultsApplied = useRef(false);
@@ -230,6 +240,7 @@ export default function JobsPage() {
       if (queryRes.ok) {
         const queryData = await queryRes.json();
         setDorkUrls(queryData.google_urls ?? []);
+        setSourcePlan(queryData.source_plan ?? null);
       }
 
       const res = await fetch(`${apiUrl}/api/jobs/discover`, {
@@ -390,6 +401,11 @@ export default function JobsPage() {
           <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
             <UserCheck className="w-3.5 h-3.5 text-emerald-400" />
             Search uses only the title, skill, experience, location, and country entered above. Your profile is used later for fit scoring.
+            {sourcePlan && (
+              <span className="rounded-full border border-cyan-400/20 bg-cyan-500/10 px-2 py-0.5 font-medium text-cyan-300">
+                {sourcePlan.country_label}: {sourcePlan.include_ats ? "all supported sources" : "country boards only"} ({sourcePlan.job_boards.length} boards)
+              </span>
+            )}
             {dorkUrls.length > 0 && (
               <>
                 <span className="hidden sm:inline text-slate-700">|</span>
