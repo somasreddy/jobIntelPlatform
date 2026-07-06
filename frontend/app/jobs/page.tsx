@@ -180,7 +180,7 @@ export default function JobsPage() {
       location: dorkSearch.location.trim(),
       country: dorkSearch.country.trim(),
       work_mode: activeProfile?.workMode ?? "Any",
-      min_match_score: 60,
+      min_match_score: 45,
       run_verification: true,
     };
   };
@@ -253,7 +253,7 @@ export default function JobsPage() {
       setJobs(normalizeJobs(discovered, activeProfile));
       setLastRefresh(new Date());
       if (!discovered.length && !silent) {
-        setDiscoverError("No openings came back from the dork search. Try a broader title, fewer skills, or a wider country/location.");
+        setDiscoverError("No openings came back from live search. Try a broader title, fewer skills, or just Remote without a country for worldwide results.");
       }
     } catch (err) {
       if (!silent) {

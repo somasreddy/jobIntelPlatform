@@ -25,7 +25,7 @@ logger = logging.getLogger(__name__)
 
 _SEARCH_TIMEOUT = 14.0
 _PAGE_TIMEOUT = 10.0
-_MAX_QUERIES = 4
+_MAX_QUERIES = 8
 _MAX_RESULTS_PER_QUERY = 12
 _MAX_PAGES_TO_ENRICH = 28
 
@@ -181,41 +181,43 @@ def _experience_terms(exp_years: int) -> list[str]:
 
 
 def build_dork_queries(role: str, skills: list[str], location: str, exp_years: int) -> list[str]:
-    """Build Google-style dork queries only from user-entered search values."""
+    """Build progressive Google-style dork queries from user-entered values.
+
+    The first query is strict. Later queries relax experience and skill clauses,
+    while keeping the selected country/source scope intact.
+    """
     titles = _role_titles(role)
     skill_terms = _skill_terms(skills)
     location_terms = _location_terms(location)
     skill_group = _quote_group(skill_terms, limit=8) if skill_terms else ""
     title_group = f'(intitle:{_quote_group(titles, limit=8)} OR {_quote_group(titles, limit=8)})'
+    title_phrase = _quote_group(titles, limit=4)
     loc_group = _quote_group(location_terms, limit=8)
     exp_group = _quote_group(_experience_terms(exp_years), limit=8)
     inurl_group = _or_group(INURL_TERMS, limit=8)
     negative = " ".join(f'-"{term}"' for term in NEGATIVE_TERMS)
-    optional_skill = f" AND {skill_group}" if skill_group else ""
-    base = f"{title_group}{optional_skill} AND {loc_group} AND {exp_group} AND {inurl_group} {negative}"
+
+    strict_base = f"{title_group}{f' AND {skill_group}' if skill_group else ''} AND {loc_group} AND {exp_group} AND {inurl_group} {negative}"
+    no_exp_base = f"{title_group}{f' AND {skill_group}' if skill_group else ''} AND {loc_group} AND {inurl_group} {negative}"
+    no_skill_base = f"{title_group} AND {loc_group} AND {exp_group} AND {inurl_group} {negative}"
+    broad_base = f"{title_phrase}{f' { _quote_group(skill_terms, limit=4)}' if skill_terms else ''} {loc_group} jobs careers {negative}"
 
     source_plan = resolve_source_plan(location)
     board_sites = list(source_plan.job_boards) or JOB_BOARD_SITES
-    queries = []
-    if source_plan.include_ats:
-        queries.append(f"{_or_group(ATS_SITES, limit=24)} AND {base}")
+    site_chunks = _chunks(board_sites, 24) if source_plan.scope in {"global", "global_remote"} else [board_sites]
+    queries: list[str] = []
 
-    if source_plan.scope in {"global", "global_remote"}:
-        for chunk in _chunks(board_sites, 24):
+    if source_plan.include_ats:
+        queries.append(f"{_or_group(ATS_SITES, limit=24)} AND {strict_base}")
+
+    for base in (strict_base, no_exp_base, no_skill_base, broad_base):
+        for chunk in site_chunks:
             if len(queries) >= _MAX_QUERIES:
                 break
             queries.append(f"{_or_group(chunk, limit=24)} AND {base}")
-    else:
-        queries.append(f"{_or_group(board_sites, limit=34)} AND {base}")
+        if len(queries) >= _MAX_QUERIES:
+            break
 
-    # Shorter fallbacks help when search engines reject very long dorks, but stay country-scoped when a country is known.
-    fallback_skill = f" {_quote_group(skill_terms, limit=4)}" if skill_terms else ""
-    short_base = f"{_quote_group(titles, limit=4)}{fallback_skill} {_quote_group(location_terms, limit=4)} jobs careers {negative}"
-    if len(queries) < _MAX_QUERIES:
-        if source_plan.scope == "country":
-            queries.append(f"{_or_group(board_sites, limit=18)} AND {short_base}")
-        else:
-            queries.append(short_base)
     return list(dict.fromkeys(queries))[:_MAX_QUERIES]
 
 
@@ -400,6 +402,20 @@ def _job_text(job: dict) -> str:
     ).lower()
 
 
+def _site_domain(site: str) -> str:
+    return site.replace("site:", "").lower().strip()
+
+
+def _matches_selected_country_board(job: dict, location: str) -> bool:
+    plan = resolve_source_plan(location)
+    if plan.scope != "country":
+        return False
+    host = urlparse(str(job.get("application_link") or "")).netloc.lower().replace("www.", "")
+    if not host:
+        return False
+    return any(_site_domain(site) in host or host.endswith(_site_domain(site)) for site in plan.job_boards)
+
+
 QA_ROLE_TERMS = (
     "qa", "quality assurance", "quality engineer", "quality analyst", "test engineer",
     "test automation", "automation tester", "sdet", "software development engineer in test",
@@ -438,7 +454,7 @@ def _skill_matches(skills: list[str], combined: str) -> bool:
     return False
 
 
-def _location_matches(location: str, combined: str) -> bool:
+def _location_matches(job: dict, location: str, combined: str) -> bool:
     raw = (location or "").lower()
     terms = [term.lower() for term in _location_terms(location)]
     concrete_terms = [term for term in terms if term not in {"remote", "hybrid"}]
@@ -448,9 +464,9 @@ def _location_matches(location: str, combined: str) -> bool:
             return False
 
     if concrete_terms:
-        return any(term in combined for term in concrete_terms)
+        return any(term in combined for term in concrete_terms) or _matches_selected_country_board(job, location)
     if "remote" in terms:
-        return "remote" in combined
+        return "remote" in combined or resolve_source_plan(location).scope == "global_remote"
     return True
 
 
@@ -461,7 +477,7 @@ def _passes_user_constraints(job: dict, role: str, skills: list[str], location: 
     return (
         _role_family_matches(role, job, combined)
         and _skill_matches(skills, combined)
-        and _location_matches(location, combined)
+        and _location_matches(job, location, combined)
     )
 
 
@@ -632,7 +648,7 @@ async def discover_jobs_from_dorks(
         if not isinstance(item, dict):
             continue
         ai_score, match_reasons = _ai_relevance_score(item, role, skill_terms, location, exp_years)
-        if ai_score < 60:
+        if ai_score < 45:
             continue
         key = (item.get("title", "").lower()[:70], item.get("organization", "").lower()[:50])
         if key in seen_jobs:
