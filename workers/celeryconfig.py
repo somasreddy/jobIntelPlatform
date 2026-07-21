@@ -22,6 +22,13 @@ celery_app.conf.update(
     enable_utc=True,
     task_acks_late=True,
     worker_prefetch_multiplier=1,
+    task_reject_on_worker_lost=True,
+    task_publish_retry=True,
+    broker_connection_retry_on_startup=True,
+    broker_transport_options={"visibility_timeout": 21600},
+    task_soft_time_limit=270,
+    task_time_limit=300,
+    worker_max_tasks_per_child=100,
 )
 
 celery_app.conf.beat_schedule = {

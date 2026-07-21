@@ -11,15 +11,17 @@ from pydantic import BaseModel
 
 from core.database import get_db
 from core.auth import get_current_user_id
-from models.database import Application, VerifiedJob
+from models.database import Application, ApplicationEvent, OutboxEvent, VerifiedJob
+from services.application_status import (
+    display_application_status,
+    display_statuses,
+    normalize_application_status,
+)
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
-VALID_STATUSES = [
-    "Saved", "Evaluated", "Applied", "Assessment", "Responded",
-    "Interview", "Offer", "Rejected", "Discarded", "SKIP",
-]
+VALID_STATUSES = display_statuses()
 
 
 class ApplicationCreate(BaseModel):
@@ -44,7 +46,8 @@ def _app_to_dict(app: Application) -> dict:
     return {
         "id": str(app.id),
         "jobId": str(app.job_id) if app.job_id else None,
-        "status": app.status,
+        "status": display_application_status(app.status),
+        "statusKey": normalize_application_status(app.status, strict=False),
         "dateApplied": str(app.date_applied)[:10] if app.date_applied else None,
         "followUpDate": str(app.follow_up_date)[:10] if app.follow_up_date else None,
         "evaluationScore": app.evaluation_score,
@@ -106,7 +109,9 @@ async def create_application(
     uid: uuid.UUID = Depends(get_current_user_id),
 ):
     """Create a new job application tracking entry."""
-    if payload.status not in VALID_STATUSES:
+    try:
+        canonical_status = normalize_application_status(payload.status)
+    except ValueError:
         raise HTTPException(status_code=400, detail=f"status must be one of: {VALID_STATUSES}")
     try:
         job_uid = uuid.UUID(payload.job_id)
@@ -123,17 +128,36 @@ async def create_application(
     app = Application(
         user_id=uid,
         job_id=job_uid,
-        status=payload.status,
+        status=canonical_status,
         notes=payload.notes,
         evaluation_score=payload.evaluation_score,
         archetype=payload.archetype,
-        date_applied=datetime.utcnow() if payload.status == "Applied" else None,
+        date_applied=datetime.utcnow() if canonical_status == "applied" else None,
         follow_up_date=follow_up,
     )
     db.add(app)
     await db.flush()
+    db.add(ApplicationEvent(
+        application_id=app.id,
+        actor_id=uid,
+        event_type="application_created",
+        to_status=app.status,
+        payload={"job_id": payload.job_id},
+    ))
+    db.add(OutboxEvent(
+        aggregate_type="application",
+        aggregate_id=str(app.id),
+        event_type="application.created",
+        payload={"application_id": str(app.id), "job_id": payload.job_id, "status": app.status},
+    ))
+    await db.flush()
     await db.refresh(app)
-    return {"id": str(app.id), "status": app.status, "job_id": payload.job_id}
+    return {
+        "id": str(app.id),
+        "status": display_application_status(app.status),
+        "statusKey": normalize_application_status(app.status, strict=False),
+        "job_id": payload.job_id,
+    }
 
 
 # ── PATCH /{id}  ───────────────────────────────────────────────────────────
@@ -157,11 +181,15 @@ async def update_application(
     if not app:
         raise HTTPException(status_code=404, detail="Application not found")
 
+    previous_status = normalize_application_status(app.status, strict=False)
+    canonical_status: str | None = None
     if payload.status is not None:
-        if payload.status not in VALID_STATUSES:
+        try:
+            canonical_status = normalize_application_status(payload.status)
+        except ValueError:
             raise HTTPException(status_code=400, detail=f"Invalid status. Must be one of: {VALID_STATUSES}")
-        app.status = payload.status
-        if payload.status == "Applied" and not app.date_applied:
+        app.status = canonical_status
+        if canonical_status == "applied" and not app.date_applied:
             app.date_applied = datetime.utcnow()
     if payload.notes is not None:
         app.notes = payload.notes
@@ -175,9 +203,73 @@ async def update_application(
         except ValueError:
             raise HTTPException(status_code=400, detail="Invalid follow_up_date — use ISO format YYYY-MM-DD")
 
-    await db.flush()
-    return {"id": str(app.id), "status": app.status}
+    if canonical_status is not None and canonical_status != previous_status:
+        db.add(ApplicationEvent(
+            application_id=app.id,
+            actor_id=uid,
+            event_type="status_changed",
+            from_status=previous_status,
+            to_status=canonical_status,
+            payload={},
+        ))
+        db.add(OutboxEvent(
+            aggregate_type="application",
+            aggregate_id=str(app.id),
+            event_type="application.status_changed",
+            payload={"application_id": str(app.id), "from_status": previous_status, "to_status": canonical_status},
+        ))
 
+    await db.flush()
+    return {
+        "id": str(app.id),
+        "status": display_application_status(app.status),
+        "statusKey": normalize_application_status(app.status, strict=False),
+    }
+
+
+@router.get("/{app_id}/timeline")
+async def get_application_timeline(
+    app_id: str,
+    db: AsyncSession = Depends(get_db),
+    uid: uuid.UUID = Depends(get_current_user_id),
+):
+    """Return the immutable event history for one user-owned application."""
+    try:
+        app_uid = uuid.UUID(app_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid app ID")
+
+    result = await db.execute(
+        select(Application.id).where(
+            Application.id == app_uid, Application.user_id == uid
+        )
+    )
+    if result.scalar_one_or_none() is None:
+        raise HTTPException(status_code=404, detail="Application not found")
+
+    events_result = await db.execute(
+        select(ApplicationEvent)
+        .where(ApplicationEvent.application_id == app_uid)
+        .order_by(ApplicationEvent.occurred_at.desc())
+    )
+    events = events_result.scalars().all()
+    return {
+        "application_id": str(app_uid),
+        "events": [
+            {
+                "id": str(event.id),
+                "event_type": event.event_type,
+                "actor_id": str(event.actor_id),
+                "from_status": display_application_status(event.from_status) if event.from_status else None,
+                "from_status_key": normalize_application_status(event.from_status, strict=False) if event.from_status else None,
+                "to_status": display_application_status(event.to_status) if event.to_status else None,
+                "to_status_key": normalize_application_status(event.to_status, strict=False) if event.to_status else None,
+                "payload": event.payload or {},
+                "occurred_at": event.occurred_at.isoformat() if event.occurred_at else None,
+            }
+            for event in events
+        ],
+    }
 
 # ── DELETE /{id}  ──────────────────────────────────────────────────────────
 @router.delete("/{app_id}")
@@ -215,13 +307,17 @@ async def get_application_analytics(
     if not apps:
         return {"message": "No applications yet", "total": 0}
 
-    stage_counter = Counter(a.status for a in apps)
-    all_stages = ["Saved", "Evaluated", "Applied", "Assessment", "Interview", "Offer", "Rejected"]
+    stage_counter = Counter(display_application_status(a.status) for a in apps)
+    all_stages = [
+        "Discovered", "Saved", "Shortlisted", "Tailoring", "Ready to Apply",
+        "Applied", "Recruiter Contacted", "Screening", "Assessment", "Interview",
+        "Final Interview", "Offer", "Rejected", "Archived",
+    ]
     stage_breakdown = {s: stage_counter.get(s, 0) for s in all_stages}
 
     total = len(apps)
-    applied_count = sum(stage_counter.get(s, 0) for s in ["Applied", "Assessment", "Interview", "Offer", "Rejected"])
-    responded_count = sum(stage_counter.get(s, 0) for s in ["Assessment", "Interview", "Offer"])
+    applied_count = sum(stage_counter.get(s, 0) for s in ["Applied", "Recruiter Contacted", "Screening", "Assessment", "Interview", "Final Interview", "Offer", "Rejected"])
+    responded_count = sum(stage_counter.get(s, 0) for s in ["Recruiter Contacted", "Screening", "Assessment", "Interview", "Final Interview", "Offer"])
     offer_count = stage_counter.get("Offer", 0)
     response_rate = round(responded_count / applied_count * 100, 1) if applied_count else 0
     offer_rate    = round(offer_count / applied_count * 100, 1) if applied_count else 0

@@ -225,9 +225,9 @@ export default function DashboardPage() {
     });
   }, [profile]);
 
-  const localHealth = useMemo(() => buildLocalHealth(profile), [profileKey, profile]);
-  const fallbackTodos = useMemo(() => buildProfileTodos(profile), [profileKey, profile]);
-  const fallbackPaths = useMemo(() => buildProfilePaths(profile), [profileKey, profile]);
+  const localHealth = useMemo(() => buildLocalHealth(profile), [profile]);
+  const fallbackTodos = useMemo(() => buildProfileTodos(profile), [profile]);
+  const fallbackPaths = useMemo(() => buildProfilePaths(profile), [profile]);
 
   const load = useCallback(async () => {
     setLoading(true);

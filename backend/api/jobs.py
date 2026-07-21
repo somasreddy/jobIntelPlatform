@@ -2,18 +2,21 @@ import uuid
 import logging
 from datetime import datetime, timedelta, timezone
 from typing import Optional
-from fastapi import APIRouter, Depends, HTTPException, Query, Body
+from fastapi import APIRouter, Depends, HTTPException, Query, Body, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 
 from core.database import get_db
 from core.auth import get_current_user_id
+from core.config import settings
 from models.database import VerifiedJob, CandidateProfile, CareerGoal
 from models.schemas import JobCreate
 from job_discovery.service_v2 import JobDiscoveryService
 from job_discovery.dork_discovery import build_dork_search_plan, google_search_urls
+from job_discovery.source_registry import load_search_catalog, resolve_source_plan
 from services.fit_score import compute_fit_score
 from services.job_intel import compute_intel_flags
+from services.job_ranking import RankingPreferences, rank_jobs
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -30,6 +33,15 @@ def _combined_location(payload: dict) -> str:
 
 
 def _row_to_dict(job: VerifiedJob) -> dict:
+    created_at = job.created_at
+    if created_at and created_at.tzinfo is None:
+        created_at = created_at.replace(tzinfo=timezone.utc)
+    age_hours = max(0, int((datetime.now(timezone.utc) - created_at).total_seconds() / 3600)) if created_at else None
+    verification_status = job.verification_status or "UNVERIFIED"
+    confidence = getattr(job, "extraction_confidence", None)
+    confidence = int(confidence if confidence is not None else (90 if verification_status == "VERIFIED" else 45))
+    source_quality = "high" if verification_status == "VERIFIED" else "medium" if job.application_link else "low"
+    freshness_status = "fresh" if age_hours is not None and age_hours <= 72 else "aging" if age_hours is not None and age_hours <= 336 else "stale"
     return {
         "id": str(job.id),
         "title": job.title,
@@ -46,16 +58,25 @@ def _row_to_dict(job: VerifiedJob) -> dict:
         "careerPageLink": job.career_page_link,
         "recruiterName": job.recruiter_name,
         "recruiterLinkedIn": job.recruiter_linkedin,
-        "verificationStatus": job.verification_status,
+        "verificationStatus": verification_status,
         "levelUp": job.level_up,
         "matchScore": job.match_score,
         "postedDate": job.posted_date or str(job.created_at)[:10],
-        "source": getattr(job, "source", None),
+        "source": (getattr(job, "normalized_payload", None) or {}).get("source"),
+        "sourceQuality": source_quality,
+        "extractionConfidence": confidence,
+        "freshnessScore": int(getattr(job, "freshness_score", 0) or 0) or None,
+        "jobFreshnessHours": age_hours,
+        "freshnessStatus": freshness_status,
+        "lastVerifiedAt": str(getattr(job, "last_verified_at", "") or "") or None,
+        "canonicalUrl": getattr(job, "canonical_url", None),
+        "fieldProvenance": getattr(job, "field_provenance", None) or {},
     }
 
 
 @router.get("")
 async def get_jobs(
+    response: Response,
     search: Optional[str] = Query(None),
     work_mode: Optional[str] = Query(None),
     tech: Optional[str] = Query(None),
@@ -63,14 +84,18 @@ async def get_jobs(
     min_match_score: int = Query(0, ge=0, le=100), # strict score filter
     verified_only: bool = Query(False),
     skip: int = Query(0, ge=0),
+    recency_days: int = Query(7, ge=1, le=90),
+    salary_present: Optional[bool] = Query(None),
+    min_confidence: int = Query(0, ge=0, le=100),
+    source_quality: Optional[str] = Query(None, pattern="^(high|medium|low)$"),
     limit: int = Query(50, ge=1, le=200),
     db: AsyncSession = Depends(get_db),
     user_id: uuid.UUID = Depends(get_current_user_id),
 ):
-    """Get all discovered jobs with optional filters. Only returns jobs from the last 7 days."""
+    """Get discovered jobs with trust, provenance, recency, and fit filters."""
     from collections import Counter
     try:
-        cutoff = datetime.now(timezone.utc) - timedelta(days=7)
+        cutoff = datetime.now(timezone.utc) - timedelta(days=recency_days)
         stmt = select(VerifiedJob).where(VerifiedJob.created_at >= cutoff)
         if verified_only:
             stmt = stmt.where(VerifiedJob.verification_status == "VERIFIED")
@@ -82,9 +107,11 @@ async def get_jobs(
                 func.lower(VerifiedJob.title).like(q)
                 | func.lower(VerifiedJob.organization).like(q)
             )
-        stmt = stmt.order_by(VerifiedJob.created_at.desc()).offset(skip).limit(limit)
+        retrieval_limit = min(500, max(limit * 4, skip + limit))
+        stmt = stmt.order_by(VerifiedJob.created_at.desc()).limit(retrieval_limit)
         result = await db.execute(stmt)
         job_objs = result.scalars().all()
+        candidates_retrieved = len(job_objs)
         rows = [_row_to_dict(j) for j in job_objs]
     except Exception as exc:
         logger.warning(f"DB unavailable for GET /jobs, returning empty list: {exc}")
@@ -100,7 +127,15 @@ async def get_jobs(
     if min_match_score > 0:
         rows = [r for r in rows if (r.get("matchScore") or 0) >= min_match_score]
 
+    if salary_present is not None:
+        rows = [row for row in rows if bool(row.get("salaryMin") or row.get("salaryMax")) is salary_present]
+    if min_confidence:
+        rows = [row for row in rows if (row.get("extractionConfidence") or 0) >= min_confidence]
+    if source_quality:
+        rows = [row for row in rows if row.get("sourceQuality") == source_quality]
     # ── Attach fit scores using the user's live profile ──────────────────────
+    profile = None
+    goal = None
     try:
         profile_r = await db.execute(
             select(CandidateProfile).where(CandidateProfile.user_id == user_id)
@@ -163,6 +198,29 @@ async def get_jobs(
     except Exception as exc:
         logger.warning(f"Intel flags computation skipped: {exc}")
 
+    preferences = RankingPreferences(
+        target_role=goal.target_role if goal else "",
+        work_mode=profile.work_mode if profile else "",
+        locations=tuple(profile.preferred_locations or ()) if profile else (),
+        minimum_salary=goal.target_salary_min if goal else None,
+    )
+    if settings.ENABLE_DETERMINISTIC_RANKING:
+        rows, ranking_telemetry = rank_jobs(rows, preferences)
+    else:
+        ranking_telemetry = {"ranking_version": "disabled", "candidates_ranked": len(rows)}
+    candidates_after_filters = len(rows)
+    rows = rows[skip:skip + limit]
+    ranking_telemetry.update({
+        "candidates_retrieved": candidates_retrieved,
+        "candidates_after_filters": candidates_after_filters,
+        "returned": len(rows),
+        "skip": skip,
+        "limit": limit,
+    })
+    response.headers["X-Ranking-Version"] = ranking_telemetry["ranking_version"]
+    response.headers["X-Candidates-Retrieved"] = str(candidates_retrieved)
+    response.headers["X-Candidates-Ranked"] = str(candidates_after_filters)
+    logger.info("job_ranking_telemetry=%s", ranking_telemetry)
     return rows
 
 
@@ -214,6 +272,7 @@ async def discover_jobs(
         + (payload.get("languages") or [])
     )
 
+    source_catalog = await load_search_catalog(db)
     jobs = await svc.discover_jobs(
         role=payload.get("role", ""),
         location=_combined_location(payload),
@@ -221,6 +280,7 @@ async def discover_jobs(
         exp_years=int(payload.get("experience_years") or 0),
         min_match_score=int(payload.get("min_match_score") or 60),
         run_verification=bool(payload.get("run_verification", True)),
+        source_catalog=source_catalog or None,
     )
 
     # Persist discovered jobs so GET /api/jobs/ returns them on next load
@@ -285,7 +345,7 @@ async def discover_jobs(
 
 
 @router.post("/dork-query")
-async def generate_dork_query(payload: dict = Body(...)):
+async def generate_dork_query(payload: dict = Body(...), db: AsyncSession = Depends(get_db)):
     """Return the generic Google-style dork queries generated for a profile."""
     profile_skills = (
         (payload.get("skills") or [])
@@ -293,11 +353,14 @@ async def generate_dork_query(payload: dict = Body(...)):
         + (payload.get("cicd_tools") or [])
         + (payload.get("languages") or [])
     )
+    source_catalog = await load_search_catalog(db)
+    source_plan = resolve_source_plan(_combined_location(payload), source_catalog=source_catalog or None)
     plan = build_dork_search_plan(
         role=payload.get("role", ""),
         skills=profile_skills,
         location=_combined_location(payload),
         exp_years=int(payload.get("experience_years") or 0),
+        source_plan=source_plan,
     )
     queries = plan["queries"]
     return {

@@ -28,6 +28,7 @@ from models.database import (
     CareerMilestone,
     MasterStory,
 )
+from services.application_status import normalize_application_status
 
 logger = logging.getLogger(__name__)
 
@@ -124,8 +125,8 @@ def _application_activity_score(applications: list[Application]) -> tuple[int, s
     last_90 = [a for a in applications if a.created_at and (now - a.created_at).days <= 90]
 
     # Active pipeline — non-rejected recent apps
-    active_statuses = {"Applied", "Screening", "Interview", "Offer", "Saved"}
-    active = [a for a in last_90 if a.status in active_statuses]
+    active_statuses = {"applied", "screening", "interview", "offer", "saved"}
+    active = [a for a in last_90 if normalize_application_status(a.status, strict=False) in active_statuses]
 
     velocity_score = min(100, len(last_30) * 10)   # 10 apps/month = 100
     pipeline_score = min(100, len(active) * 7)      # 14 active = 100
@@ -146,7 +147,7 @@ def _interview_readiness_score(stories: int, applications: list[Application]) ->
     # Look for interview stages reached
     interview_reached = sum(
         1 for a in applications
-        if a.status in {"Interview", "Offer", "Negotiating"}
+        if normalize_application_status(a.status, strict=False) in {"interview", "offer"}
     )
     perf_score = min(100, interview_reached * 15)
 

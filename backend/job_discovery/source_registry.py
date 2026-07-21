@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import re
+from typing import Any, Iterable
 
 ATS_SITES = [
     "site:myworkdayjobs.com", "site:greenhouse.io", "site:boards.greenhouse.io",
@@ -38,6 +39,7 @@ class SourcePlan:
     scope: str
     country_code: str | None
     country_label: str
+    ats_sites: tuple[str, ...]
     job_boards: tuple[str, ...]
     include_ats: bool
     reason: str
@@ -47,6 +49,7 @@ class SourcePlan:
             "scope": self.scope,
             "country_code": self.country_code,
             "country_label": self.country_label,
+            "ats_sites": list(self.ats_sites),
             "job_boards": list(self.job_boards),
             "include_ats": self.include_ats,
             "reason": self.reason,
@@ -77,7 +80,7 @@ COUNTRY_SOURCE_GROUPS = [
         label="United States",
         aliases=("united states", "usa", "us", "america"),
         default_locations=("new york", "san francisco", "austin", "seattle", "chicago", "boston", "california", "texas"),
-        job_boards=tuple(GLOBAL_JOB_BOARD_SITES),
+        job_boards=tuple(GLOBAL_JOB_BOARD_SITES) + ("site:usajobs.gov", "site:dice.com"),
     ),
     CountrySourceGroup(
         code="CA",
@@ -164,7 +167,82 @@ def all_registered_job_boards() -> tuple[str, ...]:
     return tuple(dict.fromkeys(boards))
 
 
-def resolve_source_plan(location: str) -> SourcePlan:
+def search_source_catalog() -> list[dict[str, Any]]:
+    """Return the deduplicated built-in catalog used to seed the database."""
+    catalog: dict[str, dict[str, Any]] = {}
+
+    def add(site: str, source_group: str, region: str) -> None:
+        entry = catalog.setdefault(site, {
+            "site": site,
+            "source_group": source_group,
+            "regions": [],
+            "enabled": True,
+        })
+        if source_group == "ats":
+            entry["source_group"] = "ats"
+        if region not in entry["regions"]:
+            entry["regions"].append(region)
+
+    for site in ATS_SITES:
+        add(site, "ats", "GLOBAL")
+    for site in GLOBAL_JOB_BOARD_SITES:
+        add(site, "job_board", "GLOBAL")
+    for group in COUNTRY_SOURCE_GROUPS:
+        for site in group.job_boards:
+            add(site, "job_board", group.code)
+    return list(catalog.values())
+
+
+def _catalog_sites(
+    catalog: Iterable[dict[str, Any]] | None,
+    *,
+    source_group: str,
+    region: str | None,
+) -> tuple[str, ...]:
+    if catalog is None:
+        return ()
+    selected = []
+    for item in catalog:
+        if not item.get("enabled", True) or item.get("source_group") != source_group:
+            continue
+        regions = {str(value).upper() for value in (item.get("regions") or ["GLOBAL"])}
+        if region is None or "GLOBAL" in regions or region.upper() in regions:
+            site = str(item.get("site") or "").strip()
+            if site:
+                selected.append(site if site.startswith("site:") else "site:" + site)
+    return tuple(dict.fromkeys(selected))
+
+
+async def load_search_catalog(db: Any) -> list[dict[str, Any]]:
+    """Load search seeds without coupling callers to ORM projections."""
+    from sqlalchemy import select
+    from models.database import SourceRegistry
+
+    result = await db.execute(
+        select(SourceRegistry).where(
+            SourceRegistry.source_type == "search_seed",
+        ).order_by(SourceRegistry.priority.desc(), SourceRegistry.name)
+    )
+    catalog = []
+    for source in result.scalars().all():
+        config = source.adapter_config or {}
+        site = str(config.get("site") or "").strip()
+        if not site:
+            continue
+        catalog.append({
+            "site": site,
+            "source_group": str(config.get("source_group") or "job_board"),
+            "regions": list(config.get("regions") or ["GLOBAL"]),
+            "enabled": bool(source.enabled),
+            "source_id": str(source.id),
+        })
+    return catalog
+
+
+def resolve_source_plan(
+    location: str,
+    source_catalog: Iterable[dict[str, Any]] | None = None,
+) -> SourcePlan:
     text = re.sub(r"\s+", " ", (location or "").strip().lower())
     for group in COUNTRY_SOURCE_GROUPS:
         if any(_contains_phrase(text, alias) for alias in group.aliases):
@@ -172,8 +250,12 @@ def resolve_source_plan(location: str) -> SourcePlan:
                 scope="country",
                 country_code=group.code,
                 country_label=group.label,
-                job_boards=group.job_boards,
-                include_ats=True,
+                ats_sites=_catalog_sites(source_catalog, source_group="ats", region=group.code)
+                if source_catalog is not None else tuple(ATS_SITES),
+                job_boards=_catalog_sites(source_catalog, source_group="job_board", region=group.code)
+                if source_catalog is not None else group.job_boards,
+                include_ats=source_catalog is None
+                or bool(_catalog_sites(source_catalog, source_group="ats", region=group.code)),
                 reason=f"Matched country from user search: {group.label}; using trusted ATS/company career portals plus country boards.",
             )
     for group in COUNTRY_SOURCE_GROUPS:
@@ -182,8 +264,12 @@ def resolve_source_plan(location: str) -> SourcePlan:
                 scope="country",
                 country_code=group.code,
                 country_label=group.label,
-                job_boards=group.job_boards,
-                include_ats=True,
+                ats_sites=_catalog_sites(source_catalog, source_group="ats", region=group.code)
+                if source_catalog is not None else tuple(ATS_SITES),
+                job_boards=_catalog_sites(source_catalog, source_group="job_board", region=group.code)
+                if source_catalog is not None else group.job_boards,
+                include_ats=source_catalog is None
+                or bool(_catalog_sites(source_catalog, source_group="ats", region=group.code)),
                 reason=f"Inferred country from city/location: {group.label}; using trusted ATS/company career portals plus country boards.",
             )
     is_remote = _contains_phrase(text, "remote") or not text
@@ -191,7 +277,11 @@ def resolve_source_plan(location: str) -> SourcePlan:
         scope="global_remote" if is_remote else "global",
         country_code=None,
         country_label="Worldwide Remote" if is_remote else "Global",
-        job_boards=all_registered_job_boards(),
-        include_ats=True,
+        ats_sites=_catalog_sites(source_catalog, source_group="ats", region=None)
+        if source_catalog is not None else tuple(ATS_SITES),
+        job_boards=_catalog_sites(source_catalog, source_group="job_board", region=None)
+        if source_catalog is not None else all_registered_job_boards(),
+        include_ats=source_catalog is None
+        or bool(_catalog_sites(source_catalog, source_group="ats", region=None)),
         reason="Remote search with no country selected; using all supported global and country job boards." if is_remote else "No supported country detected; using all supported global and country job boards.",
     )

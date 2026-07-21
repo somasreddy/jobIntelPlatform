@@ -2,6 +2,9 @@ import asyncio
 import os
 import sys
 from unittest.mock import MagicMock # Keep this import as it's not explicitly removed and the replacement is malformed
+import pytest
+
+pytestmark = pytest.mark.integration
 
 # Add current directory to path for imports (priority)
 project_root = os.path.dirname(os.path.abspath(__file__))

@@ -2,7 +2,8 @@ import uuid
 import logging
 import io
 from typing import Optional, List
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
+from datetime import datetime, timezone
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from pydantic import BaseModel
@@ -10,6 +11,7 @@ from pydantic import BaseModel
 from core.database import get_db
 from core.auth import get_current_user_id
 from models.database import CandidateProfile
+from services.profile_intelligence import create_snapshot, sync_explicit_profile_facts
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -67,7 +69,7 @@ async def get_profile(
     )
     profile = result.scalar_one_or_none()
     if not profile:
-        raise HTTPException(status_code=404, detail="Profile not found. Use PUT to create one.")
+        return Response(status_code=204)
     return _profile_to_dict(profile)
 
 
@@ -93,6 +95,11 @@ async def upsert_profile(
         db.add(profile)
 
     await db.flush()
+    await sync_explicit_profile_facts(db, profile, uid)
+    await create_snapshot(
+        db, profile, uid,
+        label=f"Profile save {datetime.now(timezone.utc).date().isoformat()}",
+    )
     await db.refresh(profile)
     return _profile_to_dict(profile)
 
