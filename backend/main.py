@@ -1,13 +1,17 @@
 import time
 import logging
+import json
+import uuid
 from collections import defaultdict
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response
+from sqlalchemy import text
 
 from core.config import settings
+from core.feature_flags import deployment_warnings, feature_flags
 from core.database import database_url, engine
 from models import database as _models   # noqa: F401 - ensures all models are registered
 from models.database import Base
@@ -17,6 +21,7 @@ from api import (
     intelligence_tools, auth, evaluate, apply, campaign,
     career_graph, company, learning, notifications, market,
     insights, interview_analytics, portfolio, autopilot, digest,
+    match_intelligence, source_health, profile_intelligence,
 )
 
 logger = logging.getLogger(__name__)
@@ -46,13 +51,17 @@ def _apply_cors_headers(response: Response, origin: str | None) -> Response:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Create all SQLAlchemy-managed tables on startup (idempotent)."""
+    """Verify database connectivity; synchronize ORM schema only when explicitly enabled."""
     db_url: str = database_url
     is_local_dev = "localhost" in db_url or "127.0.0.1" in db_url
     try:
         async with engine.begin() as conn:
-            await conn.run_sync(Base.metadata.create_all)
-        logger.info("Database tables ensured.")
+            if is_local_dev or settings.ENABLE_STARTUP_SCHEMA_SYNC:
+                await conn.run_sync(Base.metadata.create_all)
+                logger.warning("ORM startup schema synchronization ran; managed migrations remain authoritative.")
+            else:
+                await conn.execute(text("SELECT 1"))
+                logger.info("Database connectivity verified; startup schema synchronization disabled.")
     except Exception as exc:
         if is_local_dev:
             # Local dev without PostgreSQL running - start in degraded mode
@@ -180,6 +189,8 @@ app.include_router(salary.router,            prefix="/api/salary",            ta
 app.include_router(recruiter.router,         prefix="/api/recruiter",         tags=["Recruiter"])
 app.include_router(interview.router,         prefix="/api/interview",         tags=["Interview"])
 app.include_router(profile.router,           prefix="/api/profile",           tags=["Profile"])
+if settings.ENABLE_PROFILE_INTELLIGENCE:
+    app.include_router(profile_intelligence.router, prefix="/api/profile/intelligence", tags=["Profile Intelligence"])
 app.include_router(negotiation.router,       prefix="/api/negotiation",       tags=["Negotiation"])
 app.include_router(stream.router,            prefix="/api/stream",            tags=["Streaming"])
 app.include_router(intelligence_tools.router, prefix="/api/intelligence-tools", tags=["Intelligence Tools"])
@@ -193,12 +204,50 @@ app.include_router(interview_analytics.router,  prefix="/api/interview-analytics
 app.include_router(portfolio.router,            prefix="/api/portfolio",            tags=["Portfolio"])
 app.include_router(autopilot.router,            prefix="/api/autopilot",            tags=["Autopilot"])
 app.include_router(digest.router,               prefix="/api/digest",               tags=["Digest"])
+app.include_router(match_intelligence.router,   prefix="/api/v2/matches",           tags=["Match Intelligence v2"])
+if settings.ENABLE_ADMIN_OPERATIONS:
+    app.include_router(source_health.router, prefix="/api/admin/source-health", tags=["Source Health"])
 
 
 # Health check
 @app.get("/health", tags=["Health"])
 async def health_check():
-    return {"status": "healthy", "version": "3.0.0"}
+    return {
+        "status": "healthy",
+        "version": "3.0.0",
+        "environment": settings.ENVIRONMENT,
+        "features": feature_flags(),
+        "warnings": deployment_warnings(),
+    }
+
+
+@app.get("/ready", tags=["Health"])
+async def readiness_check():
+    try:
+        async with engine.connect() as connection:
+            await connection.execute(text("SELECT 1"))
+            outbox_backlog = int((await connection.execute(text(
+                "SELECT count(*) FROM outbox_events "
+                "WHERE published_at IS NULL AND occurred_at < now() - interval '5 minutes'"
+            ))).scalar_one())
+    except Exception as exc:
+        logger.error("readiness_check_failed=%s", type(exc).__name__)
+        return JSONResponse(
+            status_code=503,
+            content={
+                "status": "not_ready",
+                "database": "unavailable",
+                "error_code": "database_readiness_failed",
+            },
+        )
+    return {
+        "status": "ready" if outbox_backlog < 1000 else "degraded",
+        "database": "available",
+        "outbox_backlog_over_5m": outbox_backlog,
+        "features": feature_flags(),
+        "warnings": deployment_warnings(),
+    }
+
 
 @app.middleware("http")
 async def browser_cors_middleware(request: Request, call_next):
@@ -211,3 +260,23 @@ async def browser_cors_middleware(request: Request, call_next):
         logger.exception("Unhandled API error while processing %s %s", request.method, request.url.path)
         response = JSONResponse(status_code=500, content={"detail": "Internal server error"})
     return _apply_cors_headers(response, origin)
+
+
+@app.middleware("http")
+async def observability_middleware(request: Request, call_next):
+    request_id = request.headers.get("X-Request-ID") or str(uuid.uuid4())
+    request.state.request_id = request_id
+    started = time.perf_counter()
+    response = await call_next(request)
+    duration_ms = round((time.perf_counter() - started) * 1000, 2)
+    response.headers["X-Request-ID"] = request_id
+    response.headers["X-Response-Time-Ms"] = str(duration_ms)
+    logger.info(json.dumps({
+        "event": "http_request",
+        "request_id": request_id,
+        "method": request.method,
+        "path": request.url.path,
+        "status": response.status_code,
+        "duration_ms": duration_ms,
+    }, separators=(",", ":")))
+    return response

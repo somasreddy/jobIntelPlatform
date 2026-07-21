@@ -13,7 +13,7 @@ _BATCH_SIZE = 20  # verify this many jobs per run
 
 
 def _run(coro):
-    return asyncio.get_event_loop().run_until_complete(coro)
+    return asyncio.run(coro)
 
 
 @celery_app.task(
@@ -28,6 +28,8 @@ def verify_pending_jobs(self):
     try:
         from verification_engine.verifier import VerificationEngine
         from core.database import AsyncSessionLocal
+        from datetime import datetime, timezone
+        from job_discovery.pipeline import freshness_score
         from models.database import VerifiedJob
         from sqlalchemy import select
 
@@ -54,6 +56,14 @@ def verify_pending_jobs(self):
                     updated = await engine.verify_job(job_dict)
                     status = updated.get("verification_status", "UNVERIFIED")
                     job.verification_status = status
+                    verified_at = datetime.now(timezone.utc)
+                    if hasattr(job, "last_verified_at"):
+                        job.last_verified_at = verified_at
+                    if hasattr(job, "freshness_score"):
+                        job.freshness_score = freshness_score({**job_dict, "last_verified_at": verified_at.isoformat(), "verification_status": status}, verified_at)
+                    if status == "EXPIRED" and hasattr(job, "suppressed_at"):
+                        job.suppressed_at = verified_at
+                        job.suppression_reason = "Source verification marked the job expired."
                     if status == "VERIFIED":
                         verified += 1
                     elif status == "EXPIRED":

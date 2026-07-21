@@ -17,6 +17,7 @@ from core.database import get_db
 from core.auth import get_current_user_id
 from core.llm import smart_chat
 from models.database import Application, VerifiedJob, MasterStory, CareerGraph
+from services.application_status import display_application_status, normalize_application_status
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -38,7 +39,7 @@ async def application_funnel(
     stages = ["Saved", "Applied", "Assessment", "Screening", "Interview", "Offer", "Rejected"]
     counts: dict[str, int] = defaultdict(int)
     for a in apps:
-        counts[a.status] += 1
+        counts[display_application_status(a.status)] += 1
 
     # Conversion rates
     applied = counts.get("Applied", 0) + counts.get("Assessment", 0) + counts.get("Screening", 0) + counts.get("Interview", 0) + counts.get("Offer", 0) + counts.get("Rejected", 0)
@@ -108,7 +109,7 @@ async def response_rates(
     by_work_mode: dict[str, dict] = defaultdict(lambda: {"total": 0, "responded": 0})
 
     for app, job in pairs:
-        moved = app.status not in {"Saved", "Applied"}
+        moved = normalize_application_status(app.status, strict=False) not in {"saved", "applied"}
         responded += 1 if moved else 0
         if job:
             wm = job.work_mode or "Unknown"
@@ -176,7 +177,7 @@ async def rejection_analysis(
     result = await db.execute(
         select(Application).where(
             Application.user_id == user_id,
-            Application.status == "Rejected",
+            func.lower(Application.status) == "rejected",
         )
     )
     rejections = result.scalars().all()

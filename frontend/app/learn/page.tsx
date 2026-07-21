@@ -1,9 +1,10 @@
 "use client";
 import { useState, useEffect, useCallback } from "react";
+import Link from "next/link";
 import { useAuth } from "@/lib/AuthContext";
 import {
-  BookOpen, Plus, Trash2, CheckCircle2, Loader2,
-  ArrowRight, Clock, ExternalLink, TrendingUp, Zap, AlertCircle,
+  BookOpen, Plus, Trash2, CheckCircle2, Loader2, Award,
+  ArrowRight, Clock, ExternalLink, TrendingUp, Zap, AlertCircle, Target, Route,
 } from "lucide-react";
 
 const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
@@ -70,7 +71,13 @@ export default function LearnPage() {
         fetch(`${API}/api/learning/suggestions`, { headers: authHeaders(token) }),
         fetch(`${API}/api/learning/completions`, { headers: authHeaders(token) }),
       ]);
-      if (pathsRes.ok) setPaths(await pathsRes.json());
+      if (pathsRes.ok) {
+        const pathData: LearningPath[] = await pathsRes.json();
+        setPaths(pathData);
+        setSelectedPath(current =>
+          pathData.find(path => path.id === current?.id) ?? pathData[0] ?? null
+        );
+      }
       if (suggestionsRes.ok) {
         const s = await suggestionsRes.json();
         setSuggestions(s.suggestions || []);
@@ -150,10 +157,16 @@ export default function LearnPage() {
       }),
     });
     await fetchData();
-    // Refresh selected path
-    const updated = paths.find(p => p.id === path.id);
-    if (updated) setSelectedPath(updated);
   };
+
+  const activePathCount = paths.filter(path => path.status === "active").length;
+  const plannedHours = Math.round(paths.reduce((sum, path) => sum + (path.estimated_hours ?? 0), 0));
+  const averageProgress = paths.length
+    ? Math.round(paths.reduce((sum, path) => sum + path.progress_pct, 0) / paths.length)
+    : 0;
+  const nextResource = selectedPath?.resources?.find(resource =>
+    !completions.some(completion => completion.path_id === selectedPath.id && completion.resource_url === resource.url)
+  );
 
   if (loading) return (
     <div className="flex min-h-screen items-center justify-center">
@@ -181,6 +194,52 @@ export default function LearnPage() {
           </div>
         )}
 
+        <div className="grid grid-cols-2 xl:grid-cols-4 gap-3 mb-4">
+          {[
+            { label: "Active paths", value: activePathCount, detail: `${paths.length} total paths`, icon: Route },
+            { label: "Portfolio progress", value: `${averageProgress}%`, detail: "Across every path", icon: Target },
+            { label: "Learning completed", value: completions.length, detail: "Verified resources", icon: CheckCircle2 },
+            { label: "Planned effort", value: `${plannedHours}h`, detail: "Estimated curriculum", icon: Clock },
+          ].map(({ label, value, detail, icon: Icon }) => (
+            <div key={label} className="card p-4">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">{label}</p>
+                  <p className="mt-1 text-2xl font-bold text-white">{value}</p>
+                  <p className="mt-0.5 text-[11px] text-slate-500">{detail}</p>
+                </div>
+                <div
+                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl"
+                  style={{ background: "color-mix(in srgb, var(--accent) 12%, transparent)", color: "var(--accent-bright)" }}
+                >
+                  <Icon className="h-4 w-4" />
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <div className="card mb-6 flex flex-col gap-4 p-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-start gap-3">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-indigo-500/10 text-indigo-300">
+              <Award className="h-5 w-5" />
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-white">Turn learning into interview evidence</p>
+              <p className="mt-0.5 text-xs text-slate-400">
+                {nextResource
+                  ? `Next up: ${nextResource.title}${nextResource.duration_minutes ? ` - ${nextResource.duration_minutes} min` : ""}.`
+                  : paths.length ? "Your selected path is complete. Rehearse the skill with role-specific questions." : "Create a skill path, complete resources, then rehearse the skill in Interview Prep."}
+              </p>
+            </div>
+          </div>
+          <Link
+            href="/interview"
+            className="btn-secondary flex shrink-0 items-center justify-center gap-2 px-4 py-2 text-xs"
+          >
+            <Award className="h-3.5 w-3.5" /> Practice in Interview Prep
+          </Link>
+        </div>
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Left — paths list + generator */}
           <div className="space-y-4">

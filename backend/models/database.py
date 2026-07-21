@@ -1,7 +1,9 @@
 import uuid
 from datetime import datetime
+from decimal import Decimal
 from sqlalchemy import (
-    String, Integer, Float, Boolean, Text, DateTime, ForeignKey, func, Index
+    String, Integer, SmallInteger, Float, Numeric, Boolean, Text, DateTime,
+    ForeignKey, func, Index, UniqueConstraint
 )
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -59,6 +61,23 @@ class VerifiedJob(Base):
     level_up: Mapped[bool] = mapped_column(Boolean, default=False)
     match_score: Mapped[int | None] = mapped_column(Integer)
     posted_date: Mapped[str | None] = mapped_column(String(30))
+    tenant_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
+    source_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("source_registry.id")
+    )
+    external_requisition_id: Mapped[str | None] = mapped_column(Text)
+    canonical_url: Mapped[str | None] = mapped_column(Text)
+    canonical_fingerprint: Mapped[str | None] = mapped_column(Text)
+    normalized_payload: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+    field_provenance: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+    extraction_confidence: Mapped[Decimal | None] = mapped_column(Numeric(5, 2))
+    freshness_score: Mapped[Decimal | None] = mapped_column(Numeric(5, 2))
+    first_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    last_seen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    suppressed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    suppression_reason: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
@@ -69,6 +88,7 @@ class VerifiedJob(Base):
     applications: Mapped[list["Application"]] = relationship(
         back_populates="job", cascade="all, delete-orphan"
     )
+    source_registry: Mapped["SourceRegistry | None"] = relationship()
 
 
 class CandidateProfile(Base):
@@ -105,6 +125,80 @@ class CandidateProfile(Base):
     )
 
 
+
+
+class ProfileFact(Base):
+    __tablename__ = "profile_facts"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False, index=True)
+    profile_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("candidate_profiles.id", ondelete="CASCADE"), nullable=False
+    )
+    fact_type: Mapped[str] = mapped_column(String(80), nullable=False)
+    normalized_key: Mapped[str] = mapped_column(String(255), nullable=False)
+    value: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    trust_state: Mapped[str] = mapped_column(String(30), nullable=False, default="needs_review")
+    source_type: Mapped[str] = mapped_column(String(50), nullable=False)
+    source_ref: Mapped[str | None] = mapped_column(Text)
+    evidence: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+    review_status: Mapped[str] = mapped_column(String(30), nullable=False, default="pending")
+    reviewed_by: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    __table_args__ = (
+        UniqueConstraint("profile_id", "source_type", "fact_type", "normalized_key", name="uq_profile_fact_source_key"),
+        Index("idx_profile_facts_review", "user_id", "review_status", "fact_type"),
+    )
+
+
+class ProfileSnapshot(Base):
+    __tablename__ = "profile_snapshots"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False, index=True)
+    profile_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("candidate_profiles.id", ondelete="CASCADE"), nullable=False
+    )
+    label: Mapped[str] = mapped_column(String(255), nullable=False)
+    kind: Mapped[str] = mapped_column(String(30), nullable=False, default="base")
+    version: Mapped[int] = mapped_column(Integer, nullable=False)
+    profile_data: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    facts: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    __table_args__ = (
+        UniqueConstraint("profile_id", "version", name="uq_profile_snapshot_version"),
+        Index("idx_profile_snapshots_user_created", "user_id", "created_at"),
+    )
+
+
+class ProfileVariant(Base):
+    __tablename__ = "profile_variants"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False, index=True)
+    profile_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("candidate_profiles.id", ondelete="CASCADE"), nullable=False
+    )
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    target_role: Mapped[str | None] = mapped_column(String(255))
+    target_company: Mapped[str | None] = mapped_column(String(255))
+    base_snapshot_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("profile_snapshots.id")
+    )
+    overrides: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+    status: Mapped[str] = mapped_column(String(30), nullable=False, default="draft")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "name", name="uq_profile_variant_user_name"),
+        Index("idx_profile_variants_user_status", "user_id", "status"),
+    )
+
 class Application(Base):
     __tablename__ = "applications"
 
@@ -118,7 +212,7 @@ class Application(Base):
     profile_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("candidate_profiles.id"), nullable=True
     )
-    status: Mapped[str] = mapped_column(String(50), nullable=False, default="Saved")
+    status: Mapped[str] = mapped_column(String(50), nullable=False, default="saved", server_default="saved")
     date_applied: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     follow_up_date: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     notes: Mapped[str | None] = mapped_column(Text)
@@ -137,6 +231,9 @@ class Application(Base):
     job: Mapped["VerifiedJob | None"] = relationship(back_populates="applications")
     profile: Mapped["CandidateProfile | None"] = relationship(
         back_populates="applications"
+    )
+    events: Mapped[list["ApplicationEvent"]] = relationship(
+        back_populates="application", cascade="all, delete-orphan"
     )
 
 
@@ -486,3 +583,166 @@ class AutopilotQueueItem(Base):
         DateTime(timezone=True), server_default=func.now()
     )
     actioned_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+# Enterprise v2 persistence models. These tables are created by
+# database/enterprise_v2.sql and remain additive to the legacy schema.
+class SourceRegistry(Base):
+    __tablename__ = "source_registry"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
+    name: Mapped[str] = mapped_column(Text, nullable=False)
+    source_type: Mapped[str] = mapped_column(Text, nullable=False)
+    base_url: Mapped[str] = mapped_column(Text, nullable=False)
+    priority: Mapped[int] = mapped_column(SmallInteger, nullable=False, default=50)
+    crawl_frequency_minutes: Mapped[int] = mapped_column(Integer, nullable=False, default=360)
+    parser_name: Mapped[str] = mapped_column(Text, nullable=False)
+    parser_version: Mapped[str] = mapped_column(Text, nullable=False)
+    dedupe_rules: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+    compliance_policy: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+    adapter_config: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+    health_score: Mapped[Decimal] = mapped_column(Numeric(5, 2), nullable=False, default=100)
+    failure_rate: Mapped[Decimal] = mapped_column(Numeric(5, 2), nullable=False, default=0)
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    last_success_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_failure_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    ingestion_runs: Mapped[list["IngestionRun"]] = relationship(back_populates="source")
+
+    __table_args__ = (UniqueConstraint("tenant_id", "base_url"),)
+
+
+class IngestionRun(Base):
+    __tablename__ = "ingestion_runs"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    source_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("source_registry.id"), nullable=False)
+    parser_version: Mapped[str] = mapped_column(Text, nullable=False)
+    correlation_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    status: Mapped[str] = mapped_column(Text, nullable=False)
+    counters: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+    error_code: Mapped[str | None] = mapped_column(Text)
+    error_detail: Mapped[str | None] = mapped_column(Text)
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    source: Mapped["SourceRegistry"] = relationship(back_populates="ingestion_runs")
+
+
+class MatchPolicy(Base):
+    __tablename__ = "match_policies"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
+    name: Mapped[str] = mapped_column(Text, nullable=False)
+    version: Mapped[str] = mapped_column(Text, nullable=False)
+    rules: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    status: Mapped[str] = mapped_column(Text, nullable=False)
+    created_by: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    activated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    assessments: Mapped[list["MatchAssessment"]] = relationship(back_populates="policy")
+
+    __table_args__ = (UniqueConstraint("tenant_id", "name", "version"),)
+
+
+class MatchAssessment(Base):
+    __tablename__ = "match_assessments"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
+    user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    job_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("verified_jobs.id"), nullable=False)
+    profile_snapshot_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
+    scoring_version: Mapped[str] = mapped_column(Text, nullable=False)
+    policy_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("match_policies.id"))
+    overall_score: Mapped[int] = mapped_column(SmallInteger, nullable=False)
+    eligibility_score: Mapped[int] = mapped_column(SmallInteger, nullable=False)
+    relevance_score: Mapped[int] = mapped_column(SmallInteger, nullable=False)
+    competitiveness_score: Mapped[int] = mapped_column(SmallInteger, nullable=False)
+    completeness_score: Mapped[int] = mapped_column(SmallInteger, nullable=False)
+    confidence_score: Mapped[int] = mapped_column(SmallInteger, nullable=False)
+    fit_label: Mapped[str] = mapped_column(Text, nullable=False)
+    reason_trace: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    input_snapshot: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    policy: Mapped["MatchPolicy | None"] = relationship(back_populates="assessments")
+
+    __table_args__ = (Index("idx_match_user_job", "user_id", "job_id", created_at.desc()),)
+
+
+class ApplicationEvent(Base):
+    __tablename__ = "application_events"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
+    application_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("applications.id", ondelete="CASCADE"), nullable=False)
+    actor_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    event_type: Mapped[str] = mapped_column(Text, nullable=False)
+    from_status: Mapped[str | None] = mapped_column(Text)
+    to_status: Mapped[str | None] = mapped_column(Text)
+    payload: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+    occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    application: Mapped["Application"] = relationship(back_populates="events")
+
+    __table_args__ = (Index("idx_application_timeline", "application_id", occurred_at.desc()),)
+
+
+class AuditLog(Base):
+    __tablename__ = "audit_log"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
+    actor_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
+    actor_type: Mapped[str] = mapped_column(Text, nullable=False)
+    action: Mapped[str] = mapped_column(Text, nullable=False)
+    resource_type: Mapped[str] = mapped_column(Text, nullable=False)
+    resource_id: Mapped[str] = mapped_column(Text, nullable=False)
+    request_id: Mapped[str | None] = mapped_column(Text)
+    before_state: Mapped[dict | None] = mapped_column(JSONB)
+    after_state: Mapped[dict | None] = mapped_column(JSONB)
+    audit_metadata: Mapped[dict] = mapped_column("metadata", JSONB, nullable=False, default=dict)
+    occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    __table_args__ = (Index("idx_audit_resource", "tenant_id", "resource_type", "resource_id", occurred_at.desc()),)
+
+class SourceCandidate(Base):
+    __tablename__ = "source_candidates"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    discovered_url: Mapped[str] = mapped_column(Text, nullable=False, unique=True)
+    discovery_method: Mapped[str] = mapped_column(Text, nullable=False)
+    validation_status: Mapped[str] = mapped_column(Text, nullable=False, default="pending")
+    detected_source_type: Mapped[str | None] = mapped_column(Text)
+    evidence: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+    reviewed_by: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+
+class OutboxEvent(Base):
+    __tablename__ = "outbox_events"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
+    aggregate_type: Mapped[str] = mapped_column(Text, nullable=False)
+    aggregate_id: Mapped[str] = mapped_column(Text, nullable=False)
+    event_type: Mapped[str] = mapped_column(Text, nullable=False)
+    event_version: Mapped[int] = mapped_column(SmallInteger, nullable=False, default=1)
+    payload: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    last_error: Mapped[str | None] = mapped_column(Text)
+
+    __table_args__ = (
+        Index("idx_outbox_unpublished", "occurred_at", postgresql_where=published_at.is_(None)),
+        Index("idx_outbox_aggregate", "aggregate_type", "aggregate_id", "occurred_at"),
+    )

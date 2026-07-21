@@ -6,8 +6,9 @@ import re
 import asyncio
 from typing import Optional
 import httpx
-from job_discovery.dork_discovery import discover_jobs_from_dorks, discover_jobs_from_direct_boards, build_dork_queries, google_search_urls, _ai_relevance_score, _skill_terms
-from job_discovery.source_registry import resolve_source_plan
+from job_discovery.dork_discovery import discover_jobs_from_direct_boards, build_dork_queries, google_search_urls, _ai_relevance_score, _skill_terms
+from job_discovery.source_registry import load_search_catalog, resolve_source_plan
+from job_discovery.pipeline import normalize_and_deduplicate
 
 logger = logging.getLogger(__name__)
 
@@ -245,67 +246,54 @@ class JobDiscoveryService:
         self.last_dork_queries: list[str] = []
         self.last_google_urls: list[str] = []
 
-    async def discover_jobs(self, role: str = "", location: str = "Remote", profile_skills: Optional[list[str]] = None, exp_years: int = 0, min_match_score: int = 0, run_verification: bool = True) -> list[dict]:
-        """Discover jobs using no-key dork search as the primary source.
-
-        This replaces API-key dependent discovery. The service builds generic
-        Google-style dork queries from the user role, skills, experience, and
-        preferred location, searches public results, scrapes the landing pages,
-        normalizes them into the existing job shape, deduplicates, scores, and
-        persists through the existing API layer.
-        """
+    async def discover_jobs(
+        self,
+        role: str = "",
+        location: str = "Remote",
+        profile_skills: Optional[list[str]] = None,
+        exp_years: int = 0,
+        min_match_score: int = 0,
+        run_verification: bool = True,
+        source_catalog: Optional[list[dict]] = None,
+    ) -> list[dict]:
+        """Discover jobs from authoritative endpoints; search is seed assistance only."""
         profile_skills = profile_skills or []
-        self.last_dork_queries = build_dork_queries(role, profile_skills, location, exp_years)
+        if source_catalog is None:
+            try:
+                from core.database import AsyncSessionLocal
+                async with AsyncSessionLocal() as session:
+                    source_catalog = await load_search_catalog(session)
+            except Exception as exc:
+                logger.warning("Search source catalog unavailable; using built-in fallback: %s", exc)
+        source_plan = resolve_source_plan(location, source_catalog=source_catalog or None)
+
+        # Keep search plans observable for endpoint discovery, but never convert
+        # search-result pages into canonical jobs.
+        self.last_dork_queries = build_dork_queries(role, profile_skills, location, exp_years, source_plan=source_plan)
         self.last_google_urls = google_search_urls(self.last_dork_queries)
 
-        dork_jobs, queries = await discover_jobs_from_dorks(
-            role=role,
-            location=location,
-            profile_skills=profile_skills,
-            exp_years=exp_years,
-            min_match_score=min_match_score,
+        from job_discovery.connectors_v3 import (
+            _fetch_ashby,
+            _fetch_generic,
+            _fetch_greenhouse,
+            _fetch_lever,
+            _fetch_wellfound,
+            _fetch_workday,
         )
-        self.last_dork_queries = queries
-        self.last_google_urls = google_search_urls(queries)
-        if dork_jobs:
-            if run_verification:
-                dork_jobs = await _verify_batch(dork_jobs)
-            return dork_jobs
-
-        direct_jobs, direct_urls = await discover_jobs_from_direct_boards(
-            role=role,
-            location=location,
-            profile_skills=profile_skills,
-            exp_years=exp_years,
-            min_match_score=min_match_score,
-        )
-        if direct_urls:
-            self.last_dork_queries = [*queries, *direct_urls]
-            self.last_google_urls = google_search_urls(queries)
-        if direct_jobs:
-            if run_verification:
-                direct_jobs = await _verify_batch(direct_jobs)
-            return direct_jobs
-
-        source_plan = resolve_source_plan(location)
-        if source_plan.scope == "country":
-            logger.info("No jobs found for %s after dork and direct-board search; skipping global fallbacks for country-scoped search.", source_plan.country_label)
-            return []
-
-        # No-key fallback: public feeds and direct public career-board APIs only.
-        # Do not call Adzuna/JSearch/Apify/LinkedIn/LLM-backed providers here.
-        from job_discovery.connectors_v3 import _fetch_greenhouse, _fetch_lever, _fetch_wellfound
         search_terms = _get_search_terms(role) if role else _DEFAULT_TERMS
         primary = search_terms[0]
         results = await asyncio.gather(
+            _fetch_greenhouse(primary),
+            _fetch_lever(primary),
+            _fetch_ashby(primary),
+            _fetch_workday(primary),
+            _fetch_generic(primary),
             _fetch_remotive(primary),
             _fetch_arbeitnow(primary),
             _fetch_weworkremotely(primary),
-            _fetch_hn_hiring(primary),
             _fetch_authentic_jobs(primary),
-            _fetch_greenhouse(primary),
-            _fetch_lever(primary),
             _fetch_wellfound(primary),
+            _fetch_hn_hiring(primary),
             return_exceptions=True,
         )
 
@@ -313,6 +301,20 @@ class JobDiscoveryService:
         for batch in results:
             if isinstance(batch, list):
                 all_jobs.extend(batch)
+
+        # Direct career/job-board pages are the second tier. They can contribute
+        # records because the page itself is fetched; search snippets cannot.
+        direct_jobs, direct_urls = await discover_jobs_from_direct_boards(
+            role=role,
+            location=location,
+            profile_skills=profile_skills,
+            exp_years=exp_years,
+            min_match_score=min_match_score,
+            source_plan=source_plan,
+        )
+        all_jobs.extend(direct_jobs)
+        if direct_urls:
+            self.last_dork_queries = [*self.last_dork_queries, *direct_urls]
 
         seen: set[tuple[str, str]] = set()
         final: list[dict] = []
@@ -328,11 +330,14 @@ class JobDiscoveryService:
             job["ai_relevance_score"] = ai_score
             job["match_reasons"] = match_reasons
             job["match_score"] = max(job.get("match_score") or 0, ai_score)
+            job["source_scope"] = source_plan.scope
+            job["discovery_policy"] = "authoritative-source-v1"
             if min_match_score and job["match_score"] < min_match_score:
                 continue
             final.append(job)
 
         if run_verification and final:
             final = await _verify_batch(final)
-        final.sort(key=lambda j: (-(j.get("match_score") or 0), j.get("title", "")))
+        final.sort(key=lambda job: (-(job.get("match_score") or 0), job.get("title", "")))
+        final = normalize_and_deduplicate(final)
         return final
