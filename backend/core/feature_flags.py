@@ -17,7 +17,7 @@ def feature_flags() -> dict[str, bool]:
 def deployment_warnings() -> list[dict[str, str]]:
     warnings: list[dict[str, str]] = []
     environment = settings.ENVIRONMENT.lower()
-    if settings.REQUIRE_AUTH.lower() != "true":
+    if not settings.REQUIRE_AUTH:
         warnings.append({
             "code": "auth_optional",
             "severity": "warning" if environment != "production" else "critical",

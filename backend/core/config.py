@@ -87,7 +87,6 @@ class Settings(BaseSettings):
     # Comma-separated break-glass/local admin allowlist; database role remains authoritative.
     ADMIN_EMAILS: str = "demo@jobintel.ai"
     ENVIRONMENT: str = "development"
-    REQUIRE_AUTH: str = "false"
     ENABLE_STARTUP_SCHEMA_SYNC: bool = False
     ENABLE_CONTRACT_CONNECTORS: bool = True
     ENABLE_DETERMINISTIC_RANKING: bool = True
