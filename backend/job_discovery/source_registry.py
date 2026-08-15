@@ -5,9 +5,12 @@ registry keeps that business rule auditable and easy to extend.
 """
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 import re
 from typing import Any, Iterable
+
+logger = logging.getLogger(__name__)
 
 ATS_SITES = [
     "site:myworkdayjobs.com", "site:greenhouse.io", "site:boards.greenhouse.io",
@@ -214,15 +217,27 @@ def _catalog_sites(
 
 
 async def load_search_catalog(db: Any) -> list[dict[str, Any]]:
-    """Load search seeds without coupling callers to ORM projections."""
+    """Load search seeds without coupling callers to ORM projections.
+
+    Callers treat an empty/falsy result as "no catalog" and fall back to the
+    hardcoded ATS_SITES/GLOBAL_JOB_BOARD_SITES/country groups above (see
+    resolve_source_plan's `source_catalog is None` branches) - so a DB error
+    here degrades discovery to the built-in site lists instead of failing
+    the whole request.
+    """
     from sqlalchemy import select
     from models.database import SourceRegistry
 
-    result = await db.execute(
-        select(SourceRegistry).where(
-            SourceRegistry.source_type == "search_seed",
-        ).order_by(SourceRegistry.priority.desc(), SourceRegistry.name)
-    )
+    try:
+        result = await db.execute(
+            select(SourceRegistry).where(
+                SourceRegistry.source_type == "search_seed",
+            ).order_by(SourceRegistry.priority.desc(), SourceRegistry.name)
+        )
+    except Exception as exc:
+        logger.warning(f"Search catalog unavailable, falling back to built-in sources: {exc}")
+        return []
+
     catalog = []
     for source in result.scalars().all():
         config = source.adapter_config or {}
