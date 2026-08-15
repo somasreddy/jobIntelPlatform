@@ -1,5 +1,12 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter+Tight:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,400&family=Inter:ital,opsz,wght@0,14..32,300;0,14..32,400;0,14..32,500;0,14..32,600;0,14..32,700;0,14..32,800;0,14..32,900;1,14..32,400&family=JetBrains+Mono:wght@400;500&display=swap');
 @import "tailwindcss";
+@import "tw-animate-css";
+
+/* Fonts loaded via <link> in app/layout.tsx (Google Fonts, browser-fetched) */
+:root {
+  --font-inter: 'Inter', system-ui, sans-serif;
+  --font-inter-tight: 'Inter Tight', system-ui, sans-serif;
+  --font-jetbrains-mono: 'JetBrains Mono', ui-monospace, monospace;
+}
 
 /* ─── Design Tokens (Nebula — default) ───────────────────────────────────────── */
 :root, [data-theme="nebula"] {
@@ -42,6 +49,9 @@
   --bg-input:    rgba(6, 26, 14, 0.92);
   --border:      rgba(16, 185, 129, 0.22);
   --border-hover:rgba(52, 211, 153, 0.55);
+  /* Overrides the inherited --text-muted (#4b5880, 2.59:1 on this bg) — WCAG
+     AA contrast fix, same hue family, lightened to clear 4.5:1. */
+  --text-muted:  #717fac;
   --accent:          #10b981;
   --accent-bright:   #34d399;
   --accent-dark:     #059669;
@@ -61,32 +71,6 @@
   --orb-4: rgba(6, 182, 212, 0.35);
 }
 
-/* ─── Solar Flare ────────────────────────────────────────────────────────────── */
-[data-theme="solar"] {
-  --bg-base:     #1a0d00;
-  --bg-card:     rgba(38, 20, 0, 0.75);
-  --bg-elevated: rgba(52, 28, 0, 0.88);
-  --bg-input:    rgba(30, 16, 0, 0.92);
-  --border:      rgba(245, 158, 11, 0.22);
-  --border-hover:rgba(251, 191, 36, 0.55);
-  --accent:          #f59e0b;
-  --accent-bright:   #fbbf24;
-  --accent-dark:     #d97706;
-  --accent-deep:     #92400e;
-  --accent-hover:    #e99408;
-  --accent-hover-deep:#b45309;
-  --accent-secondary:#f97316;
-  --glow-accent:       rgba(245, 158, 11, 0.65);
-  --glow-accent-lg:    rgba(245, 158, 11, 0.85);
-  --glow-card:         rgba(245, 158, 11, 0.30);
-  --card-hover-ring:   rgba(251, 191, 36, 0.18);
-  --input-ring:        rgba(245, 158, 11, 0.25);
-  --btn-border:        rgba(251, 191, 36, 0.60);
-  --orb-1: rgba(180, 83, 9, 0.65);
-  --orb-2: rgba(249, 115, 22, 0.52);
-  --orb-3: rgba(245, 158, 11, 0.58);
-  --orb-4: rgba(239, 68, 68, 0.38);
-}
 
 /* ─── Ocean Depth ────────────────────────────────────────────────────────────── */
 [data-theme="ocean"] {
@@ -96,6 +80,9 @@
   --bg-input:    rgba(4, 20, 36, 0.92);
   --border:      rgba(59, 130, 246, 0.22);
   --border-hover:rgba(96, 165, 250, 0.55);
+  /* Overrides the inherited --text-muted (#4b5880, 2.65:1 on this bg) — WCAG
+     AA contrast fix, same hue family, lightened to clear 4.5:1. */
+  --text-muted:  #6f7eab;
   --accent:          #3b82f6;
   --accent-bright:   #60a5fa;
   --accent-dark:     #1d4ed8;
@@ -115,167 +102,11 @@
   --orb-4: rgba(20, 184, 166, 0.38);
 }
 
-/* ─── Rose Noir ──────────────────────────────────────────────────────────────── */
-[data-theme="rose-noir"] {
-  --bg-base:     #200410;
-  --bg-card:     rgba(40, 6, 20, 0.75);
-  --bg-elevated: rgba(55, 8, 28, 0.88);
-  --bg-input:    rgba(32, 5, 16, 0.92);
-  --border:      rgba(244, 63, 94, 0.22);
-  --border-hover:rgba(251, 113, 133, 0.55);
-  --accent:          #f43f5e;
-  --accent-bright:   #fb7185;
-  --accent-dark:     #be123c;
-  --accent-deep:     #881337;
-  --accent-hover:    #e83a57;
-  --accent-hover-deep:#9f1239;
-  --accent-secondary:#ec4899;
-  --glow-accent:       rgba(244, 63, 94, 0.65);
-  --glow-accent-lg:    rgba(244, 63, 94, 0.85);
-  --glow-card:         rgba(244, 63, 94, 0.30);
-  --card-hover-ring:   rgba(251, 113, 133, 0.18);
-  --input-ring:        rgba(244, 63, 94, 0.25);
-  --btn-border:        rgba(251, 113, 133, 0.60);
-  --orb-1: rgba(190, 18, 60, 0.62);
-  --orb-2: rgba(236, 72, 153, 0.50);
-  --orb-3: rgba(244, 63, 94, 0.58);
-  --orb-4: rgba(168, 85, 247, 0.35);
-}
 
-/* ─── Matrix ─────────────────────────────────────────────────────────────────── */
-[data-theme="matrix"] {
-  --bg-base:     #001a00;
-  --bg-card:     rgba(0, 28, 0, 0.78);
-  --bg-elevated: rgba(0, 40, 0, 0.90);
-  --bg-input:    rgba(0, 22, 0, 0.94);
-  --border:      rgba(34, 197, 94, 0.22);
-  --border-hover:rgba(74, 222, 128, 0.55);
-  --accent:          #22c55e;
-  --accent-bright:   #4ade80;
-  --accent-dark:     #15803d;
-  --accent-deep:     #14532d;
-  --accent-hover:    #1db853;
-  --accent-hover-deep:#166534;
-  --accent-secondary:#86efac;
-  --glow-accent:       rgba(34, 197, 94, 0.65);
-  --glow-accent-lg:    rgba(34, 197, 94, 0.85);
-  --glow-card:         rgba(34, 197, 94, 0.30);
-  --card-hover-ring:   rgba(74, 222, 128, 0.18);
-  --input-ring:        rgba(34, 197, 94, 0.25);
-  --btn-border:        rgba(74, 222, 128, 0.60);
-  --orb-1: rgba(21, 128, 61, 0.68);
-  --orb-2: rgba(34, 197, 94, 0.52);
-  --orb-3: rgba(74, 222, 128, 0.48);
-  --orb-4: rgba(20, 184, 166, 0.32);
-}
 
-/* ─── Midnight ───────────────────────────────────────────────────────────────── */
-[data-theme="midnight"] {
-  --bg-base:     #020830;
-  --bg-card:     rgba(4, 14, 52, 0.78);
-  --bg-elevated: rgba(6, 20, 68, 0.90);
-  --bg-input:    rgba(3, 11, 44, 0.94);
-  --border:      rgba(37, 99, 235, 0.22);
-  --border-hover:rgba(96, 165, 250, 0.55);
-  --accent:          #2563eb;
-  --accent-bright:   #60a5fa;
-  --accent-dark:     #1d4ed8;
-  --accent-deep:     #1e3a8a;
-  --accent-hover:    #2262d4;
-  --accent-hover-deep:#1e40af;
-  --accent-secondary:#818cf8;
-  --glow-accent:       rgba(37, 99, 235, 0.65);
-  --glow-accent-lg:    rgba(37, 99, 235, 0.85);
-  --glow-card:         rgba(37, 99, 235, 0.30);
-  --card-hover-ring:   rgba(96, 165, 250, 0.18);
-  --input-ring:        rgba(37, 99, 235, 0.25);
-  --btn-border:        rgba(96, 165, 250, 0.60);
-  --orb-1: rgba(30, 58, 138, 0.68);
-  --orb-2: rgba(37, 99, 235, 0.55);
-  --orb-3: rgba(96, 165, 250, 0.45);
-  --orb-4: rgba(79, 70, 229, 0.52);
-}
 
-/* ─── Crimson ────────────────────────────────────────────────────────────────── */
-[data-theme="crimson"] {
-  --bg-base:     #200003;
-  --bg-card:     rgba(40, 0, 6, 0.78);
-  --bg-elevated: rgba(55, 0, 9, 0.90);
-  --bg-input:    rgba(32, 0, 5, 0.94);
-  --border:      rgba(239, 68, 68, 0.22);
-  --border-hover:rgba(248, 113, 113, 0.55);
-  --accent:          #ef4444;
-  --accent-bright:   #f87171;
-  --accent-dark:     #b91c1c;
-  --accent-deep:     #7f1d1d;
-  --accent-hover:    #e03e3e;
-  --accent-hover-deep:#991b1b;
-  --accent-secondary:#f43f5e;
-  --glow-accent:       rgba(239, 68, 68, 0.65);
-  --glow-accent-lg:    rgba(239, 68, 68, 0.85);
-  --glow-card:         rgba(239, 68, 68, 0.30);
-  --card-hover-ring:   rgba(248, 113, 113, 0.18);
-  --input-ring:        rgba(239, 68, 68, 0.25);
-  --btn-border:        rgba(248, 113, 113, 0.60);
-  --orb-1: rgba(185, 28, 28, 0.65);
-  --orb-2: rgba(239, 68, 68, 0.52);
-  --orb-3: rgba(248, 113, 113, 0.45);
-  --orb-4: rgba(244, 63, 94, 0.48);
-}
 
-/* ─── Cyber Gold ─────────────────────────────────────────────────────────────── */
-[data-theme="cyber-gold"] {
-  --bg-base:     #140e00;
-  --bg-card:     rgba(28, 18, 0, 0.78);
-  --bg-elevated: rgba(42, 26, 0, 0.90);
-  --bg-input:    rgba(22, 14, 0, 0.94);
-  --border:      rgba(234, 179, 8, 0.22);
-  --border-hover:rgba(250, 204, 21, 0.55);
-  --accent:          #eab308;
-  --accent-bright:   #facc15;
-  --accent-dark:     #a16207;
-  --accent-deep:     #713f12;
-  --accent-hover:    #d4a308;
-  --accent-hover-deep:#854d0e;
-  --accent-secondary:#f97316;
-  --glow-accent:       rgba(234, 179, 8, 0.65);
-  --glow-accent-lg:    rgba(234, 179, 8, 0.85);
-  --glow-card:         rgba(234, 179, 8, 0.30);
-  --card-hover-ring:   rgba(250, 204, 21, 0.18);
-  --input-ring:        rgba(234, 179, 8, 0.25);
-  --btn-border:        rgba(250, 204, 21, 0.60);
-  --orb-1: rgba(161, 98, 7, 0.68);
-  --orb-2: rgba(249, 115, 22, 0.52);
-  --orb-3: rgba(234, 179, 8, 0.62);
-  --orb-4: rgba(239, 68, 68, 0.32);
-}
 
-/* ─── Glacier ────────────────────────────────────────────────────────────────── */
-[data-theme="glacier"] {
-  --bg-base:     #031525;
-  --bg-card:     rgba(5, 24, 42, 0.75);
-  --bg-elevated: rgba(8, 35, 58, 0.88);
-  --bg-input:    rgba(4, 20, 35, 0.92);
-  --border:      rgba(14, 165, 233, 0.22);
-  --border-hover:rgba(56, 189, 248, 0.55);
-  --accent:          #0ea5e9;
-  --accent-bright:   #38bdf8;
-  --accent-dark:     #0284c7;
-  --accent-deep:     #0c4a6e;
-  --accent-hover:    #0d9cd8;
-  --accent-hover-deep:#0369a1;
-  --accent-secondary:#67e8f9;
-  --glow-accent:       rgba(14, 165, 233, 0.65);
-  --glow-accent-lg:    rgba(14, 165, 233, 0.85);
-  --glow-card:         rgba(14, 165, 233, 0.30);
-  --card-hover-ring:   rgba(56, 189, 248, 0.18);
-  --input-ring:        rgba(14, 165, 233, 0.25);
-  --btn-border:        rgba(56, 189, 248, 0.60);
-  --orb-1: rgba(12, 74, 110, 0.65);
-  --orb-2: rgba(14, 165, 233, 0.55);
-  --orb-3: rgba(56, 189, 248, 0.48);
-  --orb-4: rgba(103, 232, 249, 0.38);
-}
 
 /* ─── Violet Storm ───────────────────────────────────────────────────────────── */
 [data-theme="violet-storm"] {
@@ -285,6 +116,9 @@
   --bg-input:    rgba(16, 0, 40, 0.94);
   --border:      rgba(139, 92, 246, 0.22);
   --border-hover:rgba(167, 139, 250, 0.55);
+  /* Overrides the inherited --text-muted (#4b5880, 2.87:1 on this bg) — WCAG
+     AA contrast fix, same hue family, lightened to clear 4.5:1. */
+  --text-muted:  #6878a7;
   --accent:          #8b5cf6;
   --accent-bright:   #a78bfa;
   --accent-dark:     #6d28d9;
@@ -304,32 +138,6 @@
   --orb-4: rgba(236, 72, 153, 0.35);
 }
 
-/* ─── Neon Punk ──────────────────────────────────────────────────────────────── */
-[data-theme="neon-punk"] {
-  --bg-base:     #120025;
-  --bg-card:     rgba(22, 0, 44, 0.78);
-  --bg-elevated: rgba(32, 0, 60, 0.90);
-  --bg-input:    rgba(18, 0, 38, 0.94);
-  --border:      rgba(217, 70, 239, 0.22);
-  --border-hover:rgba(232, 121, 249, 0.55);
-  --accent:          #d946ef;
-  --accent-bright:   #e879f9;
-  --accent-dark:     #a21caf;
-  --accent-deep:     #701a75;
-  --accent-hover:    #cc40e5;
-  --accent-hover-deep:#86198f;
-  --accent-secondary:#4ade80;
-  --glow-accent:       rgba(217, 70, 239, 0.65);
-  --glow-accent-lg:    rgba(217, 70, 239, 0.85);
-  --glow-card:         rgba(217, 70, 239, 0.30);
-  --card-hover-ring:   rgba(232, 121, 249, 0.18);
-  --input-ring:        rgba(217, 70, 239, 0.25);
-  --btn-border:        rgba(232, 121, 249, 0.60);
-  --orb-1: rgba(162, 28, 175, 0.68);
-  --orb-2: rgba(74, 222, 128, 0.48);
-  --orb-3: rgba(217, 70, 239, 0.62);
-  --orb-4: rgba(251, 191, 36, 0.28);
-}
 
 /* ═══════════════════════════════════════════════════════════════════════════════
    SCENE BACKGROUNDS — each theme gets a unique visual composition
@@ -370,18 +178,6 @@
     radial-gradient(ellipse 50% 40% at 80% 70%, rgba(6,182,212,0.28) 0%, transparent 55%);
 }
 
-/* ☀️ Solar Flare — warm desert sunset */
-[data-theme="solar"] body {
-  background-color: #1a0d00;
-  background-image:
-    radial-gradient(ellipse 50% 30% at 50% 115%, rgba(251,191,36,0.55) 0%, transparent 65%),
-    radial-gradient(ellipse 75% 40% at 50% 105%, rgba(249,115,22,0.45) 0%, transparent 68%),
-    radial-gradient(ellipse 95% 55% at 50% 100%, rgba(239,68,68,0.35) 0%, transparent 72%),
-    radial-gradient(ellipse 100% 25% at 50% 88%, rgba(245,158,11,0.30) 0%, transparent 60%),
-    radial-gradient(ellipse 80% 60% at 10% -10%, rgba(180,83,9,0.55) 0%, transparent 65%),
-    radial-gradient(ellipse 60% 50% at 90% 15%, rgba(249,115,22,0.42) 0%, transparent 60%),
-    radial-gradient(ellipse 40% 40% at 80% 70%, rgba(239,68,68,0.30) 0%, transparent 55%);
-}
 
 /* 🌊 Ocean Depth — deep sea with bioluminescence */
 [data-theme="ocean"] body {
@@ -397,108 +193,11 @@
     radial-gradient(ellipse 40% 40% at 80% 70%, rgba(20,184,166,0.30) 0%, transparent 55%);
 }
 
-/* 🌹 Rose Noir — dark gothic rose */
-[data-theme="rose-noir"] body {
-  background-color: #200410;
-  background-image:
-    radial-gradient(ellipse 55% 45% at 25% 55%, rgba(244,63,94,0.40) 0%, transparent 60%),
-    radial-gradient(ellipse 45% 35% at 75% 30%, rgba(236,72,153,0.35) 0%, transparent 55%),
-    radial-gradient(ellipse 35% 25% at 60% 75%, rgba(251,113,133,0.28) 0%, transparent 50%),
-    radial-gradient(ellipse 80% 60% at 10% -10%, rgba(190,18,60,0.55) 0%, transparent 65%),
-    radial-gradient(ellipse 60% 50% at 90% 15%, rgba(236,72,153,0.42) 0%, transparent 60%),
-    radial-gradient(ellipse 70% 60% at 50% 110%, rgba(244,63,94,0.50) 0%, transparent 65%),
-    radial-gradient(ellipse 40% 40% at 80% 70%, rgba(168,85,247,0.28) 0%, transparent 55%);
-}
 
-/* 💚 Matrix — terminal with scan lines + green glow */
-[data-theme="matrix"] body {
-  background-color: #001a00;
-  background-image:
-    repeating-linear-gradient(
-      0deg,
-      transparent 0px, transparent 3px,
-      rgba(34,197,94,0.025) 3px, rgba(34,197,94,0.025) 4px
-    ),
-    radial-gradient(ellipse 55% 30% at 50% 105%, rgba(34,197,94,0.55) 0%, transparent 68%),
-    radial-gradient(ellipse 35% 20% at 15% 75%, rgba(74,222,128,0.38) 0%, transparent 58%),
-    radial-gradient(ellipse 25% 18% at 80% 60%, rgba(34,197,94,0.30) 0%, transparent 52%),
-    radial-gradient(ellipse 80% 60% at 10% -10%, rgba(21,128,61,0.58) 0%, transparent 65%),
-    radial-gradient(ellipse 60% 50% at 90% 15%, rgba(34,197,94,0.45) 0%, transparent 60%),
-    radial-gradient(ellipse 70% 60% at 50% 110%, rgba(74,222,128,0.48) 0%, transparent 65%),
-    radial-gradient(ellipse 40% 40% at 80% 70%, rgba(20,184,166,0.25) 0%, transparent 50%);
-}
 
-/* 🌙 Midnight — starry night with moon */
-[data-theme="midnight"] body {
-  background-color: #020830;
-  background-image:
-    radial-gradient(1px 1px at 18% 18%, rgba(255,255,255,0.90) 0%, transparent 100%),
-    radial-gradient(1px 1px at 58% 9%, rgba(255,255,255,0.75) 0%, transparent 100%),
-    radial-gradient(1px 1px at 83% 28%, rgba(255,255,255,0.80) 0%, transparent 100%),
-    radial-gradient(1px 1px at 38% 48%, rgba(255,255,255,0.65) 0%, transparent 100%),
-    radial-gradient(1px 1px at 12% 73%, rgba(255,255,255,0.72) 0%, transparent 100%),
-    radial-gradient(1px 1px at 68% 62%, rgba(255,255,255,0.82) 0%, transparent 100%),
-    radial-gradient(1px 1px at 33% 88%, rgba(255,255,255,0.68) 0%, transparent 100%),
-    radial-gradient(2px 2px at 52% 42%, rgba(255,255,255,0.55) 0%, transparent 100%),
-    radial-gradient(1px 1px at 90% 55%, rgba(255,255,255,0.70) 0%, transparent 100%),
-    radial-gradient(circle 100px at 82% 12%, rgba(200,220,255,0.42) 0%, rgba(130,160,255,0.18) 50%, transparent 80%),
-    radial-gradient(ellipse 80% 60% at 10% -10%, rgba(30,58,138,0.58) 0%, transparent 65%),
-    radial-gradient(ellipse 60% 50% at 90% 15%, rgba(37,99,235,0.45) 0%, transparent 60%),
-    radial-gradient(ellipse 70% 60% at 50% 110%, rgba(96,165,250,0.40) 0%, transparent 65%),
-    radial-gradient(ellipse 40% 40% at 80% 70%, rgba(79,70,229,0.45) 0%, transparent 55%);
-}
 
-/* 🔴 Crimson — volcanic lava */
-[data-theme="crimson"] body {
-  background-color: #200003;
-  background-image:
-    radial-gradient(ellipse 45% 22% at 50% 115%, rgba(251,191,36,0.30) 0%, transparent 60%),
-    radial-gradient(ellipse 65% 32% at 50% 108%, rgba(249,115,22,0.38) 0%, transparent 65%),
-    radial-gradient(ellipse 80% 45% at 50% 102%, rgba(239,68,68,0.45) 0%, transparent 70%),
-    radial-gradient(ellipse 60% 35% at 50% 95%, rgba(185,28,28,0.40) 0%, transparent 65%),
-    radial-gradient(ellipse 80% 60% at 10% -10%, rgba(185,28,28,0.58) 0%, transparent 65%),
-    radial-gradient(ellipse 60% 50% at 90% 15%, rgba(239,68,68,0.45) 0%, transparent 60%),
-    radial-gradient(ellipse 70% 60% at 50% 110%, rgba(248,113,113,0.42) 0%, transparent 65%),
-    radial-gradient(ellipse 40% 40% at 80% 70%, rgba(244,63,94,0.38) 0%, transparent 55%);
-}
 
-/* ⚡ Cyber Gold — cyberpunk city grid */
-[data-theme="cyber-gold"] body {
-  background-color: #140e00;
-  background-image:
-    repeating-linear-gradient(
-      0deg,
-      transparent 0px, transparent 44px,
-      rgba(234,179,8,0.06) 44px, rgba(234,179,8,0.06) 45px
-    ),
-    repeating-linear-gradient(
-      90deg,
-      transparent 0px, transparent 44px,
-      rgba(234,179,8,0.06) 44px, rgba(234,179,8,0.06) 45px
-    ),
-    radial-gradient(ellipse 70% 28% at 50% 108%, rgba(234,179,8,0.52) 0%, transparent 65%),
-    radial-gradient(ellipse 50% 20% at 30% 92%, rgba(249,115,22,0.38) 0%, transparent 58%),
-    radial-gradient(ellipse 40% 18% at 72% 88%, rgba(251,191,36,0.35) 0%, transparent 55%),
-    radial-gradient(ellipse 80% 60% at 10% -10%, rgba(161,98,7,0.58) 0%, transparent 65%),
-    radial-gradient(ellipse 60% 50% at 90% 15%, rgba(249,115,22,0.46) 0%, transparent 60%),
-    radial-gradient(ellipse 70% 60% at 50% 110%, rgba(234,179,8,0.55) 0%, transparent 65%),
-    radial-gradient(ellipse 40% 40% at 80% 70%, rgba(239,68,68,0.25) 0%, transparent 52%);
-}
 
-/* 🧊 Glacier — arctic ice with light rays */
-[data-theme="glacier"] body {
-  background-color: #031525;
-  background-image:
-    linear-gradient(180deg, rgba(56,189,248,0.22) 0%, transparent 30%),
-    radial-gradient(ellipse 38% 18% at 22% 2%, rgba(103,232,249,0.38) 0%, transparent 65%),
-    radial-gradient(ellipse 32% 14% at 68% 6%, rgba(56,189,248,0.32) 0%, transparent 60%),
-    radial-gradient(ellipse 22% 10% at 45% 12%, rgba(14,165,233,0.28) 0%, transparent 55%),
-    radial-gradient(ellipse 65% 30% at 50% 105%, rgba(14,165,233,0.42) 0%, transparent 65%),
-    radial-gradient(ellipse 80% 60% at 10% -10%, rgba(12,74,110,0.55) 0%, transparent 65%),
-    radial-gradient(ellipse 60% 50% at 90% 15%, rgba(14,165,233,0.48) 0%, transparent 60%),
-    radial-gradient(ellipse 70% 60% at 50% 110%, rgba(56,189,248,0.44) 0%, transparent 65%),
-    radial-gradient(ellipse 40% 40% at 80% 70%, rgba(103,232,249,0.32) 0%, transparent 55%);
-}
 
 /* 🔮 Violet Storm — cosmic purple lightning */
 [data-theme="violet-storm"] body {
@@ -515,28 +214,6 @@
     radial-gradient(ellipse 40% 40% at 80% 70%, rgba(236,72,153,0.28) 0%, transparent 55%);
 }
 
-/* 🎆 Neon Punk — synthwave grid with neon horizon */
-[data-theme="neon-punk"] body {
-  background-color: #120025;
-  background-image:
-    repeating-linear-gradient(
-      0deg,
-      transparent 0px, transparent 38px,
-      rgba(217,70,239,0.06) 38px, rgba(217,70,239,0.06) 39px
-    ),
-    repeating-linear-gradient(
-      90deg,
-      transparent 0px, transparent 38px,
-      rgba(217,70,239,0.06) 38px, rgba(217,70,239,0.06) 39px
-    ),
-    linear-gradient(180deg, transparent 55%, rgba(217,70,239,0.18) 72%, rgba(74,222,128,0.22) 78%, transparent 84%),
-    radial-gradient(ellipse 55% 28% at 28% 100%, rgba(217,70,239,0.52) 0%, transparent 68%),
-    radial-gradient(ellipse 48% 24% at 75% 100%, rgba(74,222,128,0.42) 0%, transparent 62%),
-    radial-gradient(ellipse 80% 60% at 10% -10%, rgba(162,28,175,0.58) 0%, transparent 65%),
-    radial-gradient(ellipse 60% 50% at 90% 15%, rgba(74,222,128,0.36) 0%, transparent 60%),
-    radial-gradient(ellipse 70% 60% at 50% 110%, rgba(217,70,239,0.55) 0%, transparent 65%),
-    radial-gradient(ellipse 40% 40% at 80% 70%, rgba(251,191,36,0.22) 0%, transparent 52%);
-}
 
 /* ─── Base ───────────────────────────────────────────────────────────────────── */
 *, *::before, *::after { box-sizing: border-box; }
@@ -545,7 +222,7 @@ html { scroll-behavior: smooth; }
 body {
   background-color: var(--bg-base);
   color: var(--text-primary);
-  font-family: "Inter", system-ui, sans-serif;
+  font-family: var(--font-inter), system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   min-height: 100vh;
@@ -1151,98 +828,12 @@ body { overflow-x: hidden; }
    Based on: JobINtel · Dark cinematic landing — Vision-Pro-meets-Linear
    ═══════════════════════════════════════════════════════════════════════════════ */
 
-[data-theme="cinematic"] {
-  /* Surface stack */
-  --bg-base:     #07070A;
-  --bg-card:     rgba(30,30,38,0.75);
-  --bg-elevated: rgba(21,21,27,0.90);
-  --bg-input:    rgba(12,12,16,0.96);
 
-  /* Lines */
-  --border:      rgba(255,255,255,0.07);
-  --border-hover:rgba(245,166,35,0.40);
 
-  /* Ink */
-  --text-primary:   #F5F2EC;
-  --text-secondary: #C5C1B8;
-  --text-muted:     #5A574F;
 
-  /* Amber accent */
-  --accent:           #F5A623;
-  --accent-bright:    #FF8A3D;
-  --accent-dark:      #C4761A;
-  --accent-deep:      #8B5514;
-  --accent-hover:     #F0A020;
-  --accent-hover-deep:#A06010;
-  --accent-secondary: #FF6B35;
-
-  /* Glows */
-  --glow-accent:     rgba(245,166,35,0.35);
-  --glow-accent-lg:  rgba(245,166,35,0.60);
-  --glow-card:       rgba(245,166,35,0.15);
-  --card-hover-ring: rgba(245,166,35,0.12);
-  --input-ring:      rgba(245,166,35,0.18);
-  --btn-border:      rgba(245,166,35,0.55);
-
-  /* Orbs */
-  --orb-1: rgba(196,118,26,0.45);
-  --orb-2: rgba(245,166,35,0.28);
-  --orb-3: rgba(255,138,61,0.35);
-  --orb-4: rgba(139,92,246,0.20);
-
-  /* Design system tokens */
-  --bg:         #07070A;
-  --bg-1:       #0C0C10;
-  --bg-2:       #15151B;
-  --bg-3:       #1D1D26;
-  --line:       rgba(255,255,255,0.07);
-  --line-2:     rgba(255,255,255,0.12);
-  --ink:        #F5F2EC;
-  --ink-2:      #C5C1B8;
-  --ink-3:      #8A867C;
-  --ink-4:      #5A574F;
-  --amber:      #F5A623;
-  --amber-2:    #FF8A3D;
-  --amber-deep: #C4761A;
-  --amber-glow: rgba(245,166,35,0.35);
-  --violet:     #8B5CF6;
-  --cyan:       #22D3EE;
-  --green:      #4ADE80;
-  --ff-display: "Inter Tight","Inter",-apple-system,BlinkMacSystemFont,system-ui,sans-serif;
-  --ff-text:    "Inter",-apple-system,system-ui,sans-serif;
-  --ff-mono:    "JetBrains Mono",ui-monospace,"SFMono-Regular",Menlo,monospace;
-  --e-out:    cubic-bezier(0.2,0.8,0.2,1);
-  --e-spring: cubic-bezier(0.34,1.3,0.5,1);
-}
-
-/* Cinematic body — pure dark with dual ambient glows (amber top-left, violet bottom-right) */
-[data-theme="cinematic"] body {
-  background-color: #07070A;
-  font-feature-settings: "ss01","cv11";
-  letter-spacing: -0.003em;
-}
-
-[data-theme="cinematic"] body::before {
-  content: "";
-  position: fixed;
-  inset: -20%;
-  background:
-    radial-gradient(ellipse 40% 30% at 20% 10%, rgba(245,166,35,0.08), transparent 60%),
-    radial-gradient(ellipse 50% 40% at 80% 80%, rgba(139,92,246,0.06), transparent 60%);
-  pointer-events: none;
-  z-index: 0;
-}
-
-/* ─── Cinematic Typography ────────────────────────────────────────────────────── */
-[data-theme="cinematic"] h1,
-[data-theme="cinematic"] h2,
-[data-theme="cinematic"] h3 {
-  font-family: "Inter Tight","Inter",system-ui,sans-serif;
-  letter-spacing: -0.025em;
-}
 
 .display {
-  font-family: var(--ff-display, "Inter Tight","Inter",system-ui,sans-serif);
+  font-family: var(--ff-display, var(--font-inter-tight),var(--font-inter),system-ui,sans-serif);
   font-weight: 600;
   letter-spacing: -0.03em;
   line-height: 0.98;
@@ -1252,16 +843,9 @@ body { overflow-x: hidden; }
 .display-lg { font-size: clamp(56px, 8vw, 136px); }
 .display-xl { font-size: clamp(72px, 11vw, 200px); }
 
-/* Cinematic gradient text — vertical ink-to-amber fade */
-[data-theme="cinematic"] .gradient-text {
-  background: linear-gradient(180deg, var(--ink, #F5F2EC) 0%, var(--ink, #F5F2EC) 40%, var(--amber, #F5A623) 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
-}
 
 .amber-text { color: var(--amber, #F5A623); }
-.mono       { font-family: var(--ff-mono, "JetBrains Mono",monospace); }
+.mono       { font-family: var(--ff-mono, var(--font-jetbrains-mono),monospace); }
 .num        { font-variant-numeric: tabular-nums; }
 
 .lede {
@@ -1274,7 +858,7 @@ body { overflow-x: hidden; }
 }
 
 .eyebrow {
-  font-family: var(--ff-mono, "JetBrains Mono",monospace);
+  font-family: var(--ff-mono, var(--font-jetbrains-mono),monospace);
   font-size: 11px;
   letter-spacing: 0.22em;
   text-transform: uppercase;
@@ -1357,22 +941,6 @@ body { overflow-x: hidden; }
   color: var(--ink-4, #5A574F); letter-spacing: 0.06em;
 }
 
-/* ─── Card variants ──────────────────────────────────────────────────────────── */
-[data-theme="cinematic"] .card {
-  background: linear-gradient(180deg, rgba(30,30,38,0.60), rgba(20,20,26,0.60));
-  border-color: var(--line);
-}
-[data-theme="cinematic"] .card.glow {
-  border-color: rgba(245,166,35,0.30);
-  box-shadow: 0 0 40px -10px var(--amber-glow), inset 0 1px 0 rgba(255,255,255,0.04);
-}
-[data-theme="cinematic"] .card:hover {
-  border-color: rgba(245,166,35,0.22);
-  box-shadow:
-    0 0 0 1px rgba(245,166,35,0.08),
-    0 8px 32px -4px rgba(245,166,35,0.12),
-    0 2px 8px -2px rgba(0,0,0,0.6);
-}
 .card-head {
   display: flex; justify-content: space-between; align-items: center;
   padding: 14px 18px;
@@ -1385,27 +953,13 @@ body { overflow-x: hidden; }
 }
 .card-body { padding: 18px; }
 
-/* ─── Cinematic Button Overrides ─────────────────────────────────────────────── */
-[data-theme="cinematic"] .btn-primary {
-  background: linear-gradient(180deg, var(--amber, #F5A623) 0%, var(--amber-deep, #C4761A) 100%);
-  border-color: rgba(245,166,35,0.55);
-  color: #1A0F00;
-  font-weight: 600;
-  font-family: var(--ff-display, "Inter Tight","Inter",sans-serif);
-  border-radius: 999px;
-  box-shadow: 0 10px 40px -12px var(--amber-glow), inset 0 1px 0 rgba(255,255,255,0.2);
-}
-[data-theme="cinematic"] .btn-primary:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 16px 50px -12px rgba(245,166,35,0.5), inset 0 1px 0 rgba(255,255,255,0.3);
-}
 
 /* Ghost button */
 .btn-ghost {
   display: inline-flex; align-items: center; gap: 8px;
   padding: 11px 20px;
   border-radius: 999px;
-  font-family: var(--ff-display, "Inter Tight","Inter",sans-serif);
+  font-family: var(--ff-display, var(--font-inter-tight),var(--font-inter),sans-serif);
   font-size: 14px;
   font-weight: 500;
   letter-spacing: -0.005em;
@@ -1420,34 +974,8 @@ body { overflow-x: hidden; }
 .btn-ghost:hover { background: rgba(255,255,255,0.08); }
 .btn-sm { padding: 7px 14px; font-size: 12.5px; }
 
-/* ─── Cinematic Input Overrides ──────────────────────────────────────────────── */
-[data-theme="cinematic"] .input {
-  background: var(--bg-1, #0C0C10);
-  border-color: var(--line);
-  color: var(--ink);
-}
-[data-theme="cinematic"] .input:focus {
-  border-color: var(--amber);
-  box-shadow: 0 0 0 3px rgba(245,166,35,0.12), 0 0 20px -8px rgba(245,166,35,0.2);
-}
-[data-theme="cinematic"] .input::placeholder {
-  color: var(--ink-4);
-}
 
-/* ─── Cinematic Sidebar ──────────────────────────────────────────────────────── */
-[data-theme="cinematic"] aside {
-  background: rgba(7,7,10,0.92) !important;
-  border-right-color: rgba(255,255,255,0.06) !important;
-  box-shadow: 4px 0 40px -8px rgba(0,0,0,0.8);
-}
 
-/* ─── Cinematic Scrollbar ────────────────────────────────────────────────────── */
-[data-theme="cinematic"] ::-webkit-scrollbar-thumb {
-  background: linear-gradient(180deg, #C4761A, #F5A623);
-}
-[data-theme="cinematic"] ::-webkit-scrollbar-thumb:hover {
-  background: #FF8A3D;
-}
 
 /* ─── Scroll Progress Bar ────────────────────────────────────────────────────── */
 .scroll-progress {
@@ -1596,7 +1124,7 @@ body { overflow-x: hidden; }
 .terminal-window {
   border-radius: 0.75rem;
   overflow: hidden;
-  font-family: var(--ff-mono, "JetBrains Mono",monospace);
+  font-family: var(--ff-mono, var(--font-jetbrains-mono),monospace);
   font-size: 0.78rem;
 }
 .terminal-prompt::before { content: '$ '; color: var(--amber, #F5A623); }
@@ -1628,7 +1156,7 @@ svg.mc-curve .marker { stroke-width: 1; stroke-dasharray: 3 3; }
   box-shadow: 0 40px 80px -20px rgba(0,0,0,0.6);
 }
 .resume-paper h3 {
-  font-family: var(--ff-display, "Inter Tight","Inter",sans-serif);
+  font-family: var(--ff-display, var(--font-inter-tight),var(--font-inter),sans-serif);
   font-size: 26px;
   color: var(--ink, #F5F2EC);
   margin: 0 0 2px;
@@ -1698,7 +1226,7 @@ svg.mc-curve .marker { stroke-width: 1; stroke-dasharray: 3 3; }
 .cmdk-overlay.open .cmdk-panel { transform: translateY(0) scale(1); }
 .cmdk-panel input {
   width: 100%; border: 0; outline: 0; background: transparent;
-  font-family: var(--ff-display, "Inter Tight","Inter",sans-serif);
+  font-family: var(--ff-display, var(--font-inter-tight),var(--font-inter),sans-serif);
   font-size: 22px;
   padding: 22px 24px;
   color: var(--ink, #F5F2EC);
@@ -1753,7 +1281,7 @@ svg.mc-curve .marker { stroke-width: 1; stroke-dasharray: 3 3; }
 
 /* ─── Stat card ──────────────────────────────────────────────────────────────── */
 .stat-value {
-  font-family: var(--ff-display, "Inter Tight","Inter",sans-serif);
+  font-family: var(--ff-display, var(--font-inter-tight),var(--font-inter),sans-serif);
   font-size: 2.25rem;
   font-weight: 800;
   line-height: 1;
@@ -1827,7 +1355,6 @@ svg.mc-curve .marker { stroke-width: 1; stroke-dasharray: 3 3; }
 
 
 /* Enterprise appearance system - reduced theme set */
-:root,
 [data-theme="executive"] {
   --bg-base: #080b14;
   --bg-card: rgba(16, 22, 36, 0.82);
@@ -1837,7 +1364,9 @@ svg.mc-curve .marker { stroke-width: 1; stroke-dasharray: 3 3; }
   --border-hover: rgba(124, 140, 255, 0.42);
   --text-primary: #f4f7fb;
   --text-secondary: #b6c0d0;
-  --text-muted: #667085;
+  /* #667085 was 3.95:1 on --bg-base — below WCAG AA 4.5:1 for normal text.
+     Lightened within the same hue to 4.62:1. */
+  --text-muted: #707b91;
   --accent: #6678f6;
   --accent-bright: #8ea0ff;
   --accent-dark: #4655c8;
@@ -1876,7 +1405,9 @@ svg.mc-curve .marker { stroke-width: 1; stroke-dasharray: 3 3; }
   --border-hover: rgba(163, 170, 184, 0.38);
   --text-primary: #f3f4f6;
   --text-secondary: #bdc3cf;
-  --text-muted: #6b7280;
+  /* #6b7280 was 4.10:1 on --bg-base — below WCAG AA 4.5:1 for normal text.
+     Lightened within the same hue to 4.60:1. */
+  --text-muted: #737a89;
   --accent: #9aa3b2;
   --accent-bright: #d1d6df;
   --accent-dark: #6f7888;
@@ -1954,7 +1485,9 @@ svg.mc-curve .marker { stroke-width: 1; stroke-dasharray: 3 3; }
   --border-hover: rgba(245, 184, 91, 0.42);
   --text-primary: #fff8ed;
   --text-secondary: #d2c2ad;
-  --text-muted: #7a6d5d;
+  /* #7a6d5d was 3.87:1 on --bg-base — below WCAG AA 4.5:1 for normal text.
+     Lightened within the same hue to 4.60:1. */
+  --text-muted: #877967;
   --accent: #f5b85b;
   --accent-bright: #ffd28a;
   --accent-dark: #c9822d;
@@ -2075,4 +1608,442 @@ svg.mc-curve .marker { stroke-width: 1; stroke-dasharray: 3 3; }
   background: color-mix(in srgb, var(--bg-base) 92%, black 8%) !important;
   border-right-color: var(--border) !important;
   box-shadow: 12px 0 36px -30px rgba(0,0,0,0.9);
+}
+
+/* ─── shadcn/ui token bridge — reduced theme set ──────────────────────────────
+   Maps the shadcn/ui component convention (--background, --foreground,
+   --card, --primary, etc.) onto this app's existing enterprise theme tokens
+   (--bg-base, --text-primary, --bg-card, --accent, etc.) so every shadcn
+   component installed under components/ui/ automatically matches whichever
+   of the 4 real themes (executive/graphite/pacific/ember) is active, with no
+   per-component color overrides required.
+
+   NOTE: this app already has real, differently-scoped custom properties
+   named --accent and --border (the theme's brand color / hairline color).
+   Those names are intentionally NOT redeclared here — doing so would create
+   a self-referencing cycle (e.g. `--border: var(--border)` in a rule that
+   wins the cascade over the original declaration resolves to nothing) and/or
+   silently repoint every existing `.btn-primary` / `.card` / `.input` rule
+   in this file that already relies on var(--accent) / var(--border) for the
+   theme's actual brand color. Where shadcn's convention needs those exact
+   concepts, the values are read (not renamed) via var(--accent) /
+   var(--border) directly. Where shadcn's own "--accent" token (a neutral
+   hover-background, unrelated to this app's brand-color --accent) is needed,
+   it is wired straight through in the @theme inline block below instead of
+   being aliased here, for the same reason. */
+[data-theme="executive"],
+[data-theme="graphite"],
+[data-theme="pacific"],
+[data-theme="ember"] {
+  --background: var(--bg-base);
+  --foreground: var(--text-primary);
+
+  --card: var(--bg-card);
+  --card-foreground: var(--text-primary);
+
+  --popover: var(--bg-elevated);
+  --popover-foreground: var(--text-primary);
+
+  --primary: var(--accent);
+  --primary-foreground: #070a10;
+
+  --secondary: var(--bg-elevated);
+  --secondary-foreground: var(--text-secondary);
+
+  --muted: var(--bg-card);
+  --muted-foreground: var(--text-muted);
+
+  --destructive: #ef4444;
+  --destructive-foreground: #fef2f2;
+
+  --input: var(--border);
+  --ring: var(--accent);
+
+  --radius: 0.75rem;
+
+  --chart-1: var(--accent);
+  --chart-2: var(--accent-secondary);
+  --chart-3: var(--accent-bright);
+  --chart-4: var(--accent-dark);
+  --chart-5: var(--accent-deep);
+
+  --sidebar: var(--bg-elevated);
+  --sidebar-foreground: var(--text-primary);
+  --sidebar-primary: var(--accent);
+  --sidebar-primary-foreground: #070a10;
+  --sidebar-accent: var(--bg-card);
+  --sidebar-accent-foreground: var(--text-primary);
+  --sidebar-border: var(--border);
+  --sidebar-ring: var(--accent);
+}
+
+/* Registers the tokens above as Tailwind v4 utilities (bg-background,
+   text-foreground, bg-primary, text-primary-foreground, border-border,
+   ring-ring, rounded-lg, ...). `inline` keeps every reference a live
+   var(--x) lookup (re-evaluated per element at used-value time) instead of
+   a value baked in at build time, which is what lets these utilities repaint
+   correctly when [data-theme] changes at runtime. --color-accent /
+   --color-accent-foreground intentionally read var(--bg-elevated) /
+   var(--text-primary) directly (shadcn's "accent" = a subtle hover surface),
+   not var(--accent) (this app's brand color) — see note above. */
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--bg-elevated);
+  --color-accent-foreground: var(--text-primary);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════════
+   LIGHT & HIGH CONTRAST — new first-class accessible themes
+   Two genuinely-designed palettes (not inversions of an existing dark theme),
+   using the same token contract as the "Enterprise appearance system" block
+   above. Each gets its own component-override + shadcn/ui bridge section
+   below rather than joining the executive/graphite/pacific/ember group,
+   because that group's shared rules (`.btn-primary` background = accent-bright→
+   accent with near-black text, `--primary-foreground: #070a10`) were tuned for
+   that group's pale, periwinkle-ish accents. These two themes use darker/more
+   saturated accents that need white foreground text instead, so reusing that
+   group's rules verbatim would produce low-contrast buttons.
+   ═══════════════════════════════════════════════════════════════════════════════ */
+
+/* ─── Light ──────────────────────────────────────────────────────────────────── */
+[data-theme="light"] {
+  --bg-base:     #f4f5fa;
+  --bg-card:     rgba(255, 255, 255, 0.86);
+  --bg-elevated: rgba(255, 255, 255, 0.97);
+  --bg-input:    rgba(255, 255, 255, 0.99);
+  --border:      rgba(15, 23, 42, 0.12);
+  --border-hover:rgba(79, 70, 229, 0.45);
+  --text-primary:#0f172a;
+  --text-secondary:#475569;
+  --text-muted:  #64748b;
+
+  --accent:          #4f46e5;
+  /* On light surfaces "bright" has to mean "more legible", not "more
+     luminous": --accent-bright is used across the app as a *foreground/text*
+     color (active nav text, active theme label, badge/tag text, hover text).
+     A lighter indigo there would fail contrast on this theme's white/near-white
+     surfaces, so this theme intentionally makes --accent-bright *deeper* than
+     --accent — same hue family, inverted lightness relationship — while still
+     serving its usual role as "the vivid, attention-grabbing shade". */
+  --accent-bright:   #4338ca;
+  --accent-dark:     #3730a3;
+  --accent-deep:     #312e81;
+  --accent-hover:    #4338ca;
+  --accent-hover-deep:#312e81;
+  --accent-secondary:#0e7490;
+
+  --glow-accent:       rgba(79, 70, 229, 0.22);
+  --glow-accent-lg:    rgba(79, 70, 229, 0.34);
+  --glow-card:         rgba(79, 70, 229, 0.14);
+  --card-hover-ring:   rgba(79, 70, 229, 0.14);
+  --input-ring:        rgba(79, 70, 229, 0.14);
+  --btn-border:        rgba(67, 56, 202, 0.55);
+
+  --orb-1: rgba(99, 102, 241, 0.20);
+  --orb-2: rgba(14, 116, 144, 0.16);
+  --orb-3: rgba(79, 70, 229, 0.16);
+  --orb-4: rgba(168, 85, 247, 0.14);
+
+  --bg: var(--bg-base);
+  --bg-1: #eef0f7;
+  --bg-2: #e4e7f1;
+  --bg-3: #d8dced;
+  --line: var(--border);
+  --line-2: rgba(15, 23, 42, 0.18);
+  --ink: var(--text-primary);
+  --ink-2: var(--text-secondary);
+  --ink-3: #5b6b81;
+  --ink-4: var(--text-muted);
+  --amber: var(--accent);
+  --amber-2: var(--accent-secondary);
+  --amber-deep: var(--accent-deep);
+  --amber-glow: var(--glow-accent);
+}
+
+/* Subtle body wash instead of the cosmic orb scenes used by the 13 dark
+   "scene" themes — a clean light workspace reads better flat. */
+[data-theme="light"] body {
+  background-color: var(--bg-base);
+  background-image:
+    linear-gradient(180deg, color-mix(in srgb, var(--accent) 5%, transparent) 0%, transparent 30%),
+    linear-gradient(135deg, color-mix(in srgb, var(--accent-secondary) 4%, transparent) 0%, transparent 45%);
+  background-attachment: fixed;
+}
+[data-theme="light"] .orb { display: none; }
+
+[data-theme="light"] aside {
+  background: color-mix(in srgb, var(--bg-base) 94%, black 4%) !important;
+  box-shadow: 12px 0 36px -30px rgba(15, 23, 42, 0.18);
+}
+
+/* Legibility fixes for shared decorative classes further up this file: their
+   hardcoded stop/text colors (#34d399, #fb7185, #22d3ee, #f472b6, #60a5fa)
+   were tuned for text rendered over this app's usual dark surfaces. On this
+   theme's light surfaces those same values fall well under WCAG AA text
+   contrast, so this theme swaps in darker stops for the same classes. */
+[data-theme="light"] .gradient-text {
+  background: linear-gradient(135deg, var(--accent-bright) 0%, var(--accent-secondary) 55%, #047857 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+[data-theme="light"] .gradient-text-warm {
+  background: linear-gradient(135deg, #be185d 0%, var(--accent-bright) 50%, #1d4ed8 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+[data-theme="light"] .badge-verified {
+  background: rgba(16, 185, 129, 0.14);
+  color: #047857;
+  border-color: rgba(16, 185, 129, 0.35);
+}
+[data-theme="light"] .badge-hot {
+  background: rgba(244, 63, 94, 0.14);
+  color: #be123c;
+  border-color: rgba(244, 63, 94, 0.35);
+}
+[data-theme="light"] .badge-tech {
+  background: rgba(6, 182, 212, 0.14);
+  color: #0e7490;
+  border-color: rgba(6, 182, 212, 0.35);
+}
+
+/* ─── High Contrast (accessibility) ──────────────────────────────────────────── */
+[data-theme="high-contrast"] {
+  --bg-base:     #000000;
+  --bg-card:     rgba(13, 13, 15, 0.96);
+  --bg-elevated: rgba(23, 23, 26, 0.98);
+  --bg-input:    rgba(0, 0, 0, 0.98);
+  --border:      rgba(255, 255, 255, 0.45);
+  --border-hover:#ffffff;
+  --text-primary:#ffffff;
+  --text-secondary:#e5e7eb;
+  --text-muted:  #9ca3af;
+
+  --accent:          #1d4ed8;
+  --accent-bright:   #60a5fa;
+  --accent-dark:     #1e40af;
+  --accent-deep:     #1e3a8a;
+  --accent-hover:    #2563eb;
+  --accent-hover-deep:#1e3a8a;
+  --accent-secondary:#facc15;
+
+  --glow-accent:       rgba(37, 99, 235, 0.55);
+  --glow-accent-lg:    rgba(37, 99, 235, 0.80);
+  --glow-card:         rgba(255, 255, 255, 0.14);
+  --card-hover-ring:   rgba(255, 255, 255, 0.30);
+  --input-ring:        rgba(37, 99, 235, 0.40);
+  --btn-border:        #ffffff;
+
+  --orb-1: rgba(37, 99, 235, 0.30);
+  --orb-2: rgba(250, 204, 21, 0.18);
+  --orb-3: rgba(96, 165, 250, 0.24);
+  --orb-4: rgba(255, 255, 255, 0.10);
+
+  --bg: var(--bg-base);
+  --bg-1: #0a0a0c;
+  --bg-2: #141416;
+  --bg-3: #1e1e22;
+  --line: var(--border);
+  --line-2: rgba(255, 255, 255, 0.60);
+  --ink: var(--text-primary);
+  --ink-2: var(--text-secondary);
+  --ink-3: #d1d5db;
+  --ink-4: var(--text-muted);
+  --amber: var(--accent);
+  --amber-2: var(--accent-secondary);
+  --amber-deep: var(--accent-deep);
+  --amber-glow: var(--glow-accent);
+}
+
+/* Opts out of ambient orb/blur decoration entirely: flatter, more predictable
+   surfaces and thicker borders read better for low-vision users than moving,
+   blurred color fields with hairline edges. */
+[data-theme="high-contrast"] .orb { display: none; }
+[data-theme="high-contrast"] aside {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+[data-theme="high-contrast"] .card,
+[data-theme="high-contrast"] .glass,
+[data-theme="high-contrast"] .glass-card,
+[data-theme="high-contrast"] .kanban-col {
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  border-width: 1.5px;
+}
+[data-theme="high-contrast"] .input {
+  border-width: 1.5px;
+}
+
+/* ─── shadcn/ui token bridge — Light ───────────────────────────────────────────
+   Same technique as the executive-family bridge above, but with its own
+   --primary-foreground / --sidebar-primary-foreground: this theme's --accent
+   (#4f46e5) is a mid-dark indigo meant to carry *white* text on top, unlike
+   the executive family's paler accents which pair with dark text. */
+[data-theme="light"] {
+  --background: var(--bg-base);
+  --foreground: var(--text-primary);
+
+  --card: var(--bg-card);
+  --card-foreground: var(--text-primary);
+
+  --popover: var(--bg-elevated);
+  --popover-foreground: var(--text-primary);
+
+  --primary: var(--accent);
+  --primary-foreground: #ffffff;
+
+  --secondary: var(--bg-elevated);
+  --secondary-foreground: var(--text-secondary);
+
+  --muted: var(--bg-card);
+  --muted-foreground: var(--text-muted);
+
+  --destructive: #dc2626;
+  --destructive-foreground: #ffffff;
+
+  --input: var(--border);
+  --ring: var(--accent);
+
+  --radius: 0.75rem;
+
+  --chart-1: var(--accent);
+  --chart-2: var(--accent-secondary);
+  --chart-3: var(--accent-bright);
+  --chart-4: var(--accent-dark);
+  --chart-5: var(--accent-deep);
+
+  --sidebar: var(--bg-elevated);
+  --sidebar-foreground: var(--text-primary);
+  --sidebar-primary: var(--accent);
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: var(--bg-card);
+  --sidebar-accent-foreground: var(--text-primary);
+  --sidebar-border: var(--border);
+  --sidebar-ring: var(--accent);
+}
+
+/* ─── shadcn/ui token bridge — High Contrast ──────────────────────────────────
+   Own block for the same reason: --accent here (#1d4ed8) also needs a white
+   foreground, and --destructive uses a darker red (#b91c1c) so white text on
+   it still clears WCAG AA (~6.6:1) — the executive family's #ef4444 does not
+   (~3.5:1), which is acceptable there as a secondary/large-text use but not
+   for this theme's stricter accessibility goal. */
+[data-theme="high-contrast"] {
+  --background: var(--bg-base);
+  --foreground: var(--text-primary);
+
+  --card: var(--bg-card);
+  --card-foreground: var(--text-primary);
+
+  --popover: var(--bg-elevated);
+  --popover-foreground: var(--text-primary);
+
+  --primary: var(--accent);
+  --primary-foreground: #ffffff;
+
+  --secondary: var(--bg-elevated);
+  --secondary-foreground: var(--text-secondary);
+
+  --muted: var(--bg-card);
+  --muted-foreground: var(--text-muted);
+
+  --destructive: #b91c1c;
+  --destructive-foreground: #ffffff;
+
+  --input: var(--border);
+  --ring: var(--accent);
+
+  --radius: 0.75rem;
+
+  --chart-1: var(--accent);
+  --chart-2: var(--accent-secondary);
+  --chart-3: var(--accent-bright);
+  --chart-4: var(--accent-dark);
+  --chart-5: var(--accent-deep);
+
+  --sidebar: var(--bg-elevated);
+  --sidebar-foreground: var(--text-primary);
+  --sidebar-primary: var(--accent);
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: var(--bg-card);
+  --sidebar-accent-foreground: var(--text-primary);
+  --sidebar-border: var(--border);
+  --sidebar-ring: var(--accent);
+}
+
+/* ─── Reduced Motion ─────────────────────────────────────────────────────────────
+   Global prefers-reduced-motion override. Placed last so it wins the cascade.
+   Neutralizes essentially all CSS animations/transitions site-wide, including
+   the always-on ambient loops earlier in this file (.orb / orbFloat ~20-35s
+   infinite; .author-banner-content / tickerScroll 40s infinite; .ticker-track /
+   ticker 55s infinite) — none of those declare animation with !important, so
+   this blanket !important rule overrides them regardless of selector
+   specificity.
+   ═══════════════════════════════════════════════════════════════════════════════ */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-delay: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    transition-delay: 0.01ms !important;
+  }
+
+  html {
+    scroll-behavior: auto !important;
+  }
+
+  /* `aside`, `.card`, `.input`, and `.tag` each declare their own
+     `transition: ... !important` elsewhere in this file (macOS-style spring
+     easing). Because two `!important` declarations tie-break on specificity
+     rather than source order, those rules (specificity 0,0,1 / 0,1,0 / 0,1,0
+     / 0,1,0) beat the universal `*` selector above (specificity 0,0,0) and
+     keep animating even with reduced motion enabled. Re-declaring the same
+     selectors here — equal specificity, but later in source order — lets
+     these overrides win instead. */
+  aside,
+  .card,
+  .input,
+  .tag {
+    transition: none !important;
+  }
 }

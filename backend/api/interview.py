@@ -1,16 +1,20 @@
 import uuid
 import logging
+from datetime import datetime, timezone
 from typing import Dict, Any, List, Optional
 
 from fastapi import APIRouter, Body, HTTPException, Depends, Query
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, func
 
 from interview_coach.service import InterviewCoachService
+from interview_coach.spaced_repetition import (
+    apply_grade, next_review_at, is_due, BOX_INTERVALS_DAYS,
+)
 from core.database import get_db
 from core.auth import get_current_user_id
-from models.database import MasterStory
+from models.database import MasterStory, QuestionReviewState
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -59,6 +63,39 @@ async def mock_interview_chat(payload: MockInterviewRequest):
         target_role=payload.target_role,
         target_company=payload.target_company or "",
         conversation_history=payload.conversation_history or [],
+    )
+
+
+# ── Shadow Interview Review (STAR rubric debrief) ─────────────────────────────
+class ShadowReviewRequest(BaseModel):
+    role: str = Field(..., min_length=1)
+    company: Optional[str] = ""
+    interview_notes: str = Field(..., min_length=1)
+    outcome: Optional[str] = None   # "offer" | "rejected" | "pending"
+
+
+@router.post("/shadow-review")
+async def shadow_review(
+    payload: ShadowReviewRequest,
+    _: uuid.UUID = Depends(get_current_user_id),
+):
+    """
+    AI post-interview debrief for real interview notes the candidate already
+    submitted to (i.e. a real interview that already happened) — an overall
+    grade/coaching breakdown PLUS an explicit STAR-structure rubric
+    (Situation/Task/Action/Result each scored 0-100 with a one-line
+    justification grounded in the actual notes, not generic advice).
+
+    Lives here (not backend/api/interview_analytics.py, which has an older
+    shadow-review endpoint using the same request shape) because this
+    module's scope owns the Interview Prep + Shadow Review deepening work;
+    the analytics module's endpoint is left untouched.
+    """
+    return await _service.review_shadow_interview(
+        role=payload.role,
+        company=payload.company or "",
+        interview_notes=payload.interview_notes,
+        outcome=payload.outcome or "",
     )
 
 
@@ -183,3 +220,158 @@ async def delete_story(
         raise HTTPException(status_code=404, detail="Story not found")
     await db.delete(story)
     return {"deleted": str(sid)}
+
+
+# ── Spaced Repetition — "Due for Review" queue ────────────────────────────────
+# Real, deterministic Leitner-style leveled interval scheduler (see
+# interview_coach/spaced_repetition.py) — NOT an LLM call, and not tied to any
+# one question source. Any question_id (static bank id, "gen_N" profile id, or
+# an id from an LLM-generated JD-specific set) can be graded; `question_snapshot`
+# is cached at first grade so the queue can render it later regardless of source.
+
+class ReviewGradeRequest(BaseModel):
+    question_id: str = Field(..., min_length=1)
+    grade: str = Field(..., description="'weak' (resurface sooner) or 'strong' (push further out)")
+    question_domain: Optional[str] = None
+    question_type: Optional[str] = None
+    question_snapshot: Optional[Dict[str, Any]] = None
+
+
+def _review_state_to_dict(s: QuestionReviewState) -> dict:
+    box = s.box if 0 <= s.box < len(BOX_INTERVALS_DAYS) else 0
+    return {
+        "question_id": s.question_id,
+        "domain": s.question_domain,
+        "type": s.question_type,
+        "box": s.box,
+        "interval_days": BOX_INTERVALS_DAYS[box],
+        "repetitions": s.repetitions,
+        "correct_streak": s.correct_streak,
+        "last_grade": s.last_grade,
+        "last_reviewed_at": s.last_reviewed_at.isoformat() if s.last_reviewed_at else None,
+        "next_review_at": s.next_review_at.isoformat() if s.next_review_at else None,
+        "is_due": is_due(s.next_review_at) if s.next_review_at else True,
+        "question_snapshot": s.question_snapshot or {},
+    }
+
+
+@router.get("/review/state")
+async def list_review_state(
+    db: AsyncSession = Depends(get_db),
+    uid: uuid.UUID = Depends(get_current_user_id),
+):
+    """All per-question spaced-repetition state tracked for the current user
+    (used by the client to badge already-tracked questions with their next
+    review date, regardless of whether they're due yet)."""
+    result = await db.execute(
+        select(QuestionReviewState).where(QuestionReviewState.user_id == uid)
+    )
+    return [_review_state_to_dict(s) for s in result.scalars().all()]
+
+
+@router.get("/review/queue")
+async def get_review_queue(
+    db: AsyncSession = Depends(get_db),
+    uid: uuid.UUID = Depends(get_current_user_id),
+):
+    """Questions due for review right now (next_review_at <= now), earliest first."""
+    now = datetime.now(timezone.utc)
+    result = await db.execute(
+        select(QuestionReviewState)
+        .where(QuestionReviewState.user_id == uid, QuestionReviewState.next_review_at <= now)
+        .order_by(QuestionReviewState.next_review_at.asc())
+    )
+    due = result.scalars().all()
+
+    total_result = await db.execute(
+        select(func.count()).select_from(QuestionReviewState).where(QuestionReviewState.user_id == uid)
+    )
+    total_tracked = total_result.scalar_one()
+
+    return {
+        "due": [_review_state_to_dict(s) for s in due],
+        "due_count": len(due),
+        "total_tracked": total_tracked,
+    }
+
+
+@router.post("/review/grade")
+async def grade_review(
+    payload: ReviewGradeRequest,
+    db: AsyncSession = Depends(get_db),
+    uid: uuid.UUID = Depends(get_current_user_id),
+):
+    """
+    Record a self-graded recall for a question and reschedule it with the
+    Leitner-style leveled interval scheduler: 'strong' promotes the question
+    to the next box (pushes it further out); 'weak' drops it back to box 0
+    (resurfaces tomorrow) so shaky questions get repeated practice sooner.
+    """
+    grade = payload.grade.strip().lower()
+    if grade not in ("weak", "strong"):
+        raise HTTPException(status_code=400, detail="grade must be 'weak' or 'strong'")
+
+    result = await db.execute(
+        select(QuestionReviewState).where(
+            QuestionReviewState.user_id == uid,
+            QuestionReviewState.question_id == payload.question_id,
+        )
+    )
+    state = result.scalar_one_or_none()
+    now = datetime.now(timezone.utc)
+    current_box = state.box if state else 0
+    new_box, interval_days = apply_grade(current_box, grade)  # type: ignore[arg-type]
+    scheduled_for = next_review_at(interval_days, now)
+
+    if state is None:
+        state = QuestionReviewState(
+            user_id=uid,
+            question_id=payload.question_id,
+            question_domain=payload.question_domain,
+            question_type=payload.question_type,
+            question_snapshot=payload.question_snapshot or {},
+            box=new_box,
+            repetitions=1,
+            correct_streak=1 if grade == "strong" else 0,
+            last_grade=grade,
+            last_reviewed_at=now,
+            next_review_at=scheduled_for,
+        )
+        db.add(state)
+    else:
+        state.box = new_box
+        state.repetitions += 1
+        state.correct_streak = state.correct_streak + 1 if grade == "strong" else 0
+        state.last_grade = grade
+        state.last_reviewed_at = now
+        state.next_review_at = scheduled_for
+        if payload.question_domain:
+            state.question_domain = payload.question_domain
+        if payload.question_type:
+            state.question_type = payload.question_type
+        if payload.question_snapshot:
+            state.question_snapshot = payload.question_snapshot
+
+    await db.flush()
+    await db.refresh(state)
+    return _review_state_to_dict(state)
+
+
+@router.delete("/review/state/{question_id}")
+async def reset_review_state(
+    question_id: str,
+    db: AsyncSession = Depends(get_db),
+    uid: uuid.UUID = Depends(get_current_user_id),
+):
+    """Stop tracking a question in the spaced-repetition queue (reset progress)."""
+    result = await db.execute(
+        select(QuestionReviewState).where(
+            QuestionReviewState.user_id == uid,
+            QuestionReviewState.question_id == question_id,
+        )
+    )
+    state = result.scalar_one_or_none()
+    if not state:
+        raise HTTPException(status_code=404, detail="No review state tracked for this question")
+    await db.delete(state)
+    return {"deleted": question_id}

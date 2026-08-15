@@ -37,3 +37,9 @@ backend/__pycache__/
 
 # Local startup probes
 startup.*.log
+*.log
+playwright-report/
+test-results/
+
+# TypeScript incremental build info
+*.tsbuildinfo

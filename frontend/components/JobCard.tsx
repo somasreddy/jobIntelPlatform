@@ -15,6 +15,8 @@ import {
   Zap,
 } from "lucide-react";
 import JobPowerToolsModal from "@/components/JobPowerToolsModal";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { getSavedJobIds, toggleSavedJob } from "@/lib/profile";
 import { Job, JobPortal } from "@/lib/types";
 
@@ -39,9 +41,9 @@ function SourceBadge({ source }: { source?: string }) {
   const style = PORTAL_STYLE[source as JobPortal] ?? fallback;
 
   return (
-    <span className={`inline-flex items-center rounded-full border border-current/20 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${style.bg} ${style.text}`}>
+    <Badge className={`rounded-full border-current/20 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${style.bg} ${style.text}`}>
       {style.label}
-    </span>
+    </Badge>
   );
 }
 
@@ -102,22 +104,39 @@ export default function JobCard({ job, onSelect }: JobCardProps) {
     setSaved(toggleSavedJob(job.id));
   };
 
+  const handleCardKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    if (event.target !== event.currentTarget) return;
+    if (event.key === "Enter") {
+      onSelect?.(job);
+    } else if (event.key === " ") {
+      event.preventDefault();
+      onSelect?.(job);
+    }
+  };
+
   return (
-    <div onClick={() => onSelect?.(job)} className="card group cursor-pointer animate-slide-up">
+    <div
+      onClick={() => onSelect?.(job)}
+      onKeyDown={handleCardKeyDown}
+      role="button"
+      tabIndex={0}
+      aria-label={`${job.title} at ${job.organization}`}
+      className="card group cursor-pointer animate-slide-up"
+    >
       <div className="mb-3 flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
           <div className="mb-2 flex flex-wrap items-center gap-1.5">
             {job.verificationStatus === "VERIFIED" ? (
-              <span className="badge badge-verified">
+              <Badge className="badge badge-verified">
                 <CheckCircle2 className="h-3 w-3" />
                 Verified
-              </span>
+              </Badge>
             ) : (
-              <span className="badge border border-amber-400/20 bg-amber-400/10 text-amber-300">
+              <Badge className="badge border border-amber-400/20 bg-amber-400/10 text-amber-300">
                 Unverified
-              </span>
+              </Badge>
             )}
-            <span className="badge badge-new">{job.workMode}</span>
+            <Badge className="badge badge-new">{job.workMode}</Badge>
             <SourceBadge source={job.source} />
             <CompactScoreBadge score={matchScore} />
           </div>
@@ -178,47 +197,53 @@ export default function JobCard({ job, onSelect }: JobCardProps) {
       )}
 
       <div className="grid grid-cols-[1fr_auto_auto_auto] gap-2">
-        <Link
-          href={detailsHref}
-          target={hasInternalDetails ? undefined : "_blank"}
-          rel={hasInternalDetails ? undefined : "noopener noreferrer"}
-          onClick={(event) => event.stopPropagation()}
-          className="btn-primary flex items-center justify-center gap-1.5 text-center text-sm"
-        >
-          {detailsLabel}
-          <ArrowUpRight className="h-4 w-4" />
-        </Link>
-        <button
+        <Button asChild className="btn-primary h-auto flex items-center justify-center gap-1.5 text-center text-sm">
+          <Link
+            href={detailsHref}
+            target={hasInternalDetails ? undefined : "_blank"}
+            rel={hasInternalDetails ? undefined : "noopener noreferrer"}
+            onClick={(event) => event.stopPropagation()}
+          >
+            {detailsLabel}
+            <ArrowUpRight className="h-4 w-4" />
+          </Link>
+        </Button>
+        <Button
           type="button"
           onClick={(event) => {
             event.stopPropagation();
             setShowAnalysis(true);
           }}
           title="AI job analysis"
-          className="btn-secondary flex items-center justify-center gap-1.5 px-3 text-sm font-semibold"
+          aria-label={`Run AI analysis for ${job.title}`}
+          className="btn-secondary h-auto flex items-center justify-center gap-1.5 px-3 text-sm font-semibold"
           style={{ color: "var(--accent-bright)", borderColor: "rgba(99,102,241,0.3)" }}
         >
           <Zap className="h-3.5 w-3.5" />
           AI
-        </button>
-        <a
-          href={job.applicationLink}
-          target="_blank"
-          rel="noopener noreferrer"
-          onClick={(event) => event.stopPropagation()}
-          title="Apply on company site"
-          className="btn-secondary flex items-center justify-center px-3 text-sm"
-        >
-          <ExternalLink className="h-4 w-4" />
-        </a>
-        <button
+        </Button>
+        <Button asChild className="btn-secondary h-auto flex items-center justify-center px-3 text-sm">
+          <a
+            href={job.applicationLink}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={(event) => event.stopPropagation()}
+            title="Apply on company site"
+            aria-label={`Apply to ${job.title} at ${job.organization} on company site`}
+          >
+            <ExternalLink className="h-4 w-4" />
+          </a>
+        </Button>
+        <Button
           type="button"
           onClick={handleSave}
           title={saved ? "Remove from saved" : "Save job"}
-          className={`btn-secondary flex items-center justify-center px-3 transition-colors ${saved ? "border-indigo-500/50 text-indigo-400" : "text-slate-400"}`}
+          aria-label={saved ? `Remove ${job.title} from saved jobs` : `Save ${job.title}`}
+          aria-pressed={saved}
+          className={`btn-secondary h-auto flex items-center justify-center px-3 transition-colors ${saved ? "border-indigo-500/50 text-indigo-400" : "text-slate-400"}`}
         >
           {saved ? <BookmarkCheck className="h-4 w-4" /> : <Bookmark className="h-4 w-4" />}
-        </button>
+        </Button>
       </div>
 
       {showAnalysis && <JobPowerToolsModal job={job} onClose={() => setShowAnalysis(false)} />}

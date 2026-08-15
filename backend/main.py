@@ -1,6 +1,4 @@
-import time
 import logging
-from collections import defaultdict
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
@@ -9,6 +7,7 @@ from fastapi.responses import JSONResponse, Response
 
 from core.config import settings
 from core.database import database_url, engine
+from core.rate_limit import check_rate_limit
 from models import database as _models   # noqa: F401 - ensures all models are registered
 from models.database import Base
 from api import (
@@ -17,6 +16,7 @@ from api import (
     intelligence_tools, auth, evaluate, apply, campaign,
     career_graph, company, learning, notifications, market,
     insights, interview_analytics, portfolio, autopilot, digest,
+    career_state, data_export, activity_log,
 )
 
 logger = logging.getLogger(__name__)
@@ -87,63 +87,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# In-process rate limiter
+# Redis-backed rate limiter (see core/rate_limit.py)
 # LLM-heavy: 10 req/min | General: 60 req/min
-_rate_store: dict[str, list[float]] = defaultdict(list)
-_LLM_PATHS = {
-    "/api/resume/generate-ats",
-    "/api/resume/generate-cover-letter",
-    "/api/resume/generate-master",
-    "/api/resume/generate-pdf",
-    "/api/interview/questions",
-    "/api/interview/mock-chat",
-    "/api/recruiter/outreach-message",
-    "/api/negotiation/strategize",
-    "/api/stream/cover-letter",
-    "/api/stream/resume-bullets",
-    "/api/stream/hiring-decoder",
-    "/api/stream/resume-surgeon",
-    "/api/stream/linkedin-infiltrator",
-    "/api/stream/interview-trap-detector",
-    "/api/stream/cold-email-weapon",
-    "/api/stream/offer-negotiator",
-    "/api/stream/gap-killer",
-    "/api/stream/attack-plan",
-    "/api/stream/deep-research",
-    "/api/skill-gap/analyze",
-    "/api/intelligence-tools/hiring-decoder",
-    "/api/intelligence-tools/resume-surgeon",
-    "/api/intelligence-tools/linkedin-infiltrator",
-    "/api/intelligence-tools/interview-trap-detector",
-    "/api/intelligence-tools/cold-email-weapon",
-    "/api/intelligence-tools/offer-negotiator",
-    "/api/intelligence-tools/gap-killer",
-    "/api/intelligence-tools/attack-plan",
-    "/api/intelligence-tools/job-evaluator",
-    "/api/evaluate/compare",
-    "/api/evaluate/course",
-    "/api/evaluate/project",
-    "/api/apply/generate-answers",
-    "/api/apply/voice-note-script",
-    "/api/campaign/daily-todos",
-    "/api/career-graph/compute-health",
-    "/api/career-graph/fit-score",
-    "/api/market/radar",
-    "/api/market/salary-benchmark",
-    "/api/market/trending-skills",
-    "/api/market/role-demand",
-    "/api/company/enrich",
-    "/api/insights/rejection-analysis",
-    "/api/interview-analytics/mock-feedback",
-    "/api/interview-analytics/shadow-review",
-    "/api/learning/paths/generate",
-    "/api/portfolio/generate-bio",
-    "/api/autopilot/scan",
-    "/api/interview-analytics/mock-feedback",
-    "/api/interview-analytics/shadow-review",
-}
-
-
 @app.middleware("http")
 async def rate_limit_middleware(request: Request, call_next):
     # Use X-Forwarded-For if behind a proxy; fall back to direct IP
@@ -151,19 +96,15 @@ async def rate_limit_middleware(request: Request, call_next):
     client_ip = forwarded.split(",")[0].strip() if forwarded else (
         request.client.host if request.client else "unknown"
     )
-    path  = request.url.path
-    now   = time.time()
-    limit = 10 if path in _LLM_PATHS else 60
+    path = request.url.path
 
-    bucket_key = f"{client_ip}:{path}"
-    _rate_store[bucket_key] = [t for t in _rate_store[bucket_key] if now - t < 60]
-    if len(_rate_store[bucket_key]) >= limit:
+    allowed, limit = await check_rate_limit(client_ip, path)
+    if not allowed:
         return JSONResponse(
             status_code=429,
             headers={"Retry-After": "60"},
             content={"detail": f"Rate limit: max {limit} req/min for this endpoint."},
         )
-    _rate_store[bucket_key].append(now)
     return await call_next(request)
 
 
@@ -193,6 +134,9 @@ app.include_router(interview_analytics.router,  prefix="/api/interview-analytics
 app.include_router(portfolio.router,            prefix="/api/portfolio",            tags=["Portfolio"])
 app.include_router(autopilot.router,            prefix="/api/autopilot",            tags=["Autopilot"])
 app.include_router(digest.router,               prefix="/api/digest",               tags=["Digest"])
+app.include_router(career_state.router,          prefix="/api/career-state",          tags=["Career State"])
+app.include_router(data_export.router,           prefix="/api/data-export",           tags=["Data Export"])
+app.include_router(activity_log.router,           prefix="/api/activity-log",           tags=["Activity Log"])
 
 
 # Health check

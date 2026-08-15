@@ -9,8 +9,6 @@ import {
   BarChart3,
   BookOpen,
   Briefcase,
-  CheckCircle2,
-  Circle,
   FileText,
   RefreshCw,
   Search,
@@ -22,6 +20,10 @@ import {
 import { useAuth } from "@/lib/AuthContext";
 import { useProfile } from "@/lib/ProfileContext";
 import { CandidateProfile } from "@/lib/types";
+import { useCareerState, type CareerState } from "@/lib/useCareerState";
+import { useDemoMode } from "@/lib/demoMode";
+import DemoDataBanner from "@/components/DemoDataBanner";
+import { mockJobs, mockApplications } from "@/lib/mockData";
 
 const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
@@ -57,12 +59,11 @@ interface LearningPath {
   estimated_hours: number;
 }
 
-interface CampaignTodo {
+interface ActionPlanItem {
   id: string;
   text: string;
-  priority: string;
-  category: string;
-  done?: boolean;
+  priority: "high" | "medium" | "low";
+  href: string;
 }
 
 function profileSkills(profile: CandidateProfile | null): string[] {
@@ -104,15 +105,131 @@ function buildLocalHealth(profile: CandidateProfile | null): HealthData | null {
   };
 }
 
-function buildProfileTodos(profile: CandidateProfile | null): CampaignTodo[] {
-  if (!profile) return [];
-  const role = profile.currentRole || "target role";
-  const location = profile.preferredLocations?.[0] || profile.currentLocation || "your target market";
-  return [
-    { id: "profile-search-jobs", text: `Find fresh ${role} openings in ${location}`, priority: "high", category: "jobs" },
-    { id: "profile-tailor-resume", text: "Tailor your resume against one high-fit JD", priority: "high", category: "resume" },
-    { id: "profile-interview-drill", text: `Practice 3 interview questions for ${role}`, priority: "medium", category: "interview" },
-  ];
+/**
+ * Today's action plan — 2-4 concrete, prioritized suggestions grounded in
+ * the real numbers the useCareerState() hook returns (skill gaps, fit score,
+ * pipeline, learning progress, goals/milestones). Every candidate below only
+ * fires when the underlying career-state section reports real data; nothing
+ * here is generic copy or a fabricated number. Callers fall back to the
+ * existing "Start with profile setup" guidance when profile.has_profile is
+ * false (see DashboardPage) rather than rendering an empty plan.
+ */
+function buildActionPlan(cs: CareerState): ActionPlanItem[] {
+  const items: ActionPlanItem[] = [];
+
+  // Skill gaps vs. the user's target role (real demand counts from VERIFIED jobs).
+  if (cs.skill_gaps.available && cs.skill_gaps.missing_skills.length > 0) {
+    const gaps = cs.skill_gaps.missing_skills;
+    const topNames = gaps.slice(0, 2).map((s) => s.skill).join(" and ");
+    const roleLabel = cs.skill_gaps.target_role || "your target role";
+    items.push({
+      id: "gap-skills",
+      text: `${gaps.length} skill gap${gaps.length === 1 ? "" : "s"} remain for ${roleLabel} — start with ${topNames}.`,
+      priority: gaps.length >= 5 ? "high" : gaps.length >= 2 ? "medium" : "low",
+      href: "/learn",
+    });
+  }
+
+  // Fit score trend — average across the user's own scored applications.
+  if (cs.fit_score.available && cs.fit_score.current_fit_score != null) {
+    const score = cs.fit_score.current_fit_score;
+    if (score < 70) {
+      items.push({
+        id: "fit-score-low",
+        text: `Your average fit score is ${score}% (${cs.fit_score.badge}) across ${cs.fit_score.sample_size} application${cs.fit_score.sample_size === 1 ? "" : "s"} — tailor your resume to raise it.`,
+        priority: score < 50 ? "high" : "medium",
+        href: "/profile?tab=match",
+      });
+    } else if (cs.fit_score.best_match) {
+      const bm = cs.fit_score.best_match;
+      items.push({
+        id: "fit-score-best-match",
+        text: `${bm.job_title} at ${bm.organization} is your best match at ${bm.fit_score}% fit — worth prioritizing.`,
+        priority: "medium",
+        href: "/applications",
+      });
+    }
+  }
+
+  // Pipeline momentum — always available (zero-filled by the backend).
+  const { total, active_count } = cs.pipeline;
+  if (total === 0) {
+    items.push({
+      id: "pipeline-empty",
+      text: "No applications tracked yet — apply to a matched job to start your pipeline.",
+      priority: "high",
+      href: "/jobs",
+    });
+  } else if (active_count === 0) {
+    items.push({
+      id: "pipeline-stalled",
+      text: `All ${total} tracked application${total === 1 ? "" : "s"} are closed out — find new roles to keep momentum.`,
+      priority: "medium",
+      href: "/jobs",
+    });
+  } else {
+    items.push({
+      id: "pipeline-active",
+      text: `${active_count} application${active_count === 1 ? "" : "s"} active in your pipeline — check in on status and next steps.`,
+      priority: "low",
+      href: "/applications",
+    });
+  }
+
+  // Learning momentum.
+  if (cs.learning.active_paths > 0) {
+    const lastCompletedIso = cs.learning.recent_completions[0]?.completed_at;
+    const daysSince = lastCompletedIso ? (Date.now() - new Date(lastCompletedIso).getTime()) / 86_400_000 : Infinity;
+    if (daysSince > 7) {
+      items.push({
+        id: "learning-stalled",
+        text: "No learning progress logged this week — momentum on your skill gaps stalls without it.",
+        priority: "high",
+        href: "/learn",
+      });
+    } else {
+      items.push({
+        id: "learning-progress",
+        text: `${cs.learning.completion_pct ?? 0}% through your active learning path${cs.learning.active_paths === 1 ? "" : "s"} — keep the streak going.`,
+        priority: "low",
+        href: "/learn",
+      });
+    }
+  } else if (cs.skill_gaps.available && cs.skill_gaps.missing_skills.length > 0) {
+    items.push({
+      id: "learning-start",
+      text: "Start a learning path for your top skill gap to close it systematically.",
+      priority: "medium",
+      href: "/learn",
+    });
+  }
+
+  // Recent milestone not yet reflected anywhere.
+  const latestMilestone = cs.career_goals.recent_milestones[0];
+  if (latestMilestone) {
+    items.push({
+      id: "milestone-reflect",
+      text: `Recent milestone "${latestMilestone.title}" isn't reflected in your resume yet — update it to strengthen your profile.`,
+      priority: "low",
+      href: "/profile",
+    });
+  }
+
+  const weight: Record<ActionPlanItem["priority"], number> = { high: 3, medium: 2, low: 1 };
+  return items.sort((a, b) => weight[b.priority] - weight[a.priority]).slice(0, 4);
+}
+
+function PriorityBadge({ priority }: { priority: ActionPlanItem["priority"] }) {
+  const color = priority === "high" ? "#ef4444" : priority === "medium" ? "#f59e0b" : "#10b981";
+  const label = priority === "high" ? "High" : priority === "medium" ? "Medium" : "Low";
+  return (
+    <span
+      className="text-[9px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded shrink-0"
+      style={{ background: `${color}22`, color, border: `1px solid ${color}44` }}
+    >
+      {label}
+    </span>
+  );
 }
 
 function buildProfilePaths(profile: CandidateProfile | null): LearningPath[] {
@@ -201,13 +318,13 @@ function FitBadge({ score, badge }: { score?: number; badge?: string }) {
 export default function DashboardPage() {
   const { authHeader } = useAuth();
   const { profile, loading: profileLoading } = useProfile();
+  const { data: careerState } = useCareerState();
+  const { demoMode, disableDemoMode } = useDemoMode();
 
   const [health, setHealth] = useState<HealthData | null>(null);
   const [funnel, setFunnel] = useState<FunnelData | null>(null);
   const [jobs, setJobs] = useState<JobMatch[]>([]);
   const [paths, setPaths] = useState<LearningPath[]>([]);
-  const [todos, setTodos] = useState<CampaignTodo[]>([]);
-  const [doneTodos, setDoneTodos] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
 
   const profileKey = useMemo(() => {
@@ -226,26 +343,24 @@ export default function DashboardPage() {
   }, [profile]);
 
   const localHealth = useMemo(() => buildLocalHealth(profile), [profileKey, profile]);
-  const fallbackTodos = useMemo(() => buildProfileTodos(profile), [profileKey, profile]);
   const fallbackPaths = useMemo(() => buildProfilePaths(profile), [profileKey, profile]);
+  const actionPlan = useMemo(() => (careerState ? buildActionPlan(careerState) : []), [careerState]);
 
   const load = useCallback(async () => {
     setLoading(true);
     const h = authHeader();
     try {
-      const [healthRes, funnelRes, jobsRes, pathsRes, todosRes] = await Promise.allSettled([
+      const [healthRes, funnelRes, jobsRes, pathsRes] = await Promise.allSettled([
         fetch(`${API}/api/career-graph/`, { headers: h }).then((r) => r.ok ? r.json() : null),
         fetch(`${API}/api/insights/funnel`, { headers: h }).then((r) => r.ok ? r.json() : null),
         fetch(`${API}/api/jobs/?limit=5`, { headers: h }).then((r) => r.ok ? r.json() : null),
         fetch(`${API}/api/learning/paths`, { headers: h }).then((r) => r.ok ? r.json() : null),
-        fetch(`${API}/api/campaign/daily-todos`, { method: "POST", headers: { ...h, "Content-Type": "application/json" }, body: "{}" }).then((r) => r.ok ? r.json() : null),
       ]);
 
       if (healthRes.status === "fulfilled" && healthRes.value) setHealth(healthRes.value);
       if (funnelRes.status === "fulfilled" && funnelRes.value) setFunnel(funnelRes.value);
       if (jobsRes.status === "fulfilled" && jobsRes.value) setJobs((jobsRes.value.jobs || jobsRes.value || []).slice(0, 5));
       if (pathsRes.status === "fulfilled" && pathsRes.value) setPaths((pathsRes.value || []).filter((p: LearningPath) => p.status === "active").slice(0, 3));
-      if (todosRes.status === "fulfilled" && todosRes.value?.todos) setTodos(todosRes.value.todos.slice(0, 3));
     } catch {
       // graceful degradation
     }
@@ -256,8 +371,38 @@ export default function DashboardPage() {
     if (!profileLoading) void load();
   }, [load, profileLoading, profileKey]);
 
+  // ── Demo mode proof-of-concept: when active, show the bundled sample
+  // dataset (lib/mockData.ts) in the "Job matches" / "Pipeline" sections
+  // instead of whatever the real fetches above returned. Additive-only —
+  // does not touch `load()`, the action-plan/career-state wiring, or any
+  // other state on this page. See frontend/lib/demoMode.ts. ────────────────
+  useEffect(() => {
+    if (!demoMode) return;
+    setJobs(mockJobs.slice(0, 5).map((j) => ({
+      id: j.id,
+      title: j.title,
+      organization: j.organization,
+      location: j.location,
+      fitScore: j.matchScore,
+      fitBadge: j.levelUp ? "Level Up" : undefined,
+      work_mode: j.workMode,
+    })));
+    const stageOrder = ["Saved", "Applied", "Assessment", "Interview", "Offer", "Rejected"];
+    const counts = new Map<string, number>();
+    for (const app of mockApplications) counts.set(app.status, (counts.get(app.status) ?? 0) + 1);
+    const progressed = mockApplications.filter((a) => a.status !== "Saved" && a.status !== "Applied").length;
+    const offers = mockApplications.filter((a) => a.status === "Offer").length;
+    setFunnel({
+      stages: stageOrder.filter((s) => counts.has(s)).map((s) => ({ stage: s, count: counts.get(s)! })),
+      total: mockApplications.length,
+      last_30_days: 0,
+      response_rate: mockApplications.length ? Math.round((progressed / mockApplications.length) * 100) : 0,
+      offer_rate: mockApplications.length ? Math.round((offers / mockApplications.length) * 100) : 0,
+    });
+  }, [demoMode]);
+
   const displayHealth = localHealth ?? health;
-  const displayTodos = todos.length > 0 ? todos : fallbackTodos;
+  const showFallbackPlan = !careerState || careerState.profile.has_profile === false || actionPlan.length === 0;
   const displayPaths = [
     ...fallbackPaths,
     ...paths.filter((path) => !fallbackPaths.some((fallback) => fallback.skill_name.toLowerCase() === path.skill_name.toLowerCase())),
@@ -285,6 +430,22 @@ export default function DashboardPage() {
   return (
     <div className="min-h-screen" style={{ background: "var(--bg-base)" }}>
       <main className="max-w-7xl mx-auto px-4 py-8 space-y-6">
+        {demoMode && (
+          <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+            <DemoDataBanner
+              className="flex-1 mb-0"
+              message="Demo mode is active — Job matches and Pipeline below are sample data. Nothing here is saved to your account."
+            />
+            <button
+              type="button"
+              onClick={disableDemoMode}
+              className="btn-secondary shrink-0 text-xs px-3 py-2 font-semibold"
+            >
+              Exit demo mode
+            </button>
+          </div>
+        )}
+
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
           <div>
             <p className="text-xs font-medium uppercase tracking-wide" style={{ color: "var(--accent-bright)" }}>Command Center</p>
@@ -352,7 +513,7 @@ export default function DashboardPage() {
         <div className="grid grid-cols-1 xl:grid-cols-[1.1fr_0.9fr] gap-5">
           <section className="rounded-lg p-5" style={{ background: "var(--bg-card)", border: "1px solid var(--border)" }}>
             <SectionHeader title="Today" actionHref="/campaign" actionLabel="Open plan" />
-            {displayTodos.length === 0 ? (
+            {showFallbackPlan ? (
               <div className="rounded-lg p-4" style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)" }}>
                 <p className="text-sm font-medium text-white">Start with profile setup</p>
                 <p className="text-xs text-slate-400 mt-1">Once role and skills are saved, this area becomes your daily action list.</p>
@@ -362,24 +523,18 @@ export default function DashboardPage() {
               </div>
             ) : (
               <div className="space-y-2">
-                {displayTodos.map((todo) => {
-                  const done = doneTodos.has(todo.id);
-                  return (
-                    <button
-                      key={todo.id}
-                      onClick={() => setDoneTodos((prev) => {
-                        const next = new Set(prev);
-                        if (done) next.delete(todo.id); else next.add(todo.id);
-                        return next;
-                      })}
-                      className="w-full rounded-lg p-3 flex items-start gap-3 text-left transition-colors"
-                      style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)" }}
-                    >
-                      {done ? <CheckCircle2 className="w-4 h-4 mt-0.5 shrink-0" style={{ color: "var(--accent-bright)" }} /> : <Circle className="w-4 h-4 mt-0.5 shrink-0 text-slate-500" />}
-                      <span className={`text-sm leading-relaxed ${done ? "line-through text-slate-500" : "text-slate-200"}`}>{todo.text}</span>
-                    </button>
-                  );
-                })}
+                {actionPlan.map((item) => (
+                  <Link
+                    key={item.id}
+                    href={item.href}
+                    className="rounded-lg p-3 flex items-center gap-3 transition-colors hover:bg-white/5"
+                    style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)" }}
+                  >
+                    <PriorityBadge priority={item.priority} />
+                    <span className="text-sm leading-relaxed text-slate-200 flex-1 min-w-0">{item.text}</span>
+                    <ArrowRight className="w-4 h-4 text-slate-500 shrink-0" />
+                  </Link>
+                ))}
               </div>
             )}
           </section>

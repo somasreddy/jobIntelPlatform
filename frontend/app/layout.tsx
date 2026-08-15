@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { MotionConfig } from "motion/react";
 import "./globals.css";
 import ThemeProvider from "@/components/ThemeProvider";
 import Navbar from "@/components/Navbar";
@@ -10,6 +11,8 @@ import Footer from "@/components/Footer";
 import AnalyticsProvider from "@/components/AnalyticsProvider";
 import PWAProvider from "@/components/PWAProvider";
 import ScrollProgress from "@/components/ScrollProgress";
+import CommandPalette from "@/components/CommandPalette";
+import Toaster from "@/components/Toaster";
 
 export const metadata: Metadata = {
   title: "JobIntel AI – Career Intelligence Platform",
@@ -29,7 +32,11 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" suppressHydrationWarning data-scroll-behavior="smooth">
+    <html
+      lang="en"
+      suppressHydrationWarning
+      data-scroll-behavior="smooth"
+    >
       <head>
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="" />
@@ -41,7 +48,7 @@ export default function RootLayout({
         {/* Anti-flash: apply saved theme before paint */}
         <script
           dangerouslySetInnerHTML={{
-            __html: `try{var a=['executive','graphite','pacific','ember'];var t=localStorage.getItem('ji-theme');if(a.indexOf(t)<0)t='executive';document.documentElement.setAttribute('data-theme',t);}catch(e){}`,
+            __html: `try{var a=['executive','graphite','pacific','ember','light','high-contrast','aurora','ocean','violet-storm'];var t=localStorage.getItem('ji-theme');if(a.indexOf(t)<0)t='executive';document.documentElement.setAttribute('data-theme',t);}catch(e){}`,
           }}
         />
       </head>
@@ -51,23 +58,27 @@ export default function RootLayout({
         <div className="orb orb-2" />
         <div className="orb orb-3" />
         <div className="orb orb-4" />
-        <ThemeProvider>
-          <AuthProvider>
-            <ProfileProvider>
-              <AppDataProvider>
-                <div style={{ position: "relative", zIndex: 1 }}>
-                  <ScrollProgress />
-                  <AnalyticsProvider />
-                  <PWAProvider />
-                  <Navbar />
-                  {children}
-                  <ProfileSidebar />
-                  <Footer />
-                </div>
-              </AppDataProvider>
-            </ProfileProvider>
-          </AuthProvider>
-        </ThemeProvider>
+        <MotionConfig reducedMotion="user">
+          <ThemeProvider>
+            <AuthProvider>
+              <ProfileProvider>
+                <AppDataProvider>
+                  <div style={{ position: "relative", zIndex: 1 }}>
+                    <ScrollProgress />
+                    <AnalyticsProvider />
+                    <PWAProvider />
+                    <CommandPalette />
+                    <Navbar />
+                    {children}
+                    <ProfileSidebar />
+                    <Footer />
+                    <Toaster />
+                  </div>
+                </AppDataProvider>
+              </ProfileProvider>
+            </AuthProvider>
+          </ThemeProvider>
+        </MotionConfig>
       </body>
     </html>
   );

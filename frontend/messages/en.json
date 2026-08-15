@@ -1,0 +1,40 @@
+{
+  "nav": {
+    "brand": "JobIntel AI",
+    "tagline": "Career Optimizer",
+    "home": "Command Center",
+    "groups": {
+      "discover": "Discover",
+      "insights": "Insights"
+    },
+    "items": {
+      "findJobs": "Find Jobs",
+      "marketRadar": "Market Radar"
+    },
+    "signIn": "Sign In",
+    "signedIn": "Signed in",
+    "demoMode": "Demo mode",
+    "openMenu": "Open menu",
+    "closeMenu": "Close menu"
+  },
+  "commandCenter": {
+    "eyebrow": "Command Center",
+    "title": "What to do next",
+    "subtitleWithProfile": "{role} - {years} yrs - {location}",
+    "subtitleEmpty": "Set up your profile once. The rest of the platform follows it.",
+    "refresh": "Refresh",
+    "readinessTitle": "Career readiness",
+    "metrics": {
+      "applications": "Applications",
+      "responseRate": "Response Rate"
+    },
+    "sections": {
+      "today": "Today",
+      "jobMatches": "Job matches"
+    },
+    "emptyJobs": {
+      "title": "No matched jobs loaded yet",
+      "body": "Use the dork job search to bring fresh openings into this dashboard."
+    }
+  }
+}

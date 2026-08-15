@@ -1,16 +1,98 @@
 "use client";
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
+import { toast } from "sonner";
+import { motion, AnimatePresence } from "motion/react";
 import { useProfile } from "@/lib/ProfileContext";
+import { useAuth } from "@/lib/AuthContext";
 import { CandidateProfile } from "@/lib/types";
 import { getQuestionsForRole, getAllQuestionsForDomain, QuestionBankItem, ALL_DOMAINS, ALL_BANK_QUESTIONS } from "@/lib/questionBank";
+import { motionTransition } from "@/lib/motion-tokens";
+import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Separator } from "@/components/ui/separator";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
+import { EmptyState } from "@/components/ui/empty-state";
 import {
   Brain, Sparkles, ChevronDown, ChevronUp,
   MessageSquare, Code2, Users, Lightbulb, Target,
   Star, RefreshCw, ClipboardList, Trophy,
   BookOpen, Cpu, GitMerge, Database, Cloud, Globe2, TestTube2, BarChart2,
   Timer, Zap, Coffee, MousePointerClick, Shield, Eye,
+  CalendarClock, ThumbsUp, ThumbsDown, FileText, Briefcase, ChevronRight, Building2,
 } from "lucide-react";
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "";
+
+function authHeaders(token: string | null): HeadersInit {
+  return token ? { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }
+               : { "Content-Type": "application/json" };
+}
+
+// ─── Spaced repetition (per-question review state from the backend) ───────────
+interface ReviewState {
+  question_id: string;
+  domain: string | null;
+  type: string | null;
+  box: number;
+  interval_days: number;
+  repetitions: number;
+  correct_streak: number;
+  last_grade: "weak" | "strong" | null;
+  last_reviewed_at: string | null;
+  next_review_at: string | null;
+  is_due: boolean;
+  question_snapshot: Record<string, unknown>;
+}
+
+interface ReviewQueueResponse {
+  due: ReviewState[];
+  due_count: number;
+  total_tracked: number;
+}
+
+/** Reconstruct a renderable question from a stored review-state snapshot
+ *  (works for static-bank, profile-generated, or JD-generated questions —
+ *  the snapshot is whatever was passed at first-grade time). */
+function hydrateSnapshot(state: ReviewState): LocalQuestion {
+  const snap = state.question_snapshot || {};
+  const star = snap.starTemplate as { situation: string; task: string; action: string; result: string } | undefined;
+  return {
+    id: state.question_id,
+    domain: (snap.domain as string) || state.domain || "Behavioral",
+    type: (snap.type as LocalQuestion["type"]) || (state.type as LocalQuestion["type"]) || "behavioral",
+    difficulty: (snap.difficulty as LocalQuestion["difficulty"]) || "Medium",
+    question: (snap.question as string) || "(Question text unavailable — it may have been generated in a session that wasn't saved.)",
+    hint: (snap.hint as string) || "",
+    keyPoints: (snap.keyPoints as string[]) || [],
+    modelAnswer: snap.modelAnswer as string | undefined,
+    starTemplate: star,
+  };
+}
+
+/** Small badge describing a question's spaced-repetition status, if tracked. */
+function reviewBadge(state: ReviewState | undefined): { label: string; color: string } | null {
+  if (!state) return null;
+  if (state.is_due) return { label: "Due now", color: "text-rose-400" };
+  if (!state.next_review_at) return null;
+  const d = new Date(state.next_review_at);
+  return {
+    label: `Next: ${d.toLocaleDateString(undefined, { month: "short", day: "numeric" })}`,
+    color: "text-slate-500",
+  };
+}
+
+// ─── JD-derived company-specific sets ──────────────────────────────────────────
+interface ApplicationOption {
+  id: string;
+  jobId: string;
+  title: string;
+  organization: string;
+}
 
 // ─── Local interview question type (profile-personalised behavioral) ───────────
 interface LocalQuestion {
@@ -26,6 +108,9 @@ interface LocalQuestion {
 }
 
 type AnyQuestion = LocalQuestion | QuestionBankItem;
+
+// Must match len(BOX_INTERVALS_DAYS) in backend/interview_coach/spaced_repetition.py
+const TOTAL_REPETITION_BOXES = 7;
 
 const TYPE_META = {
   behavioral:  { label: "Behavioural",  icon: Users,    color: "text-indigo-400",  bg: "bg-indigo-500/10 border-indigo-500/25" },
@@ -193,6 +278,7 @@ In interviews, I use structured questions with consistent rubrics — avoids bia
 export default function InterviewPrepPage() {
   const router = useRouter();
   const { profile, loading } = useProfile();
+  const { token } = useAuth();
   const [targetRole, setTargetRole] = useState("");
   const [targetCompany, setTargetCompany] = useState("");
   const [questions, setQuestions] = useState<AnyQuestion[] | null>(ALL_BANK_QUESTIONS);
@@ -209,12 +295,49 @@ export default function InterviewPrepPage() {
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [browseMode, setBrowseMode] = useState(false);
 
+  // ── Spaced repetition ────────────────────────────────────────────────────
+  const [reviewStates, setReviewStates] = useState<Record<string, ReviewState>>({});
+  const [dueCount, setDueCount] = useState(0);
+  const [reviewMode, setReviewMode] = useState(false);
+  const [reviewLoading, setReviewLoading] = useState(false);
+  const [gradingId, setGradingId] = useState<string | null>(null);
+
+  // ── JD-derived company-specific sets ─────────────────────────────────────
+  const [showJdPanel, setShowJdPanel] = useState(false);
+  const [jobDescription, setJobDescription] = useState("");
+  const [applications, setApplications] = useState<ApplicationOption[]>([]);
+  const [applicationsLoaded, setApplicationsLoaded] = useState(false);
+  const [selectedApplicationId, setSelectedApplicationId] = useState("");
+  const [jdSource, setJdSource] = useState<"jd-derived" | "profile-general" | null>(null);
+
   const MOCK_TIMER_SECS = 120; // 2 minutes per question
 
   useEffect(() => {
     if (loading || !profile) return;
     setTargetRole(profile.currentRole || "");
   }, [loading, profile]);
+
+  // Load spaced-repetition state once on mount so cards can show "Due now" /
+  // "Next: <date>" badges and the header chip can show a due count.
+  useEffect(() => {
+    if (!API_URL) return;
+    (async () => {
+      try {
+        const res = await fetch(`${API_URL}/api/interview/review/state`, { headers: authHeaders(token) });
+        if (!res.ok) return;
+        const list: ReviewState[] = await res.json();
+        const map: Record<string, ReviewState> = {};
+        let due = 0;
+        for (const s of list) {
+          map[s.question_id] = s;
+          if (s.is_due) due += 1;
+        }
+        setReviewStates(map);
+        setDueCount(due);
+      } catch { /* best-effort — spaced repetition is additive, page still works without it */ }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token]);
 
   // Countdown tick
   useEffect(() => {
@@ -252,6 +375,7 @@ export default function InterviewPrepPage() {
     setAnswers({});
     setScores({});
     setBrowseMode(true);
+    setReviewMode(false);
     stopTimer();
     setMockMode(false);
     // Scroll to questions section smoothly
@@ -266,6 +390,8 @@ export default function InterviewPrepPage() {
     setAnswers({});
     setScores({});
     setBrowseMode(false);
+    setReviewMode(false);
+    setJdSource(null);
     stopTimer();
     setMockMode(false);
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -279,6 +405,7 @@ export default function InterviewPrepPage() {
     setAnswers({});
     setScores({});
     setBrowseMode(false);
+    setReviewMode(false);
     setFilterDomain("all");
     setFilterType("all");
     const activeSeed = seedOverride ?? questionSeed;
@@ -289,12 +416,16 @@ export default function InterviewPrepPage() {
         const res = await fetch(`${apiUrl}/api/interview/questions`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ profile, target_role: targetRole, target_company: targetCompany }),
+          body: JSON.stringify({
+            profile, target_role: targetRole, target_company: targetCompany,
+            job_description: jobDescription,
+          }),
         });
         if (res.ok) {
           const data = await res.json();
           if (data.questions?.length) {
             setQuestions(data.questions);
+            setJdSource(data.source === "jd-derived" ? "jd-derived" : "profile-general");
             setGenerating(false);
             return;
           }
@@ -302,11 +433,128 @@ export default function InterviewPrepPage() {
       } catch { /* fall through to local generation */ }
     }
 
+    setJdSource(null);
     await new Promise((r) => setTimeout(r, 1600));
     const profileQs = buildProfileQuestions(profile, targetCompany, profile.experienceYears ?? 0);
     const bankQs = getQuestionsForRole(targetRole, profile.skills ?? [], profile.experienceYears ?? 0, activeSeed);
     setQuestions([...profileQs, ...bankQs]);
     setGenerating(false);
+  };
+
+  // ── JD-derived company-specific sets: reuse a real job from Applications ──
+  const loadApplications = async () => {
+    if (!API_URL || applicationsLoaded) return;
+    try {
+      const res = await fetch(`${API_URL}/api/applications/`, { headers: authHeaders(token) });
+      if (res.ok) {
+        const data = await res.json();
+        const opts: ApplicationOption[] = (data as Array<{
+          id: string; jobId: string | null;
+          job: { title: string; organization: string } | null;
+        }>)
+          .filter((a) => a.jobId && a.job)
+          .map((a) => ({ id: a.id, jobId: a.jobId as string, title: a.job!.title, organization: a.job!.organization }));
+        setApplications(opts);
+      }
+    } catch { /* best-effort — manual JD paste still works */ }
+    setApplicationsLoaded(true);
+  };
+
+  const handleSelectApplication = async (appId: string) => {
+    setSelectedApplicationId(appId);
+    if (!appId) return;
+    const app = applications.find((a) => a.id === appId);
+    if (!app || !API_URL) return;
+    try {
+      const res = await fetch(`${API_URL}/api/jobs/${app.jobId}`);
+      if (res.ok) {
+        const job = await res.json();
+        setJobDescription(job.description || "");
+        if (!targetCompany.trim()) setTargetCompany(job.organization || app.organization);
+        if (!targetRole.trim()) setTargetRole(job.title || app.title);
+        toast.success(`Loaded the job description for ${app.title} @ ${app.organization}`);
+      } else {
+        toast.error("Couldn't load that job's description.");
+      }
+    } catch {
+      toast.error("Couldn't reach the server to load that job's description.");
+    }
+  };
+
+  // ── Spaced repetition: "Due for Review" queue ─────────────────────────────
+  const openReviewQueue = async () => {
+    if (!API_URL) {
+      toast.error("Spaced repetition needs the backend API — set NEXT_PUBLIC_API_URL.");
+      return;
+    }
+    setReviewLoading(true);
+    try {
+      const res = await fetch(`${API_URL}/api/interview/review/queue`, { headers: authHeaders(token) });
+      if (res.ok) {
+        const data: ReviewQueueResponse = await res.json();
+        setDueCount(data.due_count);
+        setQuestions(data.due.map(hydrateSnapshot));
+        setBrowseMode(false);
+        setMockMode(false);
+        setFilterDomain("all");
+        setFilterType("all");
+        setExpanded({});
+        setAnswers({});
+        setScores({});
+        setReviewMode(true);
+        stopTimer();
+        setTimeout(() => window.scrollTo({ top: 300, behavior: "smooth" }), 100);
+        if (data.due.length === 0) {
+          toast.info("Nothing due for review right now — nice work staying on top of it.");
+        }
+      } else {
+        toast.error("Couldn't load your review queue.");
+      }
+    } catch {
+      toast.error("Couldn't reach the server to load your review queue.");
+    } finally {
+      setReviewLoading(false);
+    }
+  };
+
+  const gradeQuestion = async (q: AnyQuestion, grade: "weak" | "strong") => {
+    if (!API_URL) {
+      toast.error("Spaced repetition needs the backend API — set NEXT_PUBLIC_API_URL.");
+      return;
+    }
+    setGradingId(q.id);
+    try {
+      const res = await fetch(`${API_URL}/api/interview/review/grade`, {
+        method: "POST",
+        headers: authHeaders(token),
+        body: JSON.stringify({
+          question_id: q.id,
+          grade,
+          question_domain: q.domain,
+          question_type: q.type,
+          question_snapshot: q,
+        }),
+      });
+      if (res.ok) {
+        const state: ReviewState = await res.json();
+        setReviewStates((prev) => {
+          const next = { ...prev, [q.id]: state };
+          setDueCount(Object.values(next).filter((s) => s.is_due).length);
+          return next;
+        });
+        toast.success(
+          grade === "strong"
+            ? `Nailed it — resurfaces in ${state.interval_days} day${state.interval_days === 1 ? "" : "s"}.`
+            : "Noted — this resurfaces tomorrow so you can drill it again."
+        );
+      } else {
+        toast.error("Couldn't save your review.");
+      }
+    } catch {
+      toast.error("Couldn't reach the server to save your review.");
+    } finally {
+      setGradingId(null);
+    }
   };
 
   const scoreAnswer = (id: string, answer: string) => {
@@ -364,29 +612,68 @@ export default function InterviewPrepPage() {
                 All questions from the bank are shown below. Filter by domain or type, or generate a personalized set tailored to your role and skills.
               </p>
             </div>
-            <div className="flex gap-2">
-              <a
-                href="/interview/shadow-review"
-                className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold shrink-0 transition-all"
+            <div className="flex gap-2 flex-wrap">
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    onClick={openReviewQueue}
+                    disabled={reviewLoading}
+                    className={cn(
+                      "h-auto flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold shrink-0 transition-all relative",
+                      reviewMode && "ring-1 ring-rose-400/50"
+                    )}
+                    style={{
+                      background: "rgba(244,63,94,0.12)",
+                      border: "1px solid rgba(244,63,94,0.25)",
+                      color: "#fb7185",
+                    }}
+                  >
+                    {reviewLoading
+                      ? <RefreshCw className="w-4 h-4 animate-spin" />
+                      : <CalendarClock className="w-4 h-4" />}
+                    Due for Review
+                    {dueCount > 0 && (
+                      <span className="ml-0.5 min-w-[1.1rem] h-[1.1rem] px-1 rounded-full bg-rose-500 text-white text-[10px] font-bold flex items-center justify-center">
+                        {dueCount}
+                      </span>
+                    )}
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  {dueCount > 0
+                    ? `${dueCount} question${dueCount === 1 ? "" : "s"} due for spaced-repetition review`
+                    : "Grade an answer as \"Nailed it\" or \"Still shaky\" to start tracking it here"}
+                </TooltipContent>
+              </Tooltip>
+              <Button
+                asChild
+                variant="ghost"
+                className="h-auto flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold shrink-0 transition-all"
                 style={{
                   background: "rgba(16,185,129,0.12)",
                   border: "1px solid rgba(16,185,129,0.25)",
                   color: "#10b981",
                 }}
               >
-                <Eye className="w-4 h-4" /> Shadow Review
-              </a>
-              <a
-                href="/interview/simulator"
-                className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold shrink-0 transition-all"
+                <Link href="/interview/shadow-review">
+                  <Eye className="w-4 h-4" /> Shadow Review
+                </Link>
+              </Button>
+              <Button
+                asChild
+                variant="ghost"
+                className="h-auto flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold shrink-0 transition-all"
                 style={{
                   background: "color-mix(in srgb, var(--accent) 15%, transparent)",
                   border: "1px solid var(--border-hover)",
                   color: "var(--accent-bright)",
                 }}
               >
-                <Timer className="w-4 h-4" /> Live Simulator
-              </a>
+                <Link href="/interview/simulator">
+                  <Timer className="w-4 h-4" /> Live Simulator
+                </Link>
+              </Button>
             </div>
           </div>
         </div>
@@ -410,24 +697,28 @@ export default function InterviewPrepPage() {
               const Icon = meta.icon;
               const isActive = filterDomain === d && browseMode;
               return (
-                <button
+                <Badge
+                  asChild
+                  variant="outline"
                   key={d}
-                  onClick={() => isActive ? clearAll() : browseDomain(d)}
-                  className={`flex items-center gap-1.5 text-[11px] font-medium px-2.5 py-1.5 rounded-full border transition-all cursor-pointer ${
+                  className={cn(
+                    "cursor-pointer gap-1.5 rounded-full text-[11px] font-medium px-2.5 py-1.5 border transition-all",
                     isActive
                       ? `border-current bg-white/10 ${meta.color}`
                       : `border-slate-700/60 ${meta.color} hover:border-current hover:bg-white/5`
-                  }`}
+                  )}
                 >
-                  <Icon className="w-3 h-3" />{d}
-                </button>
+                  <button onClick={() => isActive ? clearAll() : browseDomain(d)}>
+                    <Icon className="w-3 h-3" />{d}
+                  </button>
+                </Badge>
               );
             })}
           </div>
         </div>
 
         {/* Setup Card */}
-        <div className="card mb-6">
+        <Card className="mb-6 backdrop-blur-xl p-6">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
             <div>
               <label className="text-xs font-medium text-slate-400 mb-1.5 block">Target Role</label>
@@ -448,46 +739,121 @@ export default function InterviewPrepPage() {
               />
             </div>
             <div className="flex items-end gap-2">
-              <button
-                onClick={() => handleGenerate()}
-                disabled={generating || !profile}
-                title={!profile ? "Set up your profile first for personalized questions" : "Generate questions tailored to your role and skills"}
-                className="btn-primary flex-1 flex items-center justify-center gap-2 text-sm disabled:opacity-50"
-              >
-                {generating
-                  ? <><RefreshCw className="w-4 h-4 animate-spin" /> Generating…</>
-                  : <><Sparkles className="w-4 h-4" /> Generate Personalized Set</>}
-              </button>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    onClick={() => handleGenerate()}
+                    disabled={generating || !profile}
+                    className="btn-primary h-auto flex-1 flex items-center justify-center gap-2 text-sm disabled:opacity-50"
+                  >
+                    {generating
+                      ? <><RefreshCw className="w-4 h-4 animate-spin" /> Generating…</>
+                      : <><Sparkles className="w-4 h-4" /> Generate Personalized Set</>}
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  {!profile ? "Set up your profile first for personalized questions" : "Generate questions tailored to your role and skills"}
+                </TooltipContent>
+              </Tooltip>
               {questions && !generating && (
                 <>
-                  <button
-                    onClick={() => {
-                      const nextSeed = questionSeed + 1;
-                      setQuestionSeed(nextSeed);
-                      handleGenerate(nextSeed);
-                    }}
-                    title="Get a fresh set of questions"
-                    className="btn-secondary px-3 py-2.5 flex items-center gap-1.5 text-xs shrink-0"
-                  >
-                    <RefreshCw className="w-3.5 h-3.5" /> New Set
-                  </button>
-                  <button
-                    onClick={() => { setMockMode(m => !m); stopTimer(); setExpanded({}); }}
-                    title={mockMode ? "Switch to Study Mode" : "Switch to Mock Interview Mode (2-min timer per question)"}
-                    className={`px-3 py-2.5 flex items-center gap-1.5 text-xs shrink-0 rounded-lg border transition-all ${
-                      mockMode
-                        ? "bg-rose-600/20 border-rose-500/50 text-rose-300 hover:bg-rose-600/30"
-                        : "btn-secondary"
-                    }`}
-                  >
-                    {mockMode ? <><Zap className="w-3.5 h-3.5" /> Mock On</> : <><Timer className="w-3.5 h-3.5" /> Mock</>}
-                  </button>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        onClick={() => {
+                          const nextSeed = questionSeed + 1;
+                          setQuestionSeed(nextSeed);
+                          handleGenerate(nextSeed);
+                        }}
+                        className="btn-secondary h-auto px-3 py-2.5 flex items-center gap-1.5 text-xs shrink-0"
+                      >
+                        <RefreshCw className="w-3.5 h-3.5" /> New Set
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>Get a fresh set of questions</TooltipContent>
+                  </Tooltip>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        onClick={() => { setMockMode(m => !m); stopTimer(); setExpanded({}); }}
+                        className={cn(
+                          "h-auto px-3 py-2.5 flex items-center gap-1.5 text-xs shrink-0 rounded-lg border transition-all",
+                          mockMode
+                            ? "bg-rose-600/20 border-rose-500/50 text-rose-300 hover:bg-rose-600/30"
+                            : "btn-secondary"
+                        )}
+                      >
+                        {mockMode ? <><Zap className="w-3.5 h-3.5" /> Mock On</> : <><Timer className="w-3.5 h-3.5" /> Mock</>}
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>{mockMode ? "Switch to Study Mode" : "Switch to Mock Interview Mode (2-min timer per question)"}</TooltipContent>
+                  </Tooltip>
                 </>
               )}
             </div>
           </div>
+
+          {/* JD-derived company-specific set: pick a real Application/Job or paste a JD */}
+          <button
+            type="button"
+            onClick={() => { const next = !showJdPanel; setShowJdPanel(next); if (next) loadApplications(); }}
+            className="flex items-center gap-1.5 text-xs font-semibold text-slate-400 hover:text-white transition-colors mb-1"
+          >
+            <ChevronRight className={cn("w-3.5 h-3.5 transition-transform", showJdPanel && "rotate-90")} />
+            <FileText className="w-3.5 h-3.5" />
+            Tailor to a job description {jobDescription.trim() && <span className="text-emerald-400">(1 loaded)</span>}
+          </button>
+          <AnimatePresence initial={false}>
+            {showJdPanel && (
+              <motion.div
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: "auto" }}
+                exit={{ opacity: 0, height: 0 }}
+                transition={motionTransition("base", "smooth")}
+                style={{ overflow: "hidden" }}
+              >
+                <div className="pt-3 pb-1 space-y-3">
+                  {applications.length > 0 && (
+                    <div>
+                      <label className="text-xs font-medium text-slate-400 mb-1.5 flex items-center gap-1.5">
+                        <Briefcase className="w-3 h-3" /> Pick a real job from your Applications
+                      </label>
+                      <select
+                        className="input text-sm"
+                        value={selectedApplicationId}
+                        onChange={(e) => handleSelectApplication(e.target.value)}
+                      >
+                        <option value="">— Select an application —</option>
+                        {applications.map((a) => (
+                          <option key={a.id} value={a.id}>{a.title} @ {a.organization}</option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+                  <div>
+                    <label className="text-xs font-medium text-slate-400 mb-1.5 flex items-center gap-1.5">
+                      <Building2 className="w-3 h-3" /> Or paste a job description
+                    </label>
+                    <textarea
+                      className="input text-sm resize-none leading-relaxed"
+                      rows={5}
+                      placeholder="Paste the job posting text here — the generated set will be rooted in this company's actual tech stack, domain, and responsibilities."
+                      value={jobDescription}
+                      onChange={(e) => { setJobDescription(e.target.value); setSelectedApplicationId(""); }}
+                    />
+                    <p className="text-[10px] text-slate-600 mt-1">
+                      {jobDescription.trim()
+                        ? "Generate Personalized Set above will now root every question in this JD."
+                        : "Optional — without a JD, questions are generated from your profile + target role/company only."}
+                    </p>
+                  </div>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
           {profile ? (
-            <p className="text-[11px] text-slate-500">
+            <p className="text-[11px] text-slate-500 mt-2">
               Profile: <span className="text-slate-300">{profile.name || "—"}</span>
               {" · "}<span className="text-slate-300">{profile.experienceYears}yr exp</span>
               {" · "}<span className="text-slate-300">{(profile.skills ?? []).slice(0, 3).join(", ")}</span>
@@ -496,15 +862,38 @@ export default function InterviewPrepPage() {
               )}
             </p>
           ) : (
-            <p className="text-[11px] text-amber-400/80">
+            <p className="text-[11px] text-amber-400/80 mt-2">
               ⚠ <button onClick={() => router.push("/profile")} className="underline hover:text-amber-300 transition-colors">Set up your profile</button> to generate a personalized question set tailored to your role and skills.
             </p>
           )}
-        </div>
+        </Card>
+
+        {/* Company-specific set banner — only shown right after a JD-derived generation */}
+        <AnimatePresence>
+          {jdSource === "jd-derived" && questions && !generating && !browseMode && !reviewMode && (
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: "auto" }}
+              exit={{ opacity: 0, height: 0 }}
+              transition={motionTransition("base", "smooth")}
+              style={{ overflow: "hidden" }}
+            >
+              <div className="mb-4 p-3 rounded-lg bg-emerald-500/8 border border-emerald-500/25 flex items-center gap-3">
+                <Building2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-semibold text-emerald-300">
+                    Company-specific set{targetCompany ? ` — tailored to ${targetCompany}` : ""}
+                  </p>
+                  <p className="text-[11px] text-slate-400">Rooted in the job description you provided, not a generic set.</p>
+                </div>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         {/* Progress bar */}
         {questions && completedCount > 0 && (
-          <div className="card mb-4 py-3">
+          <Card className="mb-4 backdrop-blur-xl py-3 px-6">
             <div className="flex items-center gap-4">
               <div className="flex-1">
                 <div className="flex items-center justify-between mb-1">
@@ -525,53 +914,122 @@ export default function InterviewPrepPage() {
               </div>
               <Trophy className={`w-5 h-5 ${avgScore >= 70 ? "text-emerald-400" : "text-slate-600"}`} />
             </div>
-          </div>
+          </Card>
         )}
 
         {/* Generating state */}
-        {generating && (
-          <div className="card text-center py-16">
-            <div className="w-14 h-14 rounded-full bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center mx-auto mb-4">
-              <Brain className="w-7 h-7 text-indigo-400 animate-pulse" />
-            </div>
-            <p className="text-white font-semibold mb-1">Analysing your profile & crafting questions…</p>
-            <p className="text-slate-400 text-sm">
-              Selecting DSA, System Design, {targetRole || "role-specific"}, and Behavioural questions
-              tailored to your skills
-            </p>
-          </div>
-        )}
+        <AnimatePresence>
+          {generating && (
+            <motion.div
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -8 }}
+              transition={motionTransition("base", "outQuint")}
+            >
+              <Card className="backdrop-blur-xl text-center py-16 px-6">
+                <div className="w-14 h-14 rounded-full bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center mx-auto mb-4">
+                  <Brain className="w-7 h-7 text-indigo-400 animate-pulse" />
+                </div>
+                <p className="text-white font-semibold mb-1">Analysing your profile & crafting questions…</p>
+                <p className="text-slate-400 text-sm">
+                  Selecting DSA, System Design, {targetRole || "role-specific"}, and Behavioural questions
+                  tailored to your skills
+                </p>
+              </Card>
+              {/* Skeleton preview of the incoming question list */}
+              <div className="space-y-3 mt-4">
+                {[0, 1, 2].map((i) => (
+                  <div key={i} className="flex items-start gap-3 rounded-xl border p-4" style={{ borderColor: "var(--border)" }}>
+                    <Skeleton className="w-8 h-8 rounded-lg shrink-0" />
+                    <div className="flex-1 space-y-2">
+                      <Skeleton className="h-3 w-24" />
+                      <Skeleton className="h-4 w-4/5" />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         {/* Browse Mode Banner */}
-        {browseMode && questions && !generating && (
-          <div className="mb-4 p-3 rounded-lg bg-indigo-500/8 border border-indigo-500/25 flex items-center gap-3">
-            <BookOpen className="w-4 h-4 text-indigo-400 shrink-0" />
-            <div className="flex-1 min-w-0">
-              <p className="text-xs font-semibold text-indigo-300">
-                Browsing: <span className={DOMAIN_META[filterDomain]?.color ?? "text-white"}>{filterDomain}</span>
-                <span className="text-slate-400 font-normal ml-1">— {questions.length} questions</span>
-              </p>
-              <p className="text-[11px] text-slate-400">Showing all questions for this domain regardless of role. Click another chip to switch domain.</p>
-            </div>
-            <button onClick={clearAll} className="text-[11px] text-slate-500 hover:text-slate-300 border border-slate-600 hover:border-slate-400 rounded px-2 py-0.5 shrink-0 transition-all">
-              ✕ Clear
-            </button>
-          </div>
-        )}
+        <AnimatePresence>
+          {browseMode && questions && !generating && (
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: "auto" }}
+              exit={{ opacity: 0, height: 0 }}
+              transition={motionTransition("base", "smooth")}
+              style={{ overflow: "hidden" }}
+            >
+              <div className="mb-4 p-3 rounded-lg bg-indigo-500/8 border border-indigo-500/25 flex items-center gap-3">
+                <BookOpen className="w-4 h-4 text-indigo-400 shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-semibold text-indigo-300">
+                    Browsing: <span className={DOMAIN_META[filterDomain]?.color ?? "text-white"}>{filterDomain}</span>
+                    <span className="text-slate-400 font-normal ml-1">— {questions.length} questions</span>
+                  </p>
+                  <p className="text-[11px] text-slate-400">Showing all questions for this domain regardless of role. Click another chip to switch domain.</p>
+                </div>
+                <button onClick={clearAll} className="text-[11px] text-slate-500 hover:text-slate-300 border border-slate-600 hover:border-slate-400 rounded px-2 py-0.5 shrink-0 transition-all">
+                  ✕ Clear
+                </button>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         {/* Mock Mode Banner */}
-        {mockMode && questions && !generating && (
-          <div className="mb-4 p-3 rounded-lg bg-rose-500/8 border border-rose-500/25 flex items-center gap-3">
-            <Timer className="w-4 h-4 text-rose-400 shrink-0" />
-            <div className="flex-1 min-w-0">
-              <p className="text-xs font-semibold text-rose-300">Mock Interview Mode — 2 min per question</p>
-              <p className="text-[11px] text-slate-400">Open a question to start its timer. Try to answer before time runs out.</p>
-            </div>
-            <button onClick={() => { setMockMode(false); stopTimer(); }} className="text-[11px] text-slate-500 hover:text-slate-300 shrink-0">
-              Exit
-            </button>
-          </div>
-        )}
+        <AnimatePresence>
+          {mockMode && questions && !generating && (
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: "auto" }}
+              exit={{ opacity: 0, height: 0 }}
+              transition={motionTransition("base", "smooth")}
+              style={{ overflow: "hidden" }}
+            >
+              <div className="mb-4 p-3 rounded-lg bg-rose-500/8 border border-rose-500/25 flex items-center gap-3">
+                <Timer className="w-4 h-4 text-rose-400 shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-semibold text-rose-300">Mock Interview Mode — 2 min per question</p>
+                  <p className="text-[11px] text-slate-400">Open a question to start its timer. Try to answer before time runs out.</p>
+                </div>
+                <button onClick={() => { setMockMode(false); stopTimer(); }} className="text-[11px] text-slate-500 hover:text-slate-300 shrink-0">
+                  Exit
+                </button>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Review Mode Banner — spaced-repetition "Due for Review" queue */}
+        <AnimatePresence>
+          {reviewMode && questions && !generating && (
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: "auto" }}
+              exit={{ opacity: 0, height: 0 }}
+              transition={motionTransition("base", "smooth")}
+              style={{ overflow: "hidden" }}
+            >
+              <div className="mb-4 p-3 rounded-lg bg-rose-500/8 border border-rose-500/25 flex items-center gap-3">
+                <CalendarClock className="w-4 h-4 text-rose-400 shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-semibold text-rose-300">
+                    Due for Review — {questions.length} question{questions.length === 1 ? "" : "s"}
+                  </p>
+                  <p className="text-[11px] text-slate-400">
+                    Spaced-repetition queue: questions you graded &ldquo;Still shaky&rdquo; resurface sooner, &ldquo;Nailed it&rdquo; pushes them further out.
+                  </p>
+                </div>
+                <button onClick={clearAll} className="text-[11px] text-slate-500 hover:text-slate-300 border border-slate-600 hover:border-slate-400 rounded px-2 py-0.5 shrink-0 transition-all">
+                  ✕ Clear
+                </button>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         {/* Filters */}
         {questions && !generating && (
@@ -602,18 +1060,22 @@ export default function InterviewPrepPage() {
                   const Icon = meta?.icon;
                   const count = d === "all" ? questions.length : questions.filter(q => q.domain === d).length;
                   return (
-                    <button
+                    <Badge
+                      asChild
+                      variant="outline"
                       key={d}
-                      onClick={() => setFilterDomain(d)}
-                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all border ${
+                      className={cn(
+                        "cursor-pointer gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium border transition-all",
                         filterDomain === d
                           ? "bg-indigo-600 text-white border-indigo-500"
                           : "bg-transparent text-slate-400 border-slate-700 hover:text-white hover:border-slate-500"
-                      }`}
+                      )}
                     >
-                      {Icon && <Icon className="w-3 h-3" />}
-                      {d === "all" ? `All (${count})` : `${d} (${count})`}
-                    </button>
+                      <button onClick={() => setFilterDomain(d)}>
+                        {Icon && <Icon className="w-3 h-3" />}
+                        {d === "all" ? `All (${count})` : `${d} (${count})`}
+                      </button>
+                    </Badge>
                   );
                 })}
               </div>
@@ -624,19 +1086,23 @@ export default function InterviewPrepPage() {
               <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-2">Filter by Type</p>
               <div className="flex gap-2 flex-wrap">
                 {(["all", "behavioral", "technical", "situational", "leadership"] as const).map((f) => (
-                  <button
+                  <Badge
+                    asChild
+                    variant="outline"
                     key={f}
-                    onClick={() => setFilterType(f)}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all border ${
+                    className={cn(
+                      "cursor-pointer rounded-lg px-3 py-1.5 text-xs font-medium border transition-all",
                       filterType === f
                         ? "bg-indigo-600 text-white border-indigo-500"
                         : "bg-transparent text-slate-400 border-slate-700 hover:text-white hover:border-slate-500"
-                    }`}
+                    )}
                   >
-                    {f === "all"
-                      ? `All Types (${questions.length})`
-                      : `${TYPE_META[f]?.label} (${questions.filter(q => q.type === f).length})`}
-                  </button>
+                    <button onClick={() => setFilterType(f)}>
+                      {f === "all"
+                        ? `All Types (${questions.length})`
+                        : `${TYPE_META[f]?.label} (${questions.filter(q => q.type === f).length})`}
+                    </button>
+                  </Badge>
                 ))}
               </div>
             </div>
@@ -651,13 +1117,16 @@ export default function InterviewPrepPage() {
                 const isOpen = expanded[q.id];
                 const myAnswer = answers[q.id] ?? "";
                 const myScore = scores[q.id];
+                const rState = reviewStates[q.id];
+                const revBadge = reviewBadge(rState);
 
                 return (
-                  <div key={q.id} className={`card border transition-all ${
+                  <Card key={q.id} className={cn(
+                    "backdrop-blur-xl p-6 border transition-all",
                     isOpen && mockMode && timerQuestionId === q.id && timerSeconds !== null && timerSeconds <= 30
                       ? "border-rose-500/40"
                       : isOpen ? "border-indigo-500/30" : ""
-                  }`}>
+                  )}>
                     {/* Question Header */}
                     <button onClick={() => toggle(q.id)} className="w-full text-left flex items-start gap-3">
                       <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 mt-0.5 border ${meta.bg}`}>
@@ -665,7 +1134,7 @@ export default function InterviewPrepPage() {
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 mb-1 flex-wrap">
-                          <span className={`text-[10px] font-bold uppercase tracking-wider ${meta.color}`}>{meta.label}</span>
+                          <Badge variant="outline" className={`border-none p-0 text-[10px] font-bold uppercase tracking-wider ${meta.color}`}>{meta.label}</Badge>
                           <span className={`text-[10px] font-semibold ${DIFF_COLOR[q.difficulty]}`}>· {q.difficulty}</span>
                           {DomainIcon && (
                             <span className={`flex items-center gap-1 text-[10px] font-medium ${domainMeta.color}`}>
@@ -673,6 +1142,11 @@ export default function InterviewPrepPage() {
                             </span>
                           )}
                           <span className="text-[10px] text-slate-600">Q{idx + 1}</span>
+                          {revBadge && (
+                            <span className={`flex items-center gap-1 text-[10px] font-semibold ${revBadge.color}`}>
+                              <CalendarClock className="w-2.5 h-2.5" /> {revBadge.label}
+                            </span>
+                          )}
                           {myScore !== undefined && (
                             <span className={`text-[10px] font-bold ml-auto ${myScore >= 70 ? "text-emerald-400" : myScore >= 50 ? "text-amber-400" : "text-rose-400"}`}>
                               Score: {myScore}/100
@@ -699,140 +1173,194 @@ export default function InterviewPrepPage() {
                     </button>
 
                     {/* Expanded Content */}
-                    {isOpen && (
-                      <div className="mt-4 border-t border-slate-700/60 pt-4 space-y-4">
-                        {/* Key Points */}
-                        <div>
-                          <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-2 flex items-center gap-1">
-                            <Target className="w-3 h-3" /> What interviewers are looking for
-                          </p>
-                          <div className="flex flex-wrap gap-1.5">
-                            {q.keyPoints.map((pt) => (
-                              <span key={pt} className="tag text-[11px]">{pt}</span>
-                            ))}
-                          </div>
-                        </div>
-
-                        {/* Hint */}
-                        <div className="p-3 bg-amber-500/5 border border-amber-500/20 rounded-lg">
-                          <p className="text-[10px] font-semibold text-amber-400 mb-1 flex items-center gap-1">
-                            <Lightbulb className="w-3 h-3" /> Coaching tip
-                          </p>
-                          <p className="text-xs text-slate-300 leading-relaxed">{q.hint}</p>
-                        </div>
-
-                        {/* Model Answer (technical questions) */}
-                        {q.modelAnswer && (
-                          <div className="p-3 bg-cyan-500/5 border border-cyan-500/20 rounded-lg">
-                            <p className="text-[10px] font-semibold text-cyan-400 mb-2 flex items-center gap-1">
-                              <BookOpen className="w-3 h-3" /> Model Answer
-                            </p>
-                            <div className="text-xs text-slate-300 leading-relaxed whitespace-pre-wrap font-mono bg-slate-900/40 rounded-lg p-3 border border-slate-700/40 max-h-80 overflow-y-auto">
-                              {q.modelAnswer}
-                            </div>
-                          </div>
-                        )}
-
-                        {/* STAR Template */}
-                        {q.starTemplate && (
-                          <div className="space-y-2">
-                            <p className="text-[10px] font-semibold text-indigo-400 uppercase tracking-wider flex items-center gap-1">
-                              <ClipboardList className="w-3 h-3" /> STAR Answer Template (pre-filled from your profile)
-                            </p>
-                            {(["situation", "task", "action", "result"] as const).map((key) => (
-                              <div key={key} className="flex gap-2">
-                                <span className="text-[10px] font-bold uppercase text-slate-500 w-16 shrink-0 pt-1">{key}</span>
-                                <p className="text-xs text-slate-300 leading-relaxed flex-1 bg-slate-800/50 rounded-lg px-3 py-2 border border-slate-700/50">
-                                  {q.starTemplate![key]}
-                                </p>
+                    <AnimatePresence initial={false}>
+                      {isOpen && (
+                        <motion.div
+                          key="content"
+                          initial={{ height: 0, opacity: 0 }}
+                          animate={{ height: "auto", opacity: 1 }}
+                          exit={{ height: 0, opacity: 0 }}
+                          transition={motionTransition("slow", "smooth")}
+                          style={{ overflow: "hidden" }}
+                        >
+                          <Separator className="mt-4" />
+                          <div className="pt-4 space-y-4">
+                            {/* Key Points */}
+                            <div>
+                              <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-2 flex items-center gap-1">
+                                <Target className="w-3 h-3" /> What interviewers are looking for
+                              </p>
+                              <div className="flex flex-wrap gap-1.5">
+                                {q.keyPoints.map((pt) => (
+                                  <span key={pt} className="tag text-[11px]">{pt}</span>
+                                ))}
                               </div>
-                            ))}
-                          </div>
-                        )}
-
-                        {/* Practice Answer */}
-                        <div>
-                          <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-2 flex items-center gap-1">
-                            <MessageSquare className="w-3 h-3" /> Practice your answer
-                          </p>
-                          <textarea
-                            className="input text-sm resize-none leading-relaxed"
-                            rows={5}
-                            placeholder="Type your answer here — use the STAR template or model answer above as a guide. Include specific numbers, technologies, and outcomes..."
-                            value={myAnswer}
-                            onChange={(e) => setAnswers(p => ({ ...p, [q.id]: e.target.value }))}
-                          />
-                          <div className="flex items-center justify-between mt-2">
-                            <span className="text-[11px] text-slate-600">{myAnswer.length} characters</span>
-                            <button
-                              onClick={() => scoreAnswer(q.id, myAnswer)}
-                              disabled={myAnswer.length < 30}
-                              className="btn-secondary py-1.5 px-4 text-xs flex items-center gap-1.5 disabled:opacity-40"
-                            >
-                              <Star className="w-3.5 h-3.5" /> Rate My Answer
-                            </button>
-                          </div>
-                          {myScore !== undefined && (
-                            <div className={`mt-2 p-3 rounded-lg border text-xs ${
-                              myScore >= 70 ? "bg-emerald-500/8 border-emerald-500/25 text-emerald-300" :
-                              myScore >= 50 ? "bg-amber-500/8 border-amber-500/25 text-amber-300" :
-                              "bg-rose-500/8 border-rose-500/25 text-rose-300"
-                            }`}>
-                              <span className="font-bold">{myScore}/100 — </span>
-                              {myScore >= 70
-                                ? "Strong answer! Good use of specifics and structure."
-                                : myScore >= 50
-                                ? "Decent. Add quantified outcomes (numbers, percentages) to strengthen it."
-                                : "Needs improvement. Use the STAR format or model answer above and add concrete metrics."}
                             </div>
-                          )}
-                        </div>
-                      </div>
-                    )}
-                  </div>
+
+                            {/* Hint */}
+                            <div className="p-3 bg-amber-500/5 border border-amber-500/20 rounded-lg">
+                              <p className="text-[10px] font-semibold text-amber-400 mb-1 flex items-center gap-1">
+                                <Lightbulb className="w-3 h-3" /> Coaching tip
+                              </p>
+                              <p className="text-xs text-slate-300 leading-relaxed">{q.hint}</p>
+                            </div>
+
+                            {/* Model Answer (technical questions) */}
+                            {q.modelAnswer && (
+                              <div className="p-3 bg-cyan-500/5 border border-cyan-500/20 rounded-lg">
+                                <p className="text-[10px] font-semibold text-cyan-400 mb-2 flex items-center gap-1">
+                                  <BookOpen className="w-3 h-3" /> Model Answer
+                                </p>
+                                <div className="text-xs text-slate-300 leading-relaxed whitespace-pre-wrap font-mono bg-slate-900/40 rounded-lg p-3 border border-slate-700/40 max-h-80 overflow-y-auto">
+                                  {q.modelAnswer}
+                                </div>
+                              </div>
+                            )}
+
+                            {/* STAR Template */}
+                            {q.starTemplate && (
+                              <div className="space-y-2">
+                                <p className="text-[10px] font-semibold text-indigo-400 uppercase tracking-wider flex items-center gap-1">
+                                  <ClipboardList className="w-3 h-3" /> STAR Answer Template (pre-filled from your profile)
+                                </p>
+                                {(["situation", "task", "action", "result"] as const).map((key) => (
+                                  <div key={key} className="flex gap-2">
+                                    <span className="text-[10px] font-bold uppercase text-slate-500 w-16 shrink-0 pt-1">{key}</span>
+                                    <p className="text-xs text-slate-300 leading-relaxed flex-1 bg-slate-800/50 rounded-lg px-3 py-2 border border-slate-700/50">
+                                      {q.starTemplate![key]}
+                                    </p>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+
+                            {/* Practice Answer */}
+                            <div>
+                              <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-2 flex items-center gap-1">
+                                <MessageSquare className="w-3 h-3" /> Practice your answer
+                              </p>
+                              <textarea
+                                className="input text-sm resize-none leading-relaxed"
+                                rows={5}
+                                placeholder="Type your answer here — use the STAR template or model answer above as a guide. Include specific numbers, technologies, and outcomes..."
+                                value={myAnswer}
+                                onChange={(e) => setAnswers(p => ({ ...p, [q.id]: e.target.value }))}
+                              />
+                              <div className="flex items-center justify-between mt-2">
+                                <span className="text-[11px] text-slate-600">{myAnswer.length} characters</span>
+                                <Button
+                                  onClick={() => scoreAnswer(q.id, myAnswer)}
+                                  disabled={myAnswer.length < 30}
+                                  className="btn-secondary h-auto py-1.5 px-4 text-xs flex items-center gap-1.5 disabled:opacity-40"
+                                >
+                                  <Star className="w-3.5 h-3.5" /> Rate My Answer
+                                </Button>
+                              </div>
+                              {myScore !== undefined && (
+                                <div className={`mt-2 p-3 rounded-lg border text-xs ${
+                                  myScore >= 70 ? "bg-emerald-500/8 border-emerald-500/25 text-emerald-300" :
+                                  myScore >= 50 ? "bg-amber-500/8 border-amber-500/25 text-amber-300" :
+                                  "bg-rose-500/8 border-rose-500/25 text-rose-300"
+                                }`}>
+                                  <span className="font-bold">{myScore}/100 — </span>
+                                  {myScore >= 70
+                                    ? "Strong answer! Good use of specifics and structure."
+                                    : myScore >= 50
+                                    ? "Decent. Add quantified outcomes (numbers, percentages) to strengthen it."
+                                    : "Needs improvement. Use the STAR format or model answer above and add concrete metrics."}
+                                </div>
+                              )}
+                            </div>
+
+                            {/* Spaced Repetition — self-graded recall scheduling */}
+                            <div className="p-3 rounded-lg border" style={{ background: "var(--bg-elevated)", borderColor: "var(--border)" }}>
+                              <div className="flex items-center justify-between gap-3 flex-wrap">
+                                <div className="min-w-0">
+                                  <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-1">
+                                    <CalendarClock className="w-3 h-3" /> Spaced Repetition
+                                  </p>
+                                  <p className="text-[11px] text-slate-500 mt-1">
+                                    {rState
+                                      ? <>
+                                          {rState.is_due
+                                            ? "Due now"
+                                            : `Next review: ${rState.next_review_at ? new Date(rState.next_review_at).toLocaleDateString() : "—"}`}
+                                          {" · box "}{rState.box + 1}/{TOTAL_REPETITION_BOXES}
+                                          {rState.last_grade ? ` · last graded "${rState.last_grade}"` : ""}
+                                        </>
+                                      : "Not tracked yet — grade your recall below to start scheduling review."}
+                                  </p>
+                                </div>
+                                <div className="flex gap-2 shrink-0">
+                                  <Button
+                                    onClick={() => gradeQuestion(q, "weak")}
+                                    disabled={gradingId === q.id}
+                                    className="h-auto py-1.5 px-3 text-xs flex items-center gap-1.5 rounded-lg border transition-all bg-transparent text-rose-300 border-rose-500/40 hover:bg-rose-500/10 disabled:opacity-40"
+                                  >
+                                    <ThumbsDown className="w-3.5 h-3.5" /> Still shaky
+                                  </Button>
+                                  <Button
+                                    onClick={() => gradeQuestion(q, "strong")}
+                                    disabled={gradingId === q.id}
+                                    className="h-auto py-1.5 px-3 text-xs flex items-center gap-1.5 rounded-lg border transition-all bg-transparent text-emerald-300 border-emerald-500/40 hover:bg-emerald-500/10 disabled:opacity-40"
+                                  >
+                                    <ThumbsUp className="w-3.5 h-3.5" /> Nailed it
+                                  </Button>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </Card>
                 );
               })}
             </div>
 
             {filtered.length === 0 && (
-              <div className="card text-center py-12 text-slate-400">
-                <p>No questions match the selected filters.</p>
-              </div>
+              <EmptyState
+                title="No questions match the selected filters."
+                className="mt-3"
+              />
             )}
           </>
         )}
 
         {/* Pre-generate empty state */}
         {!questions && !generating && (
-          <div className="card text-center py-12 border-dashed border-slate-700">
-            <div className="w-14 h-14 rounded-full bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center mx-auto mb-4">
-              <Brain className="w-7 h-7 text-indigo-400" />
+          <EmptyState
+            icon={Brain}
+            title="One-stop interview destination"
+            className="border-dashed"
+            bordered
+          >
+            <div className="space-y-4 w-full">
+              <p className="text-slate-400 text-sm max-w-md mx-auto">
+                <strong className="text-white">Option 1</strong> — Click a domain chip above to instantly browse all questions for that topic.
+              </p>
+              <p className="text-slate-400 text-sm max-w-md mx-auto">
+                <strong className="text-white">Option 2</strong> — Enter your role and click <strong className="text-white">Generate Questions</strong> for a personalised set.
+              </p>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 max-w-2xl mx-auto text-xs text-slate-400">
+                {ALL_DOMAINS.filter(d => DOMAIN_META[d]).map((d) => {
+                  const meta = DOMAIN_META[d];
+                  const Icon = meta.icon;
+                  return (
+                    <button
+                      key={d}
+                      onClick={() => browseDomain(d)}
+                      className={`flex items-center gap-2 p-2.5 rounded-lg border border-slate-700/50 hover:border-current transition-all cursor-pointer ${meta.color}`}
+                      style={{ background: "rgba(255,255,255,0.02)" }}
+                    >
+                      <Icon className="w-3.5 h-3.5 shrink-0" />
+                      <span className="text-[11px]">{d}</span>
+                    </button>
+                  );
+                })}
+              </div>
             </div>
-            <p className="text-white font-semibold mb-2">One-stop interview destination</p>
-            <p className="text-slate-400 text-sm max-w-md mx-auto mb-4">
-              <strong className="text-white">Option 1</strong> — Click a domain chip above to instantly browse all questions for that topic.
-            </p>
-            <p className="text-slate-400 text-sm max-w-md mx-auto mb-6">
-              <strong className="text-white">Option 2</strong> — Enter your role and click <strong className="text-white">Generate Questions</strong> for a personalised set.
-            </p>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 max-w-2xl mx-auto text-xs text-slate-400">
-              {ALL_DOMAINS.filter(d => DOMAIN_META[d]).map((d) => {
-                const meta = DOMAIN_META[d];
-                const Icon = meta.icon;
-                return (
-                  <button
-                    key={d}
-                    onClick={() => browseDomain(d)}
-                    className={`flex items-center gap-2 p-2.5 rounded-lg border border-slate-700/50 hover:border-current transition-all cursor-pointer ${meta.color}`}
-                    style={{ background: "rgba(255,255,255,0.02)" }}
-                  >
-                    <Icon className="w-3.5 h-3.5 shrink-0" />
-                    <span className="text-[11px]">{d}</span>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
+          </EmptyState>
         )}
 
         {questions && !generating && (

@@ -8,10 +8,11 @@ from sqlalchemy import select
 
 from core.database import get_db
 from core.auth import get_current_user_id
-from models.database import VerifiedJob, ResumeHistory
+from models.database import VerifiedJob, ResumeHistory, CandidateProfile
 from resume_parser.parser import ResumeParser
 from ats_resume_generator.generator import ATSResumeGenerator, generate_master_resume
 from cover_letter_generator.generator import CoverLetterGenerator
+from services.ats_match import compute_ats_match
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -91,6 +92,69 @@ async def generate_ats_resume(
         logger.warning(f"Failed to save resume history: {e}")
 
     return result
+
+
+# ── Real (non-LLM) ATS keyword-match score for a specific job ────────────────
+@router.post("/ats-match")
+async def ats_keyword_match(
+    payload: dict = Body(...),
+    db: AsyncSession = Depends(get_db),
+    uid: uuid.UUID = Depends(get_current_user_id),
+):
+    """
+    Real, computed ATS keyword-match score — plain set-overlap between the
+    candidate's resume text and a specific job's technologies/requirements +
+    description (see services/ats_match.py for the exact method). This is a
+    deterministic, user-verifiable number: no LLM call is involved, unlike
+    the AI-guessed keyword_heatmap returned by /generate-ats.
+
+    Body:
+      {
+        "resume_text": "...",   # optional — falls back to the caller's
+                                 # saved profile.base_resume_text
+        "job_id": "<uuid>"       # OR
+        "job": { "title", "description", "technologies", "requirements" }
+      }
+    """
+    resume_text = (payload.get("resume_text") or "").strip()
+    if not resume_text:
+        profile_row = (
+            await db.execute(select(CandidateProfile).where(CandidateProfile.user_id == uid))
+        ).scalar_one_or_none()
+        resume_text = ((profile_row.base_resume_text if profile_row else "") or "").strip()
+
+    job_data = payload.get("job")
+    if not job_data:
+        job_id = payload.get("job_id")
+        if not job_id:
+            raise HTTPException(status_code=400, detail="Provide either job_id or job object")
+        try:
+            job_uuid = uuid.UUID(job_id)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid job_id")
+        row = (await db.execute(select(VerifiedJob).where(VerifiedJob.id == job_uuid))).scalar_one_or_none()
+        if not row:
+            raise HTTPException(status_code=404, detail="Job not found")
+        job_data = {
+            "title": row.title,
+            "description": row.description or "",
+            "technologies": row.technologies or [],
+            "requirements": row.requirements or [],
+        }
+
+    if not resume_text:
+        raise HTTPException(
+            status_code=400,
+            detail="No resume text available — add one to your profile or pass resume_text explicitly",
+        )
+
+    result = compute_ats_match(
+        resume_text=resume_text,
+        job_description=job_data.get("description", "") or "",
+        job_technologies=job_data.get("technologies") or [],
+        job_requirements=job_data.get("requirements") or [],
+    )
+    return {"job_title": job_data.get("title", ""), **result}
 
 
 # ── Download helpers (no auth needed — caller supplies the base64) ─────────────

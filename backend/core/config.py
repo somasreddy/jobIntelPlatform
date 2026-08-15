@@ -1,8 +1,15 @@
+import logging
 from typing import List, Union
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from pydantic import field_validator, model_validator
 from pydantic_settings import BaseSettings
+
+logger = logging.getLogger(__name__)
+
+# Insecure default JWT secret shipped for local development convenience.
+# Must be kept in sync with Settings.JWT_SECRET_KEY's default below.
+_INSECURE_DEFAULT_JWT_SECRET = "change-me-in-production-use-env-var"
 
 
 def _normalize_async_database_url(value: str) -> tuple[str, bool]:
@@ -126,6 +133,15 @@ class Settings(BaseSettings):
     ADZUNA_APP_KEY: str = ""
     JSEARCH_API_KEY: str = "" # https://rapidapi.com/letscrape-6bRBa3QguO5/api/jsearch (aggregates LinkedIn/Indeed/Glassdoor/Naukri)
 
+    # Auth / JWT
+    JWT_SECRET_KEY: str = _INSECURE_DEFAULT_JWT_SECRET
+    REQUIRE_AUTH: bool = False
+
+    # Deployment environment: "development" (default), "staging", or "production".
+    # Gates the startup auth-safety check below — set this in staging/prod.
+    # (Already present, unread, as APP_ENV in this project's local .env — reusing that name.)
+    APP_ENV: str = "development"
+
     class Config:
         import os
         base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -134,3 +150,34 @@ class Settings(BaseSettings):
         extra = "ignore"
 
 settings = Settings()
+
+# ── Startup-time auth safety check ──────────────────────────────────────────
+# Refuse to start in production/staging with the insecure default JWT secret.
+# In any other environment (e.g. local development) we deliberately keep the
+# existing permissive runtime behavior and just make the risk impossible to miss.
+_uses_default_jwt_secret = settings.JWT_SECRET_KEY == _INSECURE_DEFAULT_JWT_SECRET
+_is_prod_like_env = settings.APP_ENV.strip().lower() in {"production", "prod", "staging"}
+
+if _is_prod_like_env and _uses_default_jwt_secret:
+    raise RuntimeError(
+        f"Refusing to start: APP_ENV='{settings.APP_ENV}' but JWT_SECRET_KEY "
+        "is still the insecure built-in default. Set a strong, unique JWT_SECRET_KEY "
+        "in the environment before running in production or staging."
+    )
+elif _uses_default_jwt_secret or not settings.REQUIRE_AUTH:
+    _risk_lines = []
+    if _uses_default_jwt_secret:
+        _risk_lines.append("  - JWT_SECRET_KEY is unset and using the insecure built-in default value.")
+    if not settings.REQUIRE_AUTH:
+        _risk_lines.append(
+            "  - REQUIRE_AUTH is not enabled: unauthenticated requests silently fall back "
+            "to a hardcoded demo user instead of being rejected."
+        )
+    logger.warning(
+        "\n" + "!" * 78 + "\n"
+        "! INSECURE AUTH CONFIGURATION (APP_ENV='%s')\n"
+        + "\n".join(_risk_lines) + "\n"
+        "! Set JWT_SECRET_KEY and REQUIRE_AUTH=true before deploying to production.\n"
+        + "!" * 78,
+        settings.APP_ENV,
+    )
