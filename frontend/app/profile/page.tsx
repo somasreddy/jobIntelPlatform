@@ -3,6 +3,7 @@ import { useState, useEffect, useRef, useMemo } from "react";
 import { useProfile } from "@/lib/ProfileContext";
 import { loadProfile } from "@/lib/profile";
 import LocationAutocomplete from "@/components/LocationAutocomplete";
+import ProfileIntelligenceReview from "@/components/profile-intelligence/ProfileIntelligenceReview";
 import {
   User, Briefcase, DollarSign, MapPin, Clock,
   Plus, X, Upload, ChevronRight, ChevronDown, ChevronUp,
@@ -354,6 +355,8 @@ function ProfileTab({ onTabChange }: { onTabChange: (t: TabId) => void }) {
               <Edit3 className="w-3.5 h-3.5" /> Edit Profile
             </button>
           </div>
+          <ProfileIntelligenceReview profile={form} onEdit={() => setViewMode(false)} />
+          <div className="hidden" aria-hidden="true">
           <div className="card py-4 px-5">
             <div className="flex items-start gap-4">
               <div className="w-14 h-14 rounded-2xl flex items-center justify-center text-xl font-bold text-white shrink-0" style={{ background: "color-mix(in srgb, var(--accent) 20%, transparent)", border: "1px solid var(--border-hover)" }}>
@@ -392,6 +395,7 @@ function ProfileTab({ onTabChange }: { onTabChange: (t: TabId) => void }) {
               <p className="text-xs text-slate-400 line-clamp-4 leading-relaxed font-mono">{form.resumeText}</p>
             </div>
           )}
+          </div>
           <button onClick={() => onTabChange("resume")} className="btn-secondary w-full py-2.5 flex items-center justify-center gap-2 text-sm">
             <FileText className="w-4 h-4" /> View Resume & ATS Score <ChevronRight className="w-4 h-4" />
           </button>

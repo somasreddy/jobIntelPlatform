@@ -1,6 +1,7 @@
 "use client";
 import { ApplicationStatus } from "@/lib/types";
 import { useAppData } from "@/lib/AppDataContext";
+import ApplicationTimeline from "@/components/ApplicationTimeline";
 import {
   Building2, ArrowUpRight, Bell, BellOff, AlertCircle,
   Mail, Plus, Trash2, Edit3, CheckCircle2, Clock, AlertTriangle,
@@ -13,12 +14,20 @@ import { useState, useEffect, useMemo } from "react";
 
 // ─── Application Tracker types ────────────────────────────────────────────────
 const COLUMNS: { id: ApplicationStatus; title: string; color: string }[] = [
-  { id: "Saved",      title: "Saved",      color: "text-slate-400"  },
-  { id: "Applied",    title: "Applied",    color: "text-indigo-400" },
-  { id: "Assessment", title: "Assessment", color: "text-amber-400"  },
-  { id: "Interview",  title: "Interview",  color: "text-cyan-400"   },
-  { id: "Offer",      title: "Offer",      color: "text-emerald-400"},
-  { id: "Rejected",   title: "Rejected",   color: "text-rose-400"   },
+  { id: "Discovered",         title: "Discovered",         color: "text-slate-400" },
+  { id: "Saved",              title: "Saved",              color: "text-slate-300" },
+  { id: "Shortlisted",        title: "Shortlisted",        color: "text-blue-400" },
+  { id: "Tailoring",          title: "Tailoring",          color: "text-violet-400" },
+  { id: "Ready to Apply",     title: "Ready",              color: "text-indigo-300" },
+  { id: "Applied",            title: "Applied",            color: "text-indigo-400" },
+  { id: "Recruiter Contacted",title: "Recruiter Contacted",color: "text-cyan-400" },
+  { id: "Screening",          title: "Screening",          color: "text-sky-400" },
+  { id: "Assessment",         title: "Assessment",         color: "text-amber-400" },
+  { id: "Interview",          title: "Interview",          color: "text-orange-400" },
+  { id: "Final Interview",    title: "Final Interview",    color: "text-yellow-300" },
+  { id: "Offer",              title: "Offer",              color: "text-emerald-400" },
+  { id: "Rejected",           title: "Rejected",           color: "text-rose-400" },
+  { id: "Archived",           title: "Archived",           color: "text-slate-500" },
 ];
 
 const FOLLOWUP_STORAGE_KEY = "trackerFollowUpDates";
@@ -365,8 +374,9 @@ export default function PipelinePage() {
                                 <Bell className="w-3 h-3" /> Set follow-up
                               </button>
                             ))}
+                            <ApplicationTimeline applicationId={app.id} />
                             <div className="flex items-center justify-between mt-2 pt-2 border-t border-slate-600/50">
-                              <span className="text-[10px] text-slate-500">{col.id === "Saved" ? "Bookmarked" : `Applied ${new Date(app.dateApplied + "T00:00:00").toLocaleDateString(undefined, { month: "short", day: "numeric" })}`}</span>
+                              <span className="text-[10px] text-slate-500">{app.dateApplied ? `Applied ${new Date(app.dateApplied + "T00:00:00").toLocaleDateString(undefined, { month: "short", day: "numeric" })}` : app.status}</span>
                               <Link href={`/jobs/${app.jobId}`} className="text-indigo-400 hover:text-indigo-300 text-[10px] flex items-center gap-0.5">View Job <ArrowUpRight className="w-3 h-3" /></Link>
                             </div>
                           </div>

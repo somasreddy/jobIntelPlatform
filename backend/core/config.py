@@ -77,6 +77,16 @@ class Settings(BaseSettings):
     POSTGRES_PRISMA_URL: str = ""
     POSTGRES_URL_NON_POOLING: str = ""
     DATABASE_SSL_REQUIRED: bool = False
+    # Comma-separated break-glass/local admin allowlist; database role remains authoritative.
+    ADMIN_EMAILS: str = "demo@jobintel.ai"
+    ENVIRONMENT: str = "development"
+    REQUIRE_AUTH: str = "false"
+    ENABLE_STARTUP_SCHEMA_SYNC: bool = False
+    ENABLE_CONTRACT_CONNECTORS: bool = True
+    ENABLE_DETERMINISTIC_RANKING: bool = True
+    ENABLE_PROFILE_INTELLIGENCE: bool = True
+    ENABLE_ADMIN_OPERATIONS: bool = True
+
 
     # Redis / Celery
     REDIS_URL: str = "redis://localhost:6379/0"

@@ -21,6 +21,7 @@ from core.database import get_db
 from core.auth import get_current_user_id
 from core.llm import smart_chat
 from models.database import Application
+from services.application_status import normalize_application_status
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -47,9 +48,12 @@ CREATE TABLE IF NOT EXISTS campaigns (
     status              TEXT DEFAULT 'active',
     created_at          TIMESTAMPTZ DEFAULT NOW(),
     updated_at          TIMESTAMPTZ DEFAULT NOW()
-);
-CREATE INDEX IF NOT EXISTS idx_campaigns_user ON campaigns(user_id);
+)
 """
+
+_CREATE_CAMPAIGNS_INDEX_SQL = (
+    "CREATE INDEX IF NOT EXISTS idx_campaigns_user ON campaigns(user_id)"
+)
 
 _CREATE_ACTIONS_SQL = """
 CREATE TABLE IF NOT EXISTS campaign_actions (
@@ -61,14 +65,25 @@ CREATE TABLE IF NOT EXISTS campaign_actions (
     count        INTEGER DEFAULT 1,
     metadata     JSONB,
     created_at   TIMESTAMPTZ DEFAULT NOW()
-);
-CREATE INDEX IF NOT EXISTS idx_campaign_actions_cid ON campaign_actions(campaign_id, action_date);
+)
 """
+
+_CREATE_ACTIONS_INDEX_SQL = (
+    "CREATE INDEX IF NOT EXISTS idx_campaign_actions_cid "
+    "ON campaign_actions(campaign_id, action_date)"
+)
 
 
 async def _ensure_tables(db: AsyncSession) -> None:
-    await db.execute(text(_CREATE_CAMPAIGNS_SQL))
-    await db.execute(text(_CREATE_ACTIONS_SQL))
+    # asyncpg prepares each SQLAlchemy text() execution and therefore requires
+    # exactly one PostgreSQL command per call (especially through Supavisor).
+    for statement in (
+        _CREATE_CAMPAIGNS_SQL,
+        _CREATE_CAMPAIGNS_INDEX_SQL,
+        _CREATE_ACTIONS_SQL,
+        _CREATE_ACTIONS_INDEX_SQL,
+    ):
+        await db.execute(text(statement))
     await db.flush()
 
 
@@ -172,8 +187,8 @@ async def get_active_campaign(
     )
     apps = apps_result.scalars().all()
     total_apps    = len(apps)
-    interviews    = sum(1 for a in apps if a.status in ("Interview", "Offer"))
-    offers        = sum(1 for a in apps if a.status == "Offer")
+    interviews    = sum(1 for a in apps if normalize_application_status(a.status, strict=False) in ("interview", "offer"))
+    offers        = sum(1 for a in apps if normalize_application_status(a.status, strict=False) == "offer")
 
     # Streak calculation
     streak = campaign.get("current_streak", 0)
@@ -310,8 +325,8 @@ async def get_daily_todos(
     apps_result = await db.execute(select(Application).where(Application.user_id == uid))
     apps = apps_result.scalars().all()
     total_apps = len(apps)
-    interviews = sum(1 for a in apps if a.status == "Interview")
-    saved      = sum(1 for a in apps if a.status == "Saved")
+    interviews = sum(1 for a in apps if normalize_application_status(a.status, strict=False) == "interview")
+    saved      = sum(1 for a in apps if normalize_application_status(a.status, strict=False) == "saved")
 
     system = (
         "You are a daily job search coach. Based on the campaign state, generate 5-7 specific, "

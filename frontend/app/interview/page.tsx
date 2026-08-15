@@ -1,5 +1,6 @@
 "use client";
 import { useState, useEffect, useRef } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useProfile } from "@/lib/ProfileContext";
 import { CandidateProfile } from "@/lib/types";
@@ -9,7 +10,7 @@ import {
   MessageSquare, Code2, Users, Lightbulb, Target,
   Star, RefreshCw, ClipboardList, Trophy,
   BookOpen, Cpu, GitMerge, Database, Cloud, Globe2, TestTube2, BarChart2,
-  Timer, Zap, Coffee, MousePointerClick, Shield, Eye,
+  Timer, Zap, Coffee, MousePointerClick, Shield, Eye, GraduationCap, Gauge, Route,
 } from "lucide-react";
 
 // ─── Local interview question type (profile-personalised behavioral) ───────────
@@ -345,6 +346,18 @@ export default function InterviewPrepPage() {
     ? Math.round(Object.values(scores).reduce((a, b) => a + b, 0) / completedCount)
     : 0;
 
+  const totalDomainCount = new Set((questions ?? []).map(question => question.domain)).size;
+  const practicedDomainCount = new Set(
+    (questions ?? []).filter(question => scores[question.id] !== undefined).map(question => question.domain)
+  ).size;
+  const coverageScore = questions?.length ? Math.min(100, Math.round((completedCount / questions.length) * 100)) : 0;
+  const readinessScore = Math.round((coverageScore * 0.4) + (avgScore * 0.6));
+  const readinessLabel = readinessScore >= 75 ? "Interview ready" : readinessScore >= 50 ? "Building confidence" : "Needs rehearsal";
+  const recommendedAction = completedCount === 0
+    ? "Answer and score three questions to establish your readiness baseline."
+    : avgScore < 70
+      ? "Strengthen answers with STAR structure, concrete decisions, and quantified outcomes."
+      : "Run a timed simulator session to validate delivery under pressure.";
   // No profile? Still show the full question bank — just disable personalized generation.
 
   return (
@@ -389,6 +402,45 @@ export default function InterviewPrepPage() {
               </a>
             </div>
           </div>
+        </div>
+        <div className="grid grid-cols-2 xl:grid-cols-4 gap-3 mb-4">
+          {[
+            { label: "Practice coverage", value: `${completedCount}/${questions?.length ?? 0}`, detail: "Answers scored", icon: Target },
+            { label: "Answer quality", value: `${avgScore}/100`, detail: completedCount ? "Current average" : "No baseline yet", icon: Star },
+            { label: "Domains rehearsed", value: `${practicedDomainCount}/${totalDomainCount}`, detail: "Breadth of preparation", icon: Route },
+            { label: "Readiness", value: `${readinessScore}%`, detail: readinessLabel, icon: Gauge },
+          ].map(({ label, value, detail, icon: Icon }) => (
+            <div key={label} className="card p-4">
+              <div className="flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">{label}</p>
+                  <p className="mt-1 text-xl font-bold text-white">{value}</p>
+                  <p className="mt-0.5 truncate text-[11px] text-slate-500">{detail}</p>
+                </div>
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-indigo-500/10 text-indigo-300">
+                  <Icon className="h-4 w-4" />
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <div className="card mb-6 flex flex-col gap-4 p-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-start gap-3">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-300">
+              <GraduationCap className="h-5 w-5" />
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-white">Recommended next action</p>
+              <p className="mt-0.5 text-xs text-slate-400">{recommendedAction}</p>
+            </div>
+          </div>
+          <Link
+            href="/learn"
+            className="btn-secondary flex shrink-0 items-center justify-center gap-2 px-4 py-2 text-xs"
+          >
+            <GraduationCap className="h-3.5 w-3.5" /> Close a skill gap
+          </Link>
         </div>
 
         {/* Clickable Domain Filter Chips */}

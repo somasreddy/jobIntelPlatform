@@ -9,65 +9,32 @@ import NotificationBell from "@/components/NotificationBell";
 import { THEMES } from "@/lib/theme";
 import { useAuth } from "@/lib/AuthContext";
 import {
-  LayoutDashboard,
-  Briefcase,
-  BarChart3,
-  Layers,
-  Zap,
-  Linkedin,
-  Brain,
-  Palette,
-  Menu,
-  X,
-  Crosshair,
-  Target,
-  LogIn,
-  LogOut,
-  DollarSign,
-  Activity,
-  BookOpen,
-  Radar,
-  PieChart,
-  Bot,
-  Globe,
-  UserRound,
+  LayoutDashboard, Briefcase, BarChart3, Layers, Zap, Palette, Menu, X,
+  LogIn, LogOut, UserRound, Database, GraduationCap, BrainCircuit,
 } from "lucide-react";
 
 const navGroups = [
   {
-    label: "Start",
+    label: "Talent Workspace",
     items: [
-      { href: "/",              icon: LayoutDashboard, label: "Command Center"  },
-      { href: "/profile",       icon: UserRound,       label: "Profile & Resume" },
-      { href: "/career-graph",  icon: Activity,        label: "Career Graph"     },
+      { href: "/",             icon: LayoutDashboard, label: "Home Intelligence" },
+      { href: "/jobs",         icon: Briefcase,       label: "Discover" },
+      { href: "/applications", icon: Layers,          label: "Application CRM" },
+      { href: "/profile",      icon: UserRound,       label: "Profile Intelligence" },
+      { href: "/market-radar", icon: BarChart3,        label: "Market Intelligence" },
     ],
   },
   {
-    label: "Search & Apply",
+    label: "Growth & Readiness",
     items: [
-      { href: "/jobs",          icon: Briefcase,       label: "Find Jobs"        },
-      { href: "/applications",  icon: Layers,          label: "Pipeline"         },
-      { href: "/campaign",      icon: Target,          label: "Campaign"         },
-      { href: "/autopilot",     icon: Bot,             label: "Autopilot"        },
+      { href: "/learn",     icon: GraduationCap, label: "Learning Engine" },
+      { href: "/interview", icon: BrainCircuit,  label: "Interview Prep" },
     ],
   },
   {
-    label: "Prepare",
+    label: "Platform",
     items: [
-      { href: "/learn",         icon: BookOpen,        label: "Learning Engine"  },
-      { href: "/interview",     icon: Brain,           label: "Interview Prep"   },
-      { href: "/linkedin",      icon: Linkedin,        label: "LinkedIn Enhancer"},
-      { href: "/negotiation",   icon: DollarSign,      label: "Negotiation"      },
-    ],
-  },
-  {
-    label: "Insights & Tools",
-    items: [
-      { href: "/market-radar",  icon: BarChart3,       label: "Market Radar"     },
-      { href: "/insights",      icon: PieChart,        label: "Insights"         },
-      { href: "/intelligence",  icon: Crosshair,       label: "Intelligence"     },
-      { href: "/portfolio",     icon: Globe,           label: "Portfolio"        },
-      { href: "/power-tools",   icon: Radar,           label: "Power Tools"      },
+      { href: "/admin/sources", icon: Database, label: "Source Health" },
     ],
   },
 ];

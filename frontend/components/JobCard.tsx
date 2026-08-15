@@ -7,16 +7,20 @@ import {
   Bookmark,
   BookmarkCheck,
   Building2,
+  CalendarClock,
   CheckCircle2,
   Clock,
   DollarSign,
   ExternalLink,
   MapPin,
+  ShieldAlert,
+  ShieldCheck,
   Zap,
 } from "lucide-react";
 import JobPowerToolsModal from "@/components/JobPowerToolsModal";
 import { getSavedJobIds, toggleSavedJob } from "@/lib/profile";
 import { Job, JobPortal } from "@/lib/types";
+import { getFreshnessLabel, getJobConfidence, getSourceQuality } from "@/components/discovery/trust";
 
 const PORTAL_STYLE: Record<JobPortal, { bg: string; text: string; label: string }> = {
   LinkedIn: { bg: "bg-[#0a66c2]/15", text: "text-[#5ba4f5]", label: "linkedin" },
@@ -88,9 +92,16 @@ export default function JobCard({ job, onSelect }: JobCardProps) {
   const hasInternalDetails = Boolean(job.id) && !job.id.startsWith("dork-");
   const detailsHref = hasInternalDetails ? `/jobs/${job.id}` : job.applicationLink;
   const detailsLabel = hasInternalDetails ? "View JD" : "Open JD";
-  const reasons = (job.matchReasons ?? []).filter(Boolean).slice(0, 2);
+  const rankingReasons = (job.rankingReasons ?? [])
+    .filter((reason) => reason.impact === "positive")
+    .map((reason) => reason.label);
+  const reasons = (job.matchReasons?.length ? job.matchReasons : rankingReasons)
+    .filter(Boolean).slice(0, 2);
   const techs = (job.technologies ?? []).filter(Boolean).slice(0, 4);
   const remainingTechs = Math.max((job.technologies?.length ?? 0) - techs.length, 0);
+  const sourceQuality = getSourceQuality(job);
+  const confidence = getJobConfidence(job);
+  const freshness = getFreshnessLabel(job);
 
   useEffect(() => {
     setSaved(getSavedJobIds().includes(job.id));
@@ -112,6 +123,10 @@ export default function JobCard({ job, onSelect }: JobCardProps) {
                 <CheckCircle2 className="h-3 w-3" />
                 Verified
               </span>
+            ) : job.verificationStatus === "PENDING" ? (
+              <span className="badge border border-cyan-400/20 bg-cyan-400/10 text-cyan-300">
+                Verification pending
+              </span>
             ) : (
               <span className="badge border border-amber-400/20 bg-amber-400/10 text-amber-300">
                 Unverified
@@ -120,6 +135,34 @@ export default function JobCard({ job, onSelect }: JobCardProps) {
             <span className="badge badge-new">{job.workMode}</span>
             <SourceBadge source={job.source} />
             <CompactScoreBadge score={matchScore} />
+            {Boolean(job.rankingScore) && (
+              <span
+                className="inline-flex items-center gap-1 rounded-full border border-cyan-400/25 bg-cyan-500/10 px-2 py-0.5 text-[10px] font-semibold text-cyan-300"
+                title="Deterministic priority combining fit, source trust, freshness, preferences, salary data, and verification."
+              >
+                {job.rankingScore}% priority
+              </span>
+            )}
+          </div>
+
+          <div className="mb-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-slate-500" aria-label="Job trust signals">
+            <span
+              className={`inline-flex items-center gap-1 ${sourceQuality === "high" ? "text-emerald-300" : sourceQuality === "medium" ? "text-cyan-300" : "text-amber-300"}`}
+              title="Quality is based on whether the opening came from a direct employer/ATS, a known board, or an unclassified web source."
+            >
+              {sourceQuality === "low" ? <ShieldAlert className="h-3 w-3" /> : <ShieldCheck className="h-3 w-3" />}
+              {sourceQuality === "high" ? "Direct / ATS source" : sourceQuality === "medium" ? "Known job source" : "Source needs review"}
+            </span>
+            <span className={`inline-flex items-center gap-1 ${freshness.fresh ? "text-emerald-300" : ""}`}>
+              <CalendarClock className="h-3 w-3" />
+              {freshness.label}
+            </span>
+            <span
+              className="inline-flex items-center gap-1"
+              title={confidence.estimated ? "Estimated from source quality, verification, and recency because extraction confidence was not supplied." : "Confidence supplied by the extraction pipeline."}
+            >
+              {confidence.value}% confidence{confidence.estimated ? " (est.)" : ""}
+            </span>
           </div>
 
           <h3 className="line-clamp-2 text-base font-semibold text-white transition-colors group-hover:text-indigo-300">
