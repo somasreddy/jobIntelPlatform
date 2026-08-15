@@ -928,6 +928,7 @@ export default function PipelinePage() {
                           <div className="flex items-center justify-center h-20 text-slate-600 text-xs text-center border border-dashed border-slate-700/50 rounded-xl">Drop here</div>
                         )}
                       </div>
+                    </div>
                   );
                 })}
               </div>
