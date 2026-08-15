@@ -1,6 +1,8 @@
 "use client";
 import { useState, useEffect, useRef, useMemo } from "react";
+import { toast } from "sonner";
 import { useProfile } from "@/lib/ProfileContext";
+import { useAuth } from "@/lib/AuthContext";
 import { loadProfile } from "@/lib/profile";
 import LocationAutocomplete from "@/components/LocationAutocomplete";
 import ProfileIntelligenceReview from "@/components/profile-intelligence/ProfileIntelligenceReview";
@@ -11,6 +13,7 @@ import {
   Zap, Edit3, Cpu, FileText, ShieldAlert, FileOutput,
   UserCircle2, Target, AlertCircle, Download, Loader2,
   ArrowLeft, XCircle, Copy, Check, RefreshCw, Eye, EyeOff,
+  ShieldCheck,
 } from "lucide-react";
 
 const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
@@ -985,6 +988,70 @@ function JDMatchTab({ onTabChange }: { onTabChange: (t: TabId) => void }) {
   );
 }
 
+// ─── Data & Privacy ─────────────────────────────────────────────────────────
+// Self-contained, additive section — a GDPR-style "export my own data" entry
+// point. Calls GET /api/data-export/ (auth-scoped to the current user on the
+// backend) and saves the returned JSON as a file download. Does not read or
+// modify anything else on this page.
+function DataPrivacySection() {
+  const { authHeader } = useAuth();
+  const [exporting, setExporting] = useState(false);
+
+  const handleExport = async () => {
+    setExporting(true);
+    try {
+      const res = await fetch(`${API}/api/data-export/`, {
+        headers: { ...authHeader() },
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error((err as Record<string, string>).detail || `Export failed (${res.status})`);
+      }
+      const blob = await res.blob();
+
+      // Prefer the filename the backend proposed (Content-Disposition), fall
+      // back to a generic one if that header is ever missing/unparsable.
+      const disposition = res.headers.get("content-disposition") || "";
+      const filenameMatch = disposition.match(/filename="?([^";]+)"?/i);
+      const filename = filenameMatch?.[1] || "job-intel-data-export.json";
+
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast.success("Your data export has downloaded");
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Could not export your data. Please try again.");
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  return (
+    <div id="data-privacy" className="card mt-8">
+      <h2 className="text-base font-semibold text-white mb-1 flex items-center gap-2">
+        <ShieldCheck className="w-4 h-4 text-emerald-400" /> Data &amp; Privacy
+      </h2>
+      <p className="text-xs text-slate-400 mb-4 leading-relaxed max-w-2xl">
+        Download a complete copy of everything this platform stores about you — your career profile, applications,
+        resume history, career graph, learning progress, portfolio, and notifications — as a single JSON file.
+        Every export request is recorded in your account&apos;s audit log.
+      </p>
+      <button
+        type="button"
+        onClick={handleExport}
+        disabled={exporting}
+        className="btn-secondary text-sm px-4 py-2 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+      >
+        {exporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+        {exporting ? "Preparing export…" : "Export my data"}
+      </button>
+    </div>
+  );
+}
+
 // ─── Main merged page ─────────────────────────────────────────────────────────
 const TABS: { id: TabId; label: string; icon: React.ElementType; desc: string }[] = [
   { id: "profile", label: "Profile",      icon: User,     desc: "Edit your career profile & skills"     },
@@ -1033,6 +1100,11 @@ export default function ProfilePage() {
         {activeTab === "profile" && <ProfileTab onTabChange={setActiveTab} />}
         {activeTab === "resume"  && <ResumeATSTab onTabChange={setActiveTab} />}
         {activeTab === "match"   && <JDMatchTab onTabChange={setActiveTab} />}
+
+        {/* Data & Privacy — always visible regardless of active tab (see
+            DataPrivacySection above); this is the only page-level (not
+            per-tab) section here. */}
+        <DataPrivacySection />
       </main>
     </div>
   );

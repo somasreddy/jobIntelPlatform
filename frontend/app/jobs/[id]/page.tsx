@@ -1,10 +1,12 @@
 "use client";
 import { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
+import { toast } from "sonner";
 import { mockJobs } from "@/lib/mockData";
 import { useProfile } from "@/lib/ProfileContext";
 import { useAppData } from "@/lib/AppDataContext";
 import { Job, CandidateProfile } from "@/lib/types";
+import DemoDataBanner from "@/components/DemoDataBanner";
 import MatchIntelligencePanel from "@/components/MatchIntelligencePanel";
 import {
   ArrowLeft, Building2, MapPin, Clock, DollarSign,
@@ -12,6 +14,7 @@ import {
   TrendingUp, Sparkles, ExternalLink, ShieldCheck, Copy,
   Search, ThumbsUp, ThumbsDown, Zap, Users, BarChart3,
   AlertTriangle, Star, MessageCircle, Radio, Loader2, BookOpen,
+  Info, Target,
 } from "lucide-react";
 
 function formatSalary(min: number, max: number, currency: string): string {
@@ -27,10 +30,69 @@ const emptyProfile: CandidateProfile = {
   languages: [], cicdTools: [], aiTools: [], certifications: [],
 };
 
+// ─── Fit-score breakdown & ATS keyword-match — explainability additions ─────
+// `fitBreakdown` mirrors backend/services/fit_score.py's real per-dimension
+// factors (score/label/weight), attached by GET /api/jobs/{id} alongside the
+// existing fitScore/fitBadge fields already declared on the shared Job type.
+// Declared locally (rather than editing lib/types.ts, which is out of this
+// change's scope) as an intersection on top of the shared Job type.
+interface FitDimension {
+  score: number;
+  label: string;
+  weight: number;
+}
+type JobDetail = Job & { fitBreakdown?: Record<string, FitDimension> };
+
+const FIT_DIMENSION_META: Record<string, { label: string; icon: React.ReactNode }> = {
+  skills_match: { label: "Skills Match", icon: <CheckCircle className="w-3.5 h-3.5 text-emerald-400" /> },
+  seniority_match: { label: "Experience Match", icon: <Clock className="w-3.5 h-3.5 text-cyan-400" /> },
+  location_match: { label: "Location Match", icon: <MapPin className="w-3.5 h-3.5 text-violet-400" /> },
+  salary_match: { label: "Salary Match", icon: <DollarSign className="w-3.5 h-3.5 text-amber-400" /> },
+  title_match: { label: "Title Match", icon: <BarChart3 className="w-3.5 h-3.5 text-indigo-400" /> },
+};
+
+/** Real, computed set-overlap result from POST /api/resume/ats-match — every
+ *  number here is reproducible by reading matched/missing keyword lists. */
+interface AtsMatchResult {
+  match_pct: number;
+  matched_keywords: string[];
+  missing_keywords: string[];
+  total_keywords: number;
+  methodology?: string;
+}
+
+/** Small "Computed" tag — for real, deterministic, user-verifiable figures
+ *  (fit-score breakdown, ATS keyword match) as opposed to LLM-guessed ones. */
+function ComputedTag() {
+  return (
+    <span
+      className="px-2 py-0.5 rounded-full text-[10px] font-bold shrink-0"
+      style={{ background: "rgba(16,185,129,0.15)", border: "1px solid rgba(16,185,129,0.35)", color: "#6ee7b7" }}
+    >
+      Computed
+    </span>
+  );
+}
+
+/** Small "Model estimate" tag — for deterministic-but-not-live figures, e.g.
+ *  the static rule-based salary predictor (distinct from both a verifiable
+ *  computed score and a raw AI guess). */
+function ModelEstimateTag() {
+  return (
+    <span
+      className="px-2 py-0.5 rounded-full text-[10px] font-bold shrink-0"
+      style={{ background: "rgba(56,189,248,0.15)", border: "1px solid rgba(56,189,248,0.35)", color: "#7dd3fc" }}
+    >
+      Model estimate
+    </span>
+  );
+}
+
 export default function JobDetailPage() {
   const params = useParams();
   const router = useRouter();
-  const [job, setJob] = useState<Job | null>(null);
+  const [job, setJob] = useState<JobDetail | null>(null);
+  const [isDemoData, setIsDemoData] = useState(false);
   const { profile: ctxProfile } = useProfile();
   const { applyToJob, applications } = useAppData();
   const [tracked, setTracked] = useState(false);
@@ -42,7 +104,10 @@ export default function JobDetailPage() {
   const [deepStream, setDeepStream] = useState("");
   const [deepStreaming, setDeepStreaming] = useState(false);
   const [deepDone, setDeepDone] = useState(false);
-  const [salaryEst, setSalaryEst] = useState<{min:number;mid:number;max:number;negotiation_tip?:string}|null>(null);
+  const [salaryEst, setSalaryEst] = useState<{
+    min_salary: number; mid_salary: number; max_salary: number;
+    negotiation_tip?: string; methodology?: string;
+  } | null>(null);
   const [generating, setGenerating] = useState(false);
   const [generated, setGenerated] = useState(false);
   const [generatedData, setGeneratedData] = useState<{
@@ -50,12 +115,19 @@ export default function JobDetailPage() {
     pdf_base64?: string;
     docx_base64?: string;
     ats_score?: number;
+    tailoring_rationale?: string[];
     cover_letter?: string;
+    cover_letter_rationale?: string[];
     recruiter_message?: string;
     recruiter_name?: string;
     recruiter_linkedin?: string;
   }>({});
   const [copyFeedback, setCopyFeedback] = useState<"cover" | "recruiter" | null>(null);
+
+  // Real (non-LLM) ATS keyword-match score — see services/ats_match.py.
+  const [atsMatch, setAtsMatch] = useState<AtsMatchResult | null>(null);
+  const [atsMatchLoading, setAtsMatchLoading] = useState(false);
+  const [atsMatchError, setAtsMatchError] = useState(false);
 
   useEffect(() => {
     // Reset generation state whenever the job changes
@@ -63,6 +135,7 @@ export default function JobDetailPage() {
     setGenerating(false);
     setGeneratedData({});
     setActiveTab("resume");
+    setIsDemoData(false);
 
     const loadJob = async () => {
       const apiUrl = process.env.NEXT_PUBLIC_API_URL;
@@ -73,11 +146,46 @@ export default function JobDetailPage() {
         } catch { /* fall through */ }
       }
       const j = mockJobs.find((x) => x.id === params.id);
-      if (j) setJob(j);
+      if (j) { setJob(j); setIsDemoData(true); }
     };
 
     loadJob();
   }, [params.id]);
+
+  // Real (non-LLM) ATS keyword-match: fetches whenever we have a live job
+  // (not the mock-data fallback — there's no real job record to match a
+  // resume against) and the user has resume text on file.
+  useEffect(() => {
+    setAtsMatch(null);
+    setAtsMatchError(false);
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL;
+    const resumeText = (profile.resumeText || "").trim();
+    if (!apiUrl || !job?.id || isDemoData || !resumeText) return;
+
+    let cancelled = false;
+    setAtsMatchLoading(true);
+    (async () => {
+      try {
+        const res = await fetch(`${apiUrl}/api/resume/ats-match`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ resume_text: resumeText, job_id: job.id }),
+        });
+        if (!res.ok) throw new Error("ats-match request failed");
+        const data: AtsMatchResult = await res.json();
+        if (!cancelled) setAtsMatch(data);
+      } catch {
+        if (!cancelled) {
+          setAtsMatchError(true);
+          toast.error("Couldn't compute a live ATS keyword match for this job.");
+        }
+      } finally {
+        if (!cancelled) setAtsMatchLoading(false);
+      }
+    })();
+
+    return () => { cancelled = true; };
+  }, [job?.id, isDemoData, profile.resumeText]);
 
   const handleGenerate = async () => {
     if (!job) return;
@@ -92,8 +200,8 @@ export default function JobDetailPage() {
           fetch(`${apiUrl}/api/resume/generate-cover-letter`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ profile: profilePayload, job: jobPayload }) }),
           fetch(`${apiUrl}/api/recruiter/outreach-message`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ profile: profilePayload, job: { ...jobPayload, recruiter_name: job.recruiterName, recruiter_linkedin: job.recruiterLinkedIn } }) }),
         ]);
-        type ResumeResp = { bullets?: string[]; pdf_base64?: string; docx_base64?: string; ats_score?: number };
-        type CoverResp = { content?: string };
+        type ResumeResp = { bullets?: string[]; pdf_base64?: string; docx_base64?: string; ats_score?: number; tailoring_rationale?: string[] };
+        type CoverResp = { content?: string; rationale?: string[] };
         type RecruiterResp = { message?: string; recruiter_name?: string; recruiter_linkedin?: string };
         const [resumeData, coverData, recruiterData]: [ResumeResp, CoverResp, RecruiterResp] = await Promise.all([
           resumeRes.ok ? resumeRes.json() : {},
@@ -105,7 +213,9 @@ export default function JobDetailPage() {
           pdf_base64: resumeData.pdf_base64,
           docx_base64: resumeData.docx_base64,
           ats_score: resumeData.ats_score,
+          tailoring_rationale: resumeData.tailoring_rationale,
           cover_letter: coverData.content,
+          cover_letter_rationale: coverData.rationale,
           recruiter_message: recruiterData.message,
           recruiter_name: recruiterData.recruiter_name,
           recruiter_linkedin: recruiterData.recruiter_linkedin,
@@ -285,6 +395,8 @@ export default function JobDetailPage() {
           <ArrowLeft className="w-4 h-4" /> Back to Jobs
         </button>
 
+        {isDemoData && <DemoDataBanner />}
+
         <div className="flex flex-col xl:flex-row gap-6">
           {/* Left Column: Job Details */}
           <div className="w-full xl:w-[400px] shrink-0 space-y-6">
@@ -374,6 +486,113 @@ export default function JobDetailPage() {
                   ? `Verified from ${job.source || "the listed source"}; confirm availability before applying.`
                   : "Source could not be fully verified. Review the company portal before sharing personal data."}
               </p>
+            </div>
+
+            {/* Fit-score breakdown — real factors from services/fit_score.py,
+                not a bare percentage. Only renders once the detail endpoint
+                has attached it (requires a candidate profile). */}
+            {job.fitBreakdown && (
+              <div className="card">
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-sm font-semibold text-white flex items-center gap-2">
+                    <Target className="w-4 h-4" style={{ color: "var(--accent)" }} /> Why This Fit Score
+                  </h3>
+                  <ComputedTag />
+                </div>
+                <div className="flex items-end gap-2 mb-4">
+                  <span className="text-2xl font-bold text-white">{job.fitScore}%</span>
+                  {job.fitBadge && <span className="text-xs text-slate-400 mb-1">{job.fitBadge}</span>}
+                </div>
+                <div className="space-y-3">
+                  {Object.entries(job.fitBreakdown).map(([key, dim]) => {
+                    const meta = FIT_DIMENSION_META[key] ?? { label: key, icon: <Info className="w-3.5 h-3.5 text-slate-400" /> };
+                    return (
+                      <div key={key}>
+                        <div className="flex items-center justify-between text-xs mb-1 gap-2">
+                          <span className="flex items-center gap-1.5 text-slate-300">
+                            {meta.icon} {meta.label}
+                            <span className="text-slate-500">({dim.weight}% weight)</span>
+                          </span>
+                          <span className="font-semibold text-white shrink-0">{dim.score}/100</span>
+                        </div>
+                        <div className="h-1.5 rounded-full bg-slate-700/80 overflow-hidden mb-1">
+                          <div
+                            className="h-full rounded-full transition-all duration-500"
+                            style={{ width: `${dim.score}%`, background: dim.score >= 70 ? "#10b981" : dim.score >= 40 ? "#f59e0b" : "#f43f5e" }}
+                          />
+                        </div>
+                        <p className="text-[11px] text-slate-500">{dim.label}</p>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Real ATS keyword-match — plain set-overlap of resume text vs
+                this job's keywords (see services/ats_match.py). Distinct from
+                any AI-written text elsewhere on this page: every number here
+                is verifiable by reading the matched/missing lists below. */}
+            <div className="card">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-sm font-semibold text-white flex items-center gap-2">
+                  <FileText className="w-4 h-4" style={{ color: "var(--accent)" }} /> ATS Keyword Match
+                </h3>
+                {atsMatch && <ComputedTag />}
+              </div>
+              {isDemoData ? (
+                <p className="text-xs text-slate-500 italic">
+                  This is sample data, not backed by a live job record — there&apos;s no real job to match your resume against.
+                </p>
+              ) : !(profile.resumeText || "").trim() ? (
+                <p className="text-xs text-slate-500 italic">
+                  Add your resume text in your profile to see a real keyword-match score for this job.
+                </p>
+              ) : atsMatchLoading ? (
+                <p className="text-xs text-slate-400 flex items-center gap-1.5">
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" /> Computing keyword overlap…
+                </p>
+              ) : atsMatchError ? (
+                <p className="text-xs text-rose-400">Couldn&apos;t reach the ATS match service. Try again shortly.</p>
+              ) : atsMatch ? (
+                <>
+                  <div className="flex items-end gap-2 mb-2">
+                    <span className="text-2xl font-bold text-white">{atsMatch.match_pct}%</span>
+                    <span className="text-xs text-slate-400 mb-1">
+                      {atsMatch.matched_keywords.length}/{atsMatch.total_keywords} keywords matched
+                    </span>
+                  </div>
+                  <div className="progress-bar mb-3">
+                    <div
+                      className="progress-fill"
+                      style={{ width: `${atsMatch.match_pct}%`, background: atsMatch.match_pct > 70 ? "#10b981" : atsMatch.match_pct > 40 ? "#f59e0b" : "#f43f5e" }}
+                    />
+                  </div>
+                  {atsMatch.matched_keywords.length > 0 && (
+                    <div className="mb-2">
+                      <p className="text-[11px] text-emerald-400 font-semibold mb-1.5">Matched:</p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {atsMatch.matched_keywords.slice(0, 14).map((k) => (
+                          <span key={k} className="px-1.5 py-0.5 rounded text-[10px] bg-emerald-500/15 border border-emerald-500/25 text-emerald-300">{k}</span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {atsMatch.missing_keywords.length > 0 && (
+                    <div className="mb-2">
+                      <p className="text-[11px] text-rose-400 font-semibold mb-1.5">Missing:</p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {atsMatch.missing_keywords.slice(0, 14).map((k) => (
+                          <span key={k} className="px-1.5 py-0.5 rounded text-[10px] bg-rose-500/10 border border-rose-500/25 text-rose-300">{k}</span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {atsMatch.methodology && <p className="text-[10px] text-slate-500 mt-2">{atsMatch.methodology}</p>}
+                </>
+              ) : (
+                <p className="text-xs text-slate-500 italic">Loading…</p>
+              )}
             </div>
 
             <div className="card">
@@ -576,6 +795,24 @@ export default function JobDetailPage() {
                                 </div>
                               </div>
 
+                              {/* Why the AI made these changes — surfaces the LLM's own
+                                  tailoring rationale (backend/ats_resume_generator/generator.py's
+                                  `rationale` field) instead of only showing the final bullets. */}
+                              {generatedData.tailoring_rationale && generatedData.tailoring_rationale.length > 0 && (
+                                <div className="px-4 py-3 rounded-xl bg-indigo-500/5 border border-indigo-500/20">
+                                  <p className="text-[11px] font-bold text-indigo-300 uppercase tracking-wide mb-2 flex items-center gap-1.5">
+                                    <Sparkles className="w-3.5 h-3.5" /> Why the AI made these changes
+                                  </p>
+                                  <ul className="space-y-1.5">
+                                    {generatedData.tailoring_rationale.map((r, i) => (
+                                      <li key={i} className="text-xs text-slate-300 leading-relaxed flex items-start gap-2">
+                                        <span className="text-indigo-400 mt-0.5">•</span>{r}
+                                      </li>
+                                    ))}
+                                  </ul>
+                                </div>
+                              )}
+
                               {/* Resume Document */}
                               <div className="flex-1 bg-white rounded-lg overflow-y-auto border border-slate-600 shadow-inner" style={{ fontFamily: "'Georgia', 'Times New Roman', serif", color: "#1e293b", fontSize: "12px", lineHeight: "1.5" }}>
                                 <div className="p-7">
@@ -729,6 +966,23 @@ export default function JobDetailPage() {
                         <div className="flex-1 rounded-lg p-6 overflow-y-auto text-sm text-slate-200 leading-relaxed font-sans shadow-inner whitespace-pre-wrap" style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)" }}>
                           {generatedData.cover_letter ?? `Dear Hiring Manager,\n\nI am writing to express my strong interest in the ${job.title} position at ${job.organization}.\n\nWith ${profile.experienceYears}+ years of experience in ${job.technologies.slice(0, 3).join(", ")}, I have consistently delivered high-quality solutions in fast-paced engineering environments.${profile.resumeText && !profile.resumeText.startsWith("[Resume file:") ? "\n\nHighlights from my background include hands-on delivery of production systems, strong collaboration with cross-functional teams, and a proven ability to ramp up quickly on new technology stacks." : ""}\n\nI am particularly excited about the opportunity at ${job.organization} because of its technical depth and scale. The role aligns closely with my expertise in ${job.technologies[0]} and ${job.technologies[1] || "modern engineering practices"}.\n\nI would welcome the opportunity to discuss how my experience can contribute to ${job.organization}'s goals.\n\nBest regards,\n${profile.name || "Your Name"}`}
                         </div>
+                        {/* Why the AI wrote it this way — surfaces the LLM's own
+                            personalization rationale (backend/cover_letter_generator/generator.py's
+                            `rationale` field) instead of only showing the final letter. */}
+                        {generatedData.cover_letter_rationale && generatedData.cover_letter_rationale.length > 0 && (
+                          <div className="mt-3 p-3 rounded-lg bg-indigo-500/10 border border-indigo-500/20">
+                            <p className="text-[11px] font-bold text-indigo-300 uppercase tracking-wide mb-2 flex items-center gap-1.5">
+                              <Sparkles className="w-3.5 h-3.5" /> Why the AI wrote it this way
+                            </p>
+                            <ul className="space-y-1.5">
+                              {generatedData.cover_letter_rationale.map((r, i) => (
+                                <li key={i} className="text-xs text-slate-300 leading-relaxed flex items-start gap-2">
+                                  <span className="text-indigo-400 mt-0.5">•</span>{r}
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
                       </div>
                     )}
 
@@ -985,7 +1239,7 @@ export default function JobDetailPage() {
                                         const sr = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/salary/predict`, {
                                           method: "POST",
                                           headers: { "Content-Type": "application/json" },
-                                          body: JSON.stringify({ role: job.title, location: profile.currentLocation || "United States", experience_years: profile.experienceYears || 5 }),
+                                          body: JSON.stringify({ role: job.title, location: profile.currentLocation || "United States", experience_years: profile.experienceYears || 5, company: job.organization }),
                                         });
                                         if (sr.ok) setSalaryEst(await sr.json());
                                       } catch { /* silent */ }
@@ -1011,25 +1265,35 @@ export default function JobDetailPage() {
                             )}
                           </div>
 
-                          {/* Salary Estimate */}
+                          {/* Salary Estimate — deterministic rule-based lookup (see
+                              backend/salary_prediction/predictor.py), not live market
+                              data and not an AI guess: tagged "Model estimate" to keep
+                              it visually distinct from the Computed scores above and
+                              from any AI-estimated figures elsewhere in the app. */}
                           {salaryEst && (
                             <div className="p-4 rounded-xl border border-emerald-500/20" style={{ background: "rgba(16,185,129,0.03)" }}>
-                              <p className="text-xs font-bold text-emerald-400 uppercase tracking-wider mb-3 flex items-center gap-1.5">
-                                <DollarSign className="w-3.5 h-3.5" /> Salary Estimate for This Role
-                              </p>
+                              <div className="flex items-center justify-between mb-3">
+                                <p className="text-xs font-bold text-emerald-400 uppercase tracking-wider flex items-center gap-1.5">
+                                  <DollarSign className="w-3.5 h-3.5" /> Salary Estimate for This Role
+                                </p>
+                                <ModelEstimateTag />
+                              </div>
                               <div className="grid grid-cols-3 gap-2 mb-2">
                                 {[
-                                  { label: "Floor", value: salaryEst.min },
-                                  { label: "Market", value: salaryEst.mid },
-                                  { label: "Target", value: salaryEst.max },
+                                  { label: "Floor", value: salaryEst.min_salary },
+                                  { label: "Market", value: salaryEst.mid_salary },
+                                  { label: "Target", value: salaryEst.max_salary },
                                 ].map(({ label, value }) => (
                                   <div key={label} className="text-center p-2 rounded-lg" style={{ background: "var(--bg-elevated)" }}>
                                     <p className="text-[10px] text-slate-500">{label}</p>
-                                    <p className="text-sm font-bold text-white">${Math.round(value / 1000)}k</p>
+                                    <p className="text-sm font-bold text-white">{typeof value === "number" ? `$${Math.round(value / 1000)}k` : "—"}</p>
                                   </div>
                                 ))}
                               </div>
                               {salaryEst.negotiation_tip && <p className="text-[11px] text-emerald-300 mt-1">{salaryEst.negotiation_tip}</p>}
+                              <p className="text-[10px] text-slate-500 mt-2">
+                                {salaryEst.methodology ?? "Rule-based estimate from a static salary-band table — not sourced from live market data."}
+                              </p>
                             </div>
                           )}
 

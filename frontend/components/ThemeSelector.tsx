@@ -59,7 +59,7 @@ export default function ThemeSelector({ open, onClose }: ThemeSelectorProps) {
           </button>
         </div>
 
-        <div className="p-3 space-y-2">
+        <div className="p-3 space-y-2 max-h-[70vh] overflow-y-auto">
           {THEMES.map((t) => {
             const isActive = theme === t.id;
             return (

@@ -373,8 +373,17 @@ async def generate_dork_query(payload: dict = Body(...), db: AsyncSession = Depe
 
 
 @router.get("/{job_id}")
-async def get_job_details(job_id: str, db: AsyncSession = Depends(get_db)):
-    """Get details for a specific job."""
+async def get_job_details(
+    job_id: str,
+    db: AsyncSession = Depends(get_db),
+    user_id: uuid.UUID = Depends(get_current_user_id),
+):
+    """
+    Get details for a specific job, including a per-dimension fit-score
+    breakdown (fitScore / fitBadge / fitBreakdown) against the caller's
+    profile, when one exists — same real factors and weights as
+    services/fit_score.py, not a bare percentage.
+    """
     try:
         uid = uuid.UUID(job_id)
     except ValueError:
@@ -383,7 +392,47 @@ async def get_job_details(job_id: str, db: AsyncSession = Depends(get_db)):
     job = result.scalar_one_or_none()
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
-    return _row_to_dict(job)
+    row = _row_to_dict(job)
+
+    # ── Attach fit score + real factor breakdown (best-effort, mirrors GET /) ──
+    try:
+        profile_r = await db.execute(
+            select(CandidateProfile).where(CandidateProfile.user_id == user_id)
+        )
+        profile = profile_r.scalar_one_or_none()
+
+        if profile:
+            goal_r = await db.execute(
+                select(CareerGoal).where(CareerGoal.user_id == user_id, CareerGoal.is_active == True)
+            )
+            goal = goal_r.scalar_one_or_none()
+
+            fit = compute_fit_score(
+                user_skills=list(profile.skills or []),
+                user_frameworks=list(profile.frameworks or []),
+                user_languages=list(profile.languages or []),
+                user_experience_years=profile.experience_years,
+                user_preferred_locations=list(profile.preferred_locations or []),
+                user_work_mode=profile.work_mode,
+                user_current_salary=profile.current_salary,
+                user_target_role=goal.target_role if goal else None,
+                user_target_salary_min=goal.target_salary_min if goal else None,
+                job_title=row.get("title", ""),
+                job_description=row.get("description", ""),
+                job_requirements=row.get("technologies") or [],
+                job_experience_required=row.get("experienceRequired"),
+                job_location=row.get("location"),
+                job_work_mode=row.get("workMode"),
+                job_salary_min=row.get("salaryMin"),
+                job_salary_max=row.get("salaryMax"),
+            )
+            row["fitScore"] = fit["fit_score"]
+            row["fitBadge"] = fit["badge"]
+            row["fitBreakdown"] = fit["breakdown"]
+    except Exception as exc:
+        logger.warning(f"Fit score computation skipped for job {job_id}: {exc}")
+
+    return row
 
 
 @router.post("")

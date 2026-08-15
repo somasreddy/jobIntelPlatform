@@ -18,6 +18,12 @@ REQUIRED OUTPUT (JSON):
    - MUST include metrics (%, $, time saved, scale, frequency).
    - Use the exact terminology from the job description.
 3. skills_grouped: Dictionary of 3-4 relevant categories with skills from both the profile and JD.
+4. rationale: An array of 3-5 short strings, each explaining ONE concrete tailoring
+   decision made specifically for THIS job — e.g. "Led the summary with <skill>
+   because the JD lists it as a core requirement" or "Reworded bullet 2 to use
+   the JD's exact term '<term>' instead of a generic synonym". Ground every
+   item in something specific from the JD text or the candidate's profile —
+   no generic resume-writing advice, and do not restate the bullets verbatim.
 
 Rules:
 - Mirror the JD's exact technical/domain terminology.
@@ -64,7 +70,12 @@ async def _generate_content(
             "Automation": tech_stack[:4],
             "Tools": ["Docker", "Kubernetes", "Git"],
             "Languages": ["Java", "Python", "TypeScript"]
-        }
+        },
+        "rationale": [
+            "The AI tailoring call was unavailable, so these are generic fallback "
+            "bullets rather than ones written specifically for this job — edit "
+            "them before submitting.",
+        ],
     }
 
 
@@ -699,6 +710,9 @@ class ATSResumeGenerator:
         bullets = content.get("bullets", [])
         summary = content.get("summary", "")
         skills_grouped = content.get("skills_grouped", {})
+        # The rationale the LLM itself gave for its tailoring choices — surfaced
+        # to the user rather than only showing the final bullets/summary.
+        rationale = content.get("rationale", [])
 
         # Step 2: Intelligent Gap Analysis
         gap_analysis = await _analyze_gaps(profile_skills, tech_stack)
@@ -715,4 +729,5 @@ class ATSResumeGenerator:
             "docx_base64": base64.b64encode(docx_bytes).decode() if docx_bytes else None,
             "ats_score": _estimate_ats_score(base_profile, tech_stack, gap_analysis),
             "keyword_heatmap": gap_analysis,
+            "tailoring_rationale": rationale,
         }

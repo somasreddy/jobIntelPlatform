@@ -27,13 +27,6 @@ class AnswerAnalysisRequest(BaseModel):
     expected_type: Optional[str] = None   # behavioral | technical | situational
 
 
-class ShadowReviewRequest(BaseModel):
-    role: str
-    company: str
-    interview_notes: str             # candidate's raw notes from a real interview
-    outcome: Optional[str] = None   # "offer" | "rejected" | "pending"
-
-
 class MockFeedbackRequest(BaseModel):
     question: str
     answer: str
@@ -165,64 +158,7 @@ Evaluate and coach them. Return ONLY valid JSON:
 
     return {"error": "Feedback temporarily unavailable"}
 
-
-# ─── Shadow Interview Review ──────────────────────────────────────────────────
-
-@router.post("/shadow-review")
-async def shadow_review(
-    payload: ShadowReviewRequest,
-    _: uuid.UUID = Depends(get_current_user_id),
-):
-    """
-    Review real interview notes and provide post-interview coaching.
-    What went well, what to fix, missed opportunities, and suggested rewrites.
-    """
-    outcome_context = f"Outcome: {payload.outcome}." if payload.outcome else "Outcome unknown."
-
-    prompt = f"""You are a world-class interview coach reviewing a candidate's real interview notes.
-
-Role: {payload.role} at {payload.company}
-{outcome_context}
-
-Candidate's interview notes:
-{payload.interview_notes}
-
-Provide a detailed post-interview debrief. Return ONLY valid JSON:
-{{
-  "overall_grade": "B+",
-  "overall_score": 75,
-  "what_went_well": ["specific thing 1", "thing 2", "thing 3"],
-  "missed_opportunities": [
-    {{
-      "moment": "what happened",
-      "what_you_could_have_said": "stronger response",
-      "why_it_matters": "impact on hiring decision"
-    }}
-  ],
-  "red_flag_moments": ["moment that likely hurt your candidacy"],
-  "suggested_rewrites": [
-    {{
-      "original": "what they said",
-      "rewrite": "stronger version"
-    }}
-  ],
-  "likelihood_of_offer": "High / Medium / Low",
-  "if_rejected_why": "Most likely reason if rejected",
-  "follow_up_strategy": "What to send in your follow-up email",
-  "lessons_for_next_time": ["lesson 1", "lesson 2", "lesson 3"]
-}}"""
-
-    try:
-        data = await smart_chat(
-            system="Return ONLY valid JSON. Be candid — the candidate needs honest coaching.",
-            user=prompt,
-            json_mode=True,
-        )
-        if isinstance(data, dict):
-            data["role"] = payload.role
-            data["company"] = payload.company
-            return data
-    except Exception as e:
-        logger.warning(f"Shadow review AI call failed: {e}")
-
-    return {"error": "Review temporarily unavailable"}
+# Note: shadow-review lives in backend/api/interview.py now (STAR-rubric
+# debrief, same request/response shape plus an explicit STAR score) — the
+# frontend calls that one. This module's own /shadow-review endpoint was
+# removed as a dead duplicate.

@@ -6,6 +6,7 @@ from sqlalchemy import (
     ForeignKey, func, Index, UniqueConstraint
 )
 from sqlalchemy.dialects.postgresql import UUID, JSONB
+from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from core.database import Base
@@ -18,6 +19,10 @@ class ResumeHistory(Base):
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
     )
     user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False, index=True)
+    # Multi-tenancy (PHASE 8, additive - schema only, not enforced yet).
+    tenant_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("tenants.id"), nullable=True, index=True
+    )
     job_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("verified_jobs.id"), nullable=True
     )
@@ -98,6 +103,14 @@ class CandidateProfile(Base):
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
     )
     user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    # Multi-tenancy / RBAC (PHASE 8, additive - schema only, not enforced yet).
+    # Nullable so existing rows are unaffected; backfill + enforcement are
+    # deliberate follow-up decisions, not implemented here. See Tenant below.
+    tenant_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("tenants.id"), nullable=True, index=True
+    )
+    role: Mapped[str | None] = mapped_column(String(20), nullable=True, default="member")
+    # role values: owner | admin | member | viewer
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     current_role: Mapped[str | None] = mapped_column(String(255))
     current_salary: Mapped[int | None] = mapped_column(Integer)
@@ -206,6 +219,10 @@ class Application(Base):
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
     )
     user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    # Multi-tenancy (PHASE 8, additive - schema only, not enforced yet).
+    tenant_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("tenants.id"), nullable=True, index=True
+    )
     job_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("verified_jobs.id"), nullable=True
     )
@@ -583,6 +600,214 @@ class AutopilotQueueItem(Base):
         DateTime(timezone=True), server_default=func.now()
     )
     actioned_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# PHASE 10: PIPELINE ACTIVITY LOG (additive)
+# ─────────────────────────────────────────────────────────────────────────────
+# Backs the activity timeline on the Pipeline page (frontend/app/applications/
+# page.tsx) — real logged events for status changes, follow-up set/cleared,
+# and note updates, plus the "reminder_sent" events written by the
+# follow-up-reminder check in backend/api/activity_log.py.
+#
+# Outreach CRM contacts on that same page are a client-side-only concept
+# today (kept in the browser's localStorage — there is no `contacts` table
+# anywhere in this schema, and contact ids are short random strings, not
+# UUIDs), so `contact_id` is intentionally a plain nullable UUID column with
+# no FK constraint rather than a fabricated relationship to a table that
+# doesn't exist. Exactly one of application_id / contact_id is expected to
+# be set per row; contact-scoped rows are written only if/when a real
+# backend-issued UUID is available for that contact.
+
+class ActivityLog(Base):
+    """A single timestamped event in an application's or contact's history."""
+    __tablename__ = "activity_log"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False, index=True)
+    application_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("applications.id", ondelete="CASCADE"), nullable=True, index=True
+    )
+    # Not a ForeignKey — see module comment above: no `contacts` table exists.
+    contact_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True, index=True)
+    action_type: Mapped[str] = mapped_column(String(50), nullable=False)
+    # status_change | follow_up_set | follow_up_cleared | follow_up_completed |
+    # note_added | contact_status_change | outreach_logged | reminder_sent
+    note: Mapped[str | None] = mapped_column(Text)
+    extra_data: Mapped[dict | None] = mapped_column(JSONB, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# PHASE 8: MULTI-TENANCY & RBAC (additive, schema-only - not enforced yet)
+# ─────────────────────────────────────────────────────────────────────────────
+# This introduces a Tenant (workspace/organization) concept plus a simple
+# enum-backed `role` column on CandidateProfile, and nullable `tenant_id` FKs
+# on the core user-owned tables (CandidateProfile, Application,
+# ResumeHistory). Nothing here is wired into any request path yet - no
+# dependency reads or checks tenant_id/role today. All new columns are
+# nullable specifically so existing rows and endpoints are unaffected.
+# Backfilling tenant_id on existing rows and actually enforcing role/tenant
+# checks are deliberate follow-up decisions for later, not made here.
+#
+# Role design: a flexible Role/Permission table pair was considered, but a
+# plain enum-backed string column was chosen instead - there is no signal
+# elsewhere in this schema (no existing permissions/ACL table, no per-user
+# table beyond CandidateProfile) that fine-grained, per-permission control is
+# needed yet, and a string column matches this codebase's existing
+# convention for enum-like fields (see VerifiedJob.verification_status,
+# Application.status, Notification.type, AutopilotQueueItem.status - all
+# plain String columns documented with a comment, not native DB enums or
+# separate lookup tables). If real RBAC requirements emerge later (custom
+# roles per tenant, granular permissions), this column can be migrated to a
+# Role/Permission table pair without touching unrelated schema.
+
+class Tenant(Base):
+    """A workspace/organization that user-owned data can be scoped to.
+
+    Nothing currently assigns rows to a tenant - the tenant_id columns added
+    to CandidateProfile/Application/ResumeHistory are nullable and unused by
+    any query or dependency today. This table exists so a follow-up change
+    can backfill those columns and start enforcing tenant-scoped access.
+    """
+    __tablename__ = "tenants"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    slug: Mapped[str] = mapped_column(String(100), unique=True, nullable=False)
+    owner_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), nullable=True, index=True
+    )
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# PHASE 11: INTERVIEW PREP SPACED REPETITION (additive)
+# ─────────────────────────────────────────────────────────────────────────────
+# Per-user, per-question review state backing the Interview Prep "Due for
+# Review" queue (frontend/app/interview/page.tsx) and the simple Leitner-style
+# leveled interval scheduler in backend/interview_coach/spaced_repetition.py.
+#
+# `question_id` is a plain string, not a FK - questions can come from the
+# static bank (frontend/lib/questionBank.ts ids), a profile-personalised
+# generated set ("gen_N" ids), or an LLM-generated JD-specific set, none of
+# which are backed by a DB table. `question_snapshot` caches the question's
+# text/metadata at first-grade time precisely so the review queue can render
+# a dynamically-generated question later even if the client-side set that
+# originally produced it is gone.
+
+class QuestionReviewState(Base):
+    """One row per (user, question) tracked in the spaced-repetition queue."""
+    __tablename__ = "question_review_states"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False, index=True)
+    question_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    question_domain: Mapped[str | None] = mapped_column(String(100))
+    question_type: Mapped[str | None] = mapped_column(String(50))
+    question_snapshot: Mapped[dict | None] = mapped_column(JSONB, default=dict)
+    # Leitner box index: 0 = brand new / just missed .. MAX_BOX = most mastered.
+    box: Mapped[int] = mapped_column(Integer, default=0)
+    repetitions: Mapped[int] = mapped_column(Integer, default=0)
+    correct_streak: Mapped[int] = mapped_column(Integer, default=0)
+    last_grade: Mapped[str | None] = mapped_column(String(20))
+    last_reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    next_review_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+    __table_args__ = (
+        Index("ix_question_review_states_user_question", "user_id", "question_id", unique=True),
+        Index("ix_question_review_states_user_due", "user_id", "next_review_at"),
+    )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# PHASE 9: AUDIT LOG (GDPR-friendly data export + audit trail)
+# ─────────────────────────────────────────────────────────────────────────────
+# An append-only trail of security/privacy-relevant actions a user (or the
+# system on their behalf) took - e.g. "requested a GDPR data export". This is
+# deliberately generic (action/resource_type/resource_id + a JSONB bag for
+# anything else) rather than one column per event type, matching this
+# schema's existing convention for open-ended event data (see
+# Notification.extra_data, VerifiedJob.requirements/technologies, etc. - all
+# JSONB rather than bespoke columns).
+#
+# Today the only call site is api/data_export.py, which logs
+# "data_export_requested" as a proof of concept. Retrofitting audit logging
+# into every existing endpoint (auth, applications, resume generation, ...)
+# is a deliberate, larger follow-up - not attempted here.
+#
+# Named PrivacyAuditLog (not AuditLog) to avoid colliding with the separate,
+# tenant/actor-scoped enterprise AuditLog model (table `audit_log`) below -
+# the two serve different purposes and are populated by different code paths.
+
+class PrivacyAuditLog(Base):
+    """Append-only audit trail row. See log_audit_event() below for the
+    helper other endpoints should call to write one."""
+    __tablename__ = "audit_logs"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False, index=True)
+    action: Mapped[str] = mapped_column(String(100), nullable=False)
+    # e.g. "data_export_requested", "profile_updated", "login_succeeded", ...
+    resource_type: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    # e.g. "user_data_export", "candidate_profile", "application"
+    resource_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    # String rather than UUID: some resources this may one day log against
+    # (e.g. a portfolio slug) aren't UUIDs, and this table is append-only
+    # audit metadata, not a FK-enforced relationship to any of them.
+    extra_data: Mapped[dict | None] = mapped_column(JSONB, default=dict)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), index=True
+    )
+
+    __table_args__ = (
+        Index("ix_audit_logs_user_action", "user_id", "action"),
+    )
+
+
+async def log_audit_event(
+    db: AsyncSession,
+    user_id: uuid.UUID,
+    action: str,
+    resource_type: str | None = None,
+    resource_id: str | None = None,
+    extra_data: dict | None = None,
+) -> PrivacyAuditLog:
+    """Append one row to the audit trail.
+
+    Colocated with the PrivacyAuditLog model (rather than in a separate
+    service module) so it's a single, obvious import for any endpoint that
+    wants to start emitting audit events: `from models.database import
+    log_audit_event`. Only adds+flushes the row - the caller's existing
+    `Depends(get_db)` session still owns the transaction (commit/rollback),
+    exactly like every other write in this codebase (see api/profile.py,
+    api/notifications.py, etc.).
+    """
+    entry = PrivacyAuditLog(
+        user_id=user_id,
+        action=action,
+        resource_type=resource_type,
+        resource_id=str(resource_id) if resource_id is not None else None,
+        extra_data=extra_data or {},
+    )
+    db.add(entry)
+    await db.flush()
+    return entry
+
 
 # Enterprise v2 persistence models. These tables are created by
 # database/enterprise_v2.sql and remain additive to the legacy schema.

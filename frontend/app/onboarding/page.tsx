@@ -1,10 +1,18 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { motion, AnimatePresence } from "motion/react";
+import { toast } from "sonner";
 import { useAuth } from "@/lib/AuthContext";
+import { useProfile } from "@/lib/ProfileContext";
+import { useDemoMode } from "@/lib/demoMode";
+import { motionTransition } from "@/lib/motion-tokens";
+import DemoDataBanner from "@/components/DemoDataBanner";
+import { CandidateProfile } from "@/lib/types";
 import {
   Upload, Target, Activity, Briefcase,
   CheckCircle2, ArrowRight, Loader2, User,
+  Sparkles, FileText, X, PlayCircle,
 } from "lucide-react";
 
 const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
@@ -14,9 +22,26 @@ function authHeaders(token: string | null): HeadersInit {
                : { "Content-Type": "application/json" };
 }
 
+/** "Python, TypeScript,  AWS" → ["Python", "TypeScript", "AWS"] */
+function splitCsv(s: string): string[] {
+  return s.split(",").map(x => x.trim()).filter(Boolean);
+}
+
+function unionCsv(existing: string[], incoming: unknown): string[] {
+  if (!Array.isArray(incoming)) return existing;
+  return Array.from(new Set([...existing, ...incoming.filter((x): x is string => typeof x === "string")]));
+}
+
+const EMPTY_PROFILE: CandidateProfile = {
+  name: "", currentRole: "", currentSalary: 0, currency: "USD",
+  experienceYears: 0, workMode: "Any", currentLocation: "",
+  preferredLocations: [], skills: [], frameworks: [], languages: [],
+  cicdTools: [], aiTools: [], certifications: [], resumeText: "",
+};
+
 const STEPS = [
   { id: 1, icon: User,     title: "Basic Info",      subtitle: "Who are you?" },
-  { id: 2, icon: Upload,   title: "Resume",          subtitle: "Upload or paste" },
+  { id: 2, icon: Upload,   title: "Resume",          subtitle: "Paste, upload, or auto-fill" },
   { id: 3, icon: Target,   title: "Career Goals",    subtitle: "What are you targeting?" },
   { id: 4, icon: Activity, title: "Health Score",    subtitle: "See your score" },
   { id: 5, icon: Briefcase,title: "Job Matches",     subtitle: "Discover roles" },
@@ -25,60 +50,171 @@ const STEPS = [
 export default function OnboardingPage() {
   const router = useRouter();
   const { token } = useAuth();
+  const { profile: ctxProfile, saveProfile } = useProfile();
+  const { demoMode, enableDemoMode, disableDemoMode } = useDemoMode();
+
   const [step, setStep] = useState(1);
   const [saving, setSaving] = useState(false);
   const [healthScore, setHealthScore] = useState<number | null>(null);
 
-  // Step 1 — basic info
-  const [profile, setProfile] = useState({
-    name: "", current_role: "", experience_years: 5,
-    current_location: "", work_mode: "Any",
-    skills: "", frameworks: "", current_salary: 0, currency: "USD",
-  });
+  // ── Progressive-wizard profile draft. This is a real `CandidateProfile`
+  // (not a one-off shape) so every step can persist through the same
+  // `useProfile().saveProfile()` mechanism the rest of the app uses — no
+  // second save path, no bespoke schema. ────────────────────────────────────
+  const [profile, setProfile] = useState<CandidateProfile>(EMPTY_PROFILE);
+  const [skillsText, setSkillsText] = useState("");
+  const [frameworksText, setFrameworksText] = useState("");
+  const hydrated = useRef(false);
 
-  // Step 2 — resume
+  // Resume-import step
   const [resumeText, setResumeText] = useState("");
+  const [resumeFile, setResumeFile] = useState<File | null>(null);
+  const [parsing, setParsing] = useState(false);
+  const [parseMessage, setParseMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Step 3 — goals
+  // Career goals
   const [goals, setGoals] = useState({
     target_role: "", target_salary_min: 0, target_salary_max: 0,
     timeline_months: 6, work_mode: "Remote", target_location: "",
   });
 
-  const saveProfileAndAdvance = async () => {
-    setSaving(true);
-    try {
-      await fetch(`${API}/api/profile/`, {
-        method: "PUT",
-        headers: authHeaders(token),
-        body: JSON.stringify({
-          name: profile.name,
-          current_role: profile.current_role,
-          experience_years: profile.experience_years,
-          current_location: profile.current_location,
-          work_mode: profile.work_mode,
-          skills: profile.skills.split(",").map(s => s.trim()).filter(Boolean),
-          frameworks: profile.frameworks.split(",").map(s => s.trim()).filter(Boolean),
-          current_salary: profile.current_salary || null,
-          currency: profile.currency,
-          base_resume_text: resumeText || null,
-        }),
-      });
-      setStep(3);
-    } catch (e) { console.error(e); }
-    finally { setSaving(false); }
+  // Resume onto whatever profile already exists (e.g. a user who filled in
+  // part of their profile from another page, then landed here) instead of
+  // clobbering it with a blank draft — a returning user should never see
+  // their own data reset.
+  useEffect(() => {
+    if (hydrated.current || !ctxProfile) return;
+    hydrated.current = true;
+    setProfile(ctxProfile);
+    setSkillsText((ctxProfile.skills || []).join(", "));
+    setFrameworksText((ctxProfile.frameworks || []).join(", "));
+    setResumeText(ctxProfile.resumeText || "");
+  }, [ctxProfile]);
+
+  // ── Demo mode entry point ──────────────────────────────────────────────
+  const handleTryDemoMode = () => {
+    enableDemoMode();
+    toast.success("Demo mode on — exploring with sample data. Nothing is saved to your account.");
+    router.push("/");
+  };
+  const handleExitDemo = () => {
+    disableDemoMode();
+    toast.message("Exited demo mode.");
   };
 
+  // ── Step 1 → save basic info immediately, don't wait for later steps ──
+  const saveBasicInfo = async () => {
+    setSaving(true);
+    const merged: CandidateProfile = {
+      ...profile,
+      skills: splitCsv(skillsText),
+      frameworks: splitCsv(frameworksText),
+    };
+    setProfile(merged);
+    await saveProfile(merged); // best-effort: caches to localStorage instantly, syncs to DB in the background
+    setSaving(false);
+    toast.success("Saved — basic info added to your profile");
+    setStep(2);
+  };
+
+  // ── Step 2 → resume import / auto-fill ─────────────────────────────────
+  const applyParsedResumeData = (d: Record<string, unknown>) => {
+    const mergedSkills = unionCsv(profile.skills, d.skills);
+    const mergedFrameworks = unionCsv(profile.frameworks, d.frameworks);
+    const merged: CandidateProfile = {
+      ...profile,
+      name: profile.name || (typeof d.name === "string" ? d.name : ""),
+      currentRole: profile.currentRole || (typeof d.current_role === "string" ? d.current_role : ""),
+      experienceYears: profile.experienceYears || Number(d.experience_years) || 0,
+      currentLocation: profile.currentLocation || (typeof d.current_location === "string" ? d.current_location : ""),
+      workMode: d.work_mode && d.work_mode !== "Any" ? String(d.work_mode) : profile.workMode,
+      skills: mergedSkills,
+      frameworks: mergedFrameworks,
+      languages: unionCsv(profile.languages, d.languages),
+      cicdTools: unionCsv(profile.cicdTools, d.cicd_tools),
+      aiTools: unionCsv(profile.aiTools, d.ai_tools),
+      certifications: unionCsv(profile.certifications, d.certifications),
+    };
+    setProfile(merged);
+    setSkillsText(mergedSkills.join(", "));
+    setFrameworksText(mergedFrameworks.join(", "));
+    if (typeof d.resume_text === "string" && d.resume_text) setResumeText(d.resume_text);
+
+    const newSkillCount = ["skills", "frameworks", "languages", "cicd_tools", "ai_tools", "certifications"]
+      .reduce((n, k) => n + (Array.isArray(d[k]) ? (d[k] as unknown[]).length : 0), 0);
+    setParseMessage({
+      type: "success",
+      text: `Auto-filled from resume${d.name ? " — name, " : " — "}${newSkillCount} skills/tools detected. Review below, then continue.`,
+    });
+    toast.success("Resume parsed — profile fields auto-filled");
+  };
+
+  const handleAutoFillFromResume = async () => {
+    setParsing(true);
+    setParseMessage(null);
+    try {
+      let data: Record<string, unknown>;
+      if (resumeFile) {
+        const fd = new FormData();
+        fd.append("file", resumeFile);
+        const res = await fetch(`${API}/api/profile/parse-resume-file`, { method: "POST", body: fd });
+        if (!res.ok) throw new Error(await res.text());
+        data = await res.json();
+      } else {
+        const text = resumeText.trim();
+        if (text.length < 50) {
+          setParseMessage({ type: "error", text: "Paste at least a few lines of resume text, or upload a PDF/DOCX, then try again." });
+          setParsing(false);
+          return;
+        }
+        const res = await fetch(`${API}/api/profile/parse-resume`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ resume_text: text }),
+        });
+        if (!res.ok) throw new Error(await res.text());
+        data = await res.json();
+      }
+      applyParsedResumeData(data);
+    } catch (err) {
+      const raw = err instanceof Error ? err.message : String(err);
+      let detail = raw;
+      try { detail = JSON.parse(raw)?.detail || raw; } catch { /* not JSON */ }
+      const message = raw.includes("fetch") || raw.includes("NetworkError")
+        ? "Backend not reachable — make sure the API server is running."
+        : `Couldn't parse that resume: ${detail.slice(0, 150)}`;
+      setParseMessage({ type: "error", text: message });
+      toast.error(message);
+    } finally {
+      setParsing(false);
+    }
+  };
+
+  const handleResumeFilePicked = (file: File | null) => {
+    setResumeFile(file);
+    setParseMessage(null);
+  };
+
+  const saveResumeAndAdvance = async () => {
+    setSaving(true);
+    const merged: CandidateProfile = { ...profile, resumeText };
+    setProfile(merged);
+    await saveProfile(merged);
+    setSaving(false);
+    toast.success(resumeText ? "Resume saved to your profile" : "Skipped resume for now");
+    setStep(3);
+  };
+
+  // ── Step 3 → career goals + compute health ─────────────────────────────
   const saveGoalsAndCompute = async () => {
     setSaving(true);
     try {
-      // Save goal
       await fetch(`${API}/api/career-graph/goals`, {
         method: "PUT",
         headers: authHeaders(token),
         body: JSON.stringify(goals),
       });
-      // Compute health
       const res = await fetch(`${API}/api/career-graph/compute-health`, {
         method: "POST",
         headers: authHeaders(token),
@@ -86,10 +222,16 @@ export default function OnboardingPage() {
       if (res.ok) {
         const data = await res.json();
         setHealthScore(data.health_score);
+      } else {
+        toast.error("Couldn't compute your health score right now — you can retry from the Career Graph page.");
       }
+    } catch (e) {
+      console.error(e);
+      toast.error("Goals saved locally, but the server didn't confirm — check your connection.");
+    } finally {
+      setSaving(false);
       setStep(4);
-    } catch (e) { console.error(e); }
-    finally { setSaving(false); }
+    }
   };
 
   const scoreColor = healthScore === null ? "#94a3b8"
@@ -98,6 +240,40 @@ export default function OnboardingPage() {
   return (
     <div className="min-h-screen flex flex-col items-center justify-center px-4 py-12"
       style={{ background: "var(--bg)" }}>
+
+      {/* ── Demo mode: entry point (default state) or active banner ── */}
+      <div className="w-full max-w-lg mb-4">
+        {demoMode ? (
+          <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+            <DemoDataBanner
+              className="flex-1 mb-0"
+              message="Demo mode is active — building a real profile here will be saved once you exit demo mode."
+            />
+            <button
+              type="button"
+              onClick={handleExitDemo}
+              className="btn-secondary shrink-0 text-xs px-3 py-2 font-semibold"
+            >
+              Exit demo mode
+            </button>
+          </div>
+        ) : (
+          <div className="flex items-center justify-between gap-3 rounded-xl px-4 py-2.5"
+            style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)" }}>
+            <span className="flex items-center gap-2 text-xs text-slate-400">
+              <PlayCircle className="w-3.5 h-3.5 shrink-0" />
+              Just exploring? Skip setup and preview with sample data.
+            </span>
+            <button
+              type="button"
+              onClick={handleTryDemoMode}
+              className="btn-secondary shrink-0 text-xs px-3 py-1.5 font-semibold"
+            >
+              Try demo mode
+            </button>
+          </div>
+        )}
+      </div>
 
       {/* Progress bar */}
       <div className="w-full max-w-lg mb-8">
@@ -119,233 +295,282 @@ export default function OnboardingPage() {
       </div>
 
       {/* Card */}
-      <div className="card p-8 w-full max-w-lg">
+      <div className="card p-8 w-full max-w-lg overflow-hidden">
+        <AnimatePresence mode="wait">
 
-        {/* ── STEP 1 — Basic Info ── */}
-        {step === 1 && (
-          <div className="space-y-5">
-            <div className="text-center mb-6">
-              <div className="w-12 h-12 rounded-2xl mx-auto mb-3 flex items-center justify-center"
-                style={{ background: "linear-gradient(135deg, var(--accent-deep), var(--accent))" }}>
-                <User className="w-6 h-6 text-white" />
+          {/* ── STEP 1 — Basic Info ── */}
+          {step === 1 && (
+            <motion.div key="step-1" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -8 }} transition={motionTransition("base", "outQuint")} className="space-y-5">
+              <div className="text-center mb-6">
+                <div className="w-12 h-12 rounded-2xl mx-auto mb-3 flex items-center justify-center"
+                  style={{ background: "linear-gradient(135deg, var(--accent-deep), var(--accent))" }}>
+                  <User className="w-6 h-6 text-white" />
+                </div>
+                <h2 className="text-xl font-bold text-white">Tell us about yourself</h2>
+                <p className="text-sm text-slate-400 mt-1">This powers your personalised job matches. Saved as you go — nothing is lost if you stop midway.</p>
               </div>
-              <h2 className="text-xl font-bold text-white">Tell us about yourself</h2>
-              <p className="text-sm text-slate-400 mt-1">This powers your personalised job matches</p>
-            </div>
-            <div className="grid sm:grid-cols-2 gap-3">
-              <div>
-                <label className="block text-xs text-slate-400 mb-1">Full Name</label>
-                <input className="input-field w-full" placeholder="Jane Smith"
-                  value={profile.name} onChange={e => setProfile(p => ({ ...p, name: e.target.value }))} />
-              </div>
-              <div>
-                <label className="block text-xs text-slate-400 mb-1">Current Role</label>
-                <input className="input-field w-full" placeholder="Software Engineer"
-                  value={profile.current_role} onChange={e => setProfile(p => ({ ...p, current_role: e.target.value }))} />
-              </div>
-              <div>
-                <label className="block text-xs text-slate-400 mb-1">Years of Experience</label>
-                <input className="input-field w-full" type="number" min={0}
-                  value={profile.experience_years} onChange={e => setProfile(p => ({ ...p, experience_years: +e.target.value }))} />
-              </div>
-              <div>
-                <label className="block text-xs text-slate-400 mb-1">Location</label>
-                <input className="input-field w-full" placeholder="Berlin, Germany"
-                  value={profile.current_location} onChange={e => setProfile(p => ({ ...p, current_location: e.target.value }))} />
-              </div>
-              <div>
-                <label className="block text-xs text-slate-400 mb-1">Work Mode Preference</label>
-                <select className="input-field w-full" value={profile.work_mode}
-                  onChange={e => setProfile(p => ({ ...p, work_mode: e.target.value }))}>
-                  {["Remote", "Hybrid", "On-site", "Any"].map(m => <option key={m}>{m}</option>)}
-                </select>
-              </div>
-              <div>
-                <label className="block text-xs text-slate-400 mb-1">Current Salary (optional)</label>
-                <div className="flex gap-1">
-                  <select className="input-field w-20 shrink-0" value={profile.currency}
-                    onChange={e => setProfile(p => ({ ...p, currency: e.target.value }))}>
-                    {["USD", "EUR", "GBP", "INR", "CAD"].map(c => <option key={c}>{c}</option>)}
+              <div className="grid sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs text-slate-400 mb-1">Full Name</label>
+                  <input className="input-field w-full" placeholder="Jane Smith"
+                    value={profile.name} onChange={e => setProfile(p => ({ ...p, name: e.target.value }))} />
+                </div>
+                <div>
+                  <label className="block text-xs text-slate-400 mb-1">Current Role</label>
+                  <input className="input-field w-full" placeholder="Software Engineer"
+                    value={profile.currentRole} onChange={e => setProfile(p => ({ ...p, currentRole: e.target.value }))} />
+                </div>
+                <div>
+                  <label className="block text-xs text-slate-400 mb-1">Years of Experience</label>
+                  <input className="input-field w-full" type="number" min={0}
+                    value={profile.experienceYears} onChange={e => setProfile(p => ({ ...p, experienceYears: +e.target.value }))} />
+                </div>
+                <div>
+                  <label className="block text-xs text-slate-400 mb-1">Location</label>
+                  <input className="input-field w-full" placeholder="Berlin, Germany"
+                    value={profile.currentLocation} onChange={e => setProfile(p => ({ ...p, currentLocation: e.target.value }))} />
+                </div>
+                <div>
+                  <label className="block text-xs text-slate-400 mb-1">Work Mode Preference</label>
+                  <select className="input-field w-full" value={profile.workMode}
+                    onChange={e => setProfile(p => ({ ...p, workMode: e.target.value }))}>
+                    {["Remote", "Hybrid", "On-site", "Any"].map(m => <option key={m}>{m}</option>)}
                   </select>
-                  <input className="input-field flex-1" type="number" placeholder="120000"
-                    value={profile.current_salary || ""} onChange={e => setProfile(p => ({ ...p, current_salary: +e.target.value }))} />
+                </div>
+                <div>
+                  <label className="block text-xs text-slate-400 mb-1">Current Salary (optional)</label>
+                  <div className="flex gap-1">
+                    <select className="input-field w-20 shrink-0" value={profile.currency}
+                      onChange={e => setProfile(p => ({ ...p, currency: e.target.value }))}>
+                      {["USD", "EUR", "GBP", "INR", "CAD"].map(c => <option key={c}>{c}</option>)}
+                    </select>
+                    <input className="input-field flex-1" type="number" placeholder="120000"
+                      value={profile.currentSalary || ""} onChange={e => setProfile(p => ({ ...p, currentSalary: +e.target.value }))} />
+                  </div>
                 </div>
               </div>
-            </div>
-            <div>
-              <label className="block text-xs text-slate-400 mb-1">Key Skills <span className="text-slate-600">(comma-separated)</span></label>
-              <input className="input-field w-full" placeholder="Python, TypeScript, AWS"
-                value={profile.skills} onChange={e => setProfile(p => ({ ...p, skills: e.target.value }))} />
-            </div>
-            <div>
-              <label className="block text-xs text-slate-400 mb-1">Frameworks / Tools <span className="text-slate-600">(comma-separated)</span></label>
-              <input className="input-field w-full" placeholder="React, FastAPI, Docker, Kubernetes"
-                value={profile.frameworks} onChange={e => setProfile(p => ({ ...p, frameworks: e.target.value }))} />
-            </div>
-            <button onClick={() => setStep(2)} disabled={!profile.name.trim()}
-              className="btn-primary w-full flex items-center justify-center gap-2 py-3 font-semibold">
-              Next: Upload Resume <ArrowRight className="w-4 h-4" />
-            </button>
-          </div>
-        )}
-
-        {/* ── STEP 2 — Resume ── */}
-        {step === 2 && (
-          <div className="space-y-5">
-            <div className="text-center mb-6">
-              <div className="w-12 h-12 rounded-2xl mx-auto mb-3 flex items-center justify-center"
-                style={{ background: "linear-gradient(135deg, var(--accent-deep), var(--accent))" }}>
-                <Upload className="w-6 h-6 text-white" />
+              <div>
+                <label className="block text-xs text-slate-400 mb-1">Key Skills <span className="text-slate-600">(comma-separated)</span></label>
+                <input className="input-field w-full" placeholder="Python, TypeScript, AWS"
+                  value={skillsText} onChange={e => setSkillsText(e.target.value)} />
               </div>
-              <h2 className="text-xl font-bold text-white">Your Resume</h2>
-              <p className="text-sm text-slate-400 mt-1">Paste your resume text so AI can tailor everything to you</p>
-            </div>
-            <textarea
-              className="input-field w-full resize-none text-sm"
-              rows={10}
-              placeholder="Paste your resume content here — work experience, skills, projects, education…"
-              value={resumeText}
-              onChange={e => setResumeText(e.target.value)}
-            />
-            <div className="flex gap-3">
-              <button onClick={() => setStep(1)} className="btn-secondary flex-1 py-3 font-semibold">← Back</button>
-              <button onClick={saveProfileAndAdvance} disabled={saving}
-                className="btn-primary flex-1 flex items-center justify-center gap-2 py-3 font-semibold">
+              <div>
+                <label className="block text-xs text-slate-400 mb-1">Frameworks / Tools <span className="text-slate-600">(comma-separated)</span></label>
+                <input className="input-field w-full" placeholder="React, FastAPI, Docker, Kubernetes"
+                  value={frameworksText} onChange={e => setFrameworksText(e.target.value)} />
+              </div>
+              <button onClick={saveBasicInfo} disabled={!profile.name.trim() || saving}
+                className="btn-primary w-full flex items-center justify-center gap-2 py-3 font-semibold">
                 {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <ArrowRight className="w-4 h-4" />}
-                {resumeText ? "Save & Continue" : "Skip for now"}
+                Save &amp; Continue: Resume
               </button>
-            </div>
-          </div>
-        )}
+            </motion.div>
+          )}
 
-        {/* ── STEP 3 — Goals ── */}
-        {step === 3 && (
-          <div className="space-y-5">
-            <div className="text-center mb-6">
-              <div className="w-12 h-12 rounded-2xl mx-auto mb-3 flex items-center justify-center"
-                style={{ background: "linear-gradient(135deg, var(--accent-deep), var(--accent))" }}>
-                <Target className="w-6 h-6 text-white" />
+          {/* ── STEP 2 — Resume (paste, upload, or auto-fill) ── */}
+          {step === 2 && (
+            <motion.div key="step-2" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -8 }} transition={motionTransition("base", "outQuint")} className="space-y-5">
+              <div className="text-center mb-6">
+                <div className="w-12 h-12 rounded-2xl mx-auto mb-3 flex items-center justify-center"
+                  style={{ background: "linear-gradient(135deg, var(--accent-deep), var(--accent))" }}>
+                  <Upload className="w-6 h-6 text-white" />
+                </div>
+                <h2 className="text-xl font-bold text-white">Your Resume</h2>
+                <p className="text-sm text-slate-400 mt-1">Paste your resume text or upload a file — AI can auto-fill the fields above for you.</p>
               </div>
-              <h2 className="text-xl font-bold text-white">What are you targeting?</h2>
-              <p className="text-sm text-slate-400 mt-1">Set your goals so every recommendation is personalised</p>
-            </div>
-            <div className="grid sm:grid-cols-2 gap-3">
-              <div className="col-span-full">
-                <label className="block text-xs text-slate-400 mb-1">Target Role</label>
-                <input className="input-field w-full" placeholder="Senior Software Engineer"
-                  value={goals.target_role} onChange={e => setGoals(p => ({ ...p, target_role: e.target.value }))} />
+
+              <div className="flex items-center gap-2">
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".pdf,.doc,.docx,.txt"
+                  className="hidden"
+                  onChange={e => handleResumeFilePicked(e.target.files?.[0] || null)}
+                />
+                <button type="button" onClick={() => fileInputRef.current?.click()}
+                  className="btn-secondary flex-1 flex items-center justify-center gap-2 py-2.5 text-sm font-medium truncate">
+                  <FileText className="w-4 h-4 shrink-0" />
+                  <span className="truncate">{resumeFile ? resumeFile.name : "Upload PDF / DOCX / TXT"}</span>
+                </button>
+                {resumeFile && (
+                  <button type="button" onClick={() => setResumeFile(null)}
+                    aria-label="Remove selected file"
+                    className="shrink-0 p-2.5 rounded-lg" style={{ border: "1px solid rgba(255,255,255,0.1)" }}>
+                    <X className="w-4 h-4 text-slate-400" />
+                  </button>
+                )}
               </div>
-              <div>
-                <label className="block text-xs text-slate-400 mb-1">Min Salary (USD)</label>
-                <input className="input-field w-full" type="number" placeholder="120000"
-                  value={goals.target_salary_min || ""} onChange={e => setGoals(p => ({ ...p, target_salary_min: +e.target.value }))} />
-              </div>
-              <div>
-                <label className="block text-xs text-slate-400 mb-1">Max Salary (USD)</label>
-                <input className="input-field w-full" type="number" placeholder="180000"
-                  value={goals.target_salary_max || ""} onChange={e => setGoals(p => ({ ...p, target_salary_max: +e.target.value }))} />
-              </div>
-              <div>
-                <label className="block text-xs text-slate-400 mb-1">Timeline (months)</label>
-                <select className="input-field w-full" value={goals.timeline_months}
-                  onChange={e => setGoals(p => ({ ...p, timeline_months: +e.target.value }))}>
-                  {[1,2,3,6,9,12].map(m => <option key={m} value={m}>{m} month{m > 1 ? "s" : ""}</option>)}
-                </select>
-              </div>
-              <div>
-                <label className="block text-xs text-slate-400 mb-1">Preferred Work Mode</label>
-                <select className="input-field w-full" value={goals.work_mode}
-                  onChange={e => setGoals(p => ({ ...p, work_mode: e.target.value }))}>
-                  {["Remote", "Hybrid", "On-site", "Any"].map(m => <option key={m}>{m}</option>)}
-                </select>
-              </div>
-              <div className="col-span-full">
-                <label className="block text-xs text-slate-400 mb-1">Target Location (optional)</label>
-                <input className="input-field w-full" placeholder="San Francisco, Remote"
-                  value={goals.target_location} onChange={e => setGoals(p => ({ ...p, target_location: e.target.value }))} />
-              </div>
-            </div>
-            <div className="flex gap-3">
-              <button onClick={() => setStep(2)} className="btn-secondary flex-1 py-3 font-semibold">← Back</button>
-              <button onClick={saveGoalsAndCompute} disabled={saving || !goals.target_role.trim()}
-                className="btn-primary flex-1 flex items-center justify-center gap-2 py-3 font-semibold">
-                {saving ? <><Loader2 className="w-4 h-4 animate-spin" /> Computing…</> : <><ArrowRight className="w-4 h-4" /> Compute My Score</>}
+
+              <div className="text-center text-[11px] text-slate-600 uppercase tracking-wide">or paste below</div>
+
+              <textarea
+                className="input-field w-full resize-none text-sm"
+                rows={8}
+                placeholder="Paste your resume content here — work experience, skills, projects, education…"
+                value={resumeText}
+                onChange={e => setResumeText(e.target.value)}
+              />
+
+              <button type="button" onClick={handleAutoFillFromResume} disabled={parsing || (!resumeFile && resumeText.trim().length < 50)}
+                className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-semibold disabled:opacity-40 disabled:cursor-not-allowed"
+                style={{ background: "linear-gradient(135deg, rgba(99,102,241,0.3), rgba(139,92,246,0.3))", color: "#c4b5fd", border: "1px solid rgba(139,92,246,0.5)" }}>
+                {parsing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+                {parsing ? "Reading your resume…" : "Auto-fill profile from resume"}
               </button>
-            </div>
-          </div>
-        )}
 
-        {/* ── STEP 4 — Health Score Reveal ── */}
-        {step === 4 && (
-          <div className="text-center space-y-6">
-            <div className="w-12 h-12 rounded-2xl mx-auto flex items-center justify-center"
-              style={{ background: "linear-gradient(135deg, var(--accent-deep), var(--accent))" }}>
-              <Activity className="w-6 h-6 text-white" />
-            </div>
-            <div>
-              <h2 className="text-xl font-bold text-white mb-2">Your Career Health Score</h2>
-              <p className="text-sm text-slate-400">Based on your profile, goals, and activity</p>
-            </div>
-            <div className="flex items-center justify-center">
-              <div className="relative w-40 h-40">
-                <svg viewBox="0 0 160 160" className="-rotate-90 w-full h-full">
-                  <circle cx="80" cy="80" r="68" fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth="12" />
-                  <circle cx="80" cy="80" r="68" fill="none"
-                    stroke={scoreColor} strokeWidth="12"
-                    strokeDasharray={2 * Math.PI * 68}
-                    strokeDashoffset={2 * Math.PI * 68 * (1 - (healthScore ?? 0) / 100)}
-                    strokeLinecap="round"
-                    style={{ transition: "stroke-dashoffset 1s ease" }}
-                  />
-                </svg>
-                <div className="absolute inset-0 flex flex-col items-center justify-center">
-                  <span className="text-4xl font-black text-white">{healthScore ?? "—"}</span>
-                  <span className="text-xs text-slate-400">/ 100</span>
+              {parseMessage && (
+                <p className={`text-xs rounded-lg px-3 py-2 ${parseMessage.type === "success" ? "text-emerald-300" : "text-rose-300"}`}
+                  style={{ background: parseMessage.type === "success" ? "rgba(16,185,129,0.1)" : "rgba(244,63,94,0.1)" }}>
+                  {parseMessage.text}
+                </p>
+              )}
+
+              <div className="flex gap-3">
+                <button onClick={() => setStep(1)} className="btn-secondary flex-1 py-3 font-semibold">← Back</button>
+                <button onClick={saveResumeAndAdvance} disabled={saving}
+                  className="btn-primary flex-1 flex items-center justify-center gap-2 py-3 font-semibold">
+                  {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <ArrowRight className="w-4 h-4" />}
+                  {resumeText ? "Save & Continue" : "Skip for now"}
+                </button>
+              </div>
+            </motion.div>
+          )}
+
+          {/* ── STEP 3 — Goals ── */}
+          {step === 3 && (
+            <motion.div key="step-3" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -8 }} transition={motionTransition("base", "outQuint")} className="space-y-5">
+              <div className="text-center mb-6">
+                <div className="w-12 h-12 rounded-2xl mx-auto mb-3 flex items-center justify-center"
+                  style={{ background: "linear-gradient(135deg, var(--accent-deep), var(--accent))" }}>
+                  <Target className="w-6 h-6 text-white" />
+                </div>
+                <h2 className="text-xl font-bold text-white">What are you targeting?</h2>
+                <p className="text-sm text-slate-400 mt-1">Set your goals so every recommendation is personalised</p>
+              </div>
+              <div className="grid sm:grid-cols-2 gap-3">
+                <div className="col-span-full">
+                  <label className="block text-xs text-slate-400 mb-1">Target Role</label>
+                  <input className="input-field w-full" placeholder="Senior Software Engineer"
+                    value={goals.target_role} onChange={e => setGoals(p => ({ ...p, target_role: e.target.value }))} />
+                </div>
+                <div>
+                  <label className="block text-xs text-slate-400 mb-1">Min Salary (USD)</label>
+                  <input className="input-field w-full" type="number" placeholder="120000"
+                    value={goals.target_salary_min || ""} onChange={e => setGoals(p => ({ ...p, target_salary_min: +e.target.value }))} />
+                </div>
+                <div>
+                  <label className="block text-xs text-slate-400 mb-1">Max Salary (USD)</label>
+                  <input className="input-field w-full" type="number" placeholder="180000"
+                    value={goals.target_salary_max || ""} onChange={e => setGoals(p => ({ ...p, target_salary_max: +e.target.value }))} />
+                </div>
+                <div>
+                  <label className="block text-xs text-slate-400 mb-1">Timeline (months)</label>
+                  <select className="input-field w-full" value={goals.timeline_months}
+                    onChange={e => setGoals(p => ({ ...p, timeline_months: +e.target.value }))}>
+                    {[1, 2, 3, 6, 9, 12].map(m => <option key={m} value={m}>{m} month{m > 1 ? "s" : ""}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs text-slate-400 mb-1">Preferred Work Mode</label>
+                  <select className="input-field w-full" value={goals.work_mode}
+                    onChange={e => setGoals(p => ({ ...p, work_mode: e.target.value }))}>
+                    {["Remote", "Hybrid", "On-site", "Any"].map(m => <option key={m}>{m}</option>)}
+                  </select>
+                </div>
+                <div className="col-span-full">
+                  <label className="block text-xs text-slate-400 mb-1">Target Location (optional)</label>
+                  <input className="input-field w-full" placeholder="San Francisco, Remote"
+                    value={goals.target_location} onChange={e => setGoals(p => ({ ...p, target_location: e.target.value }))} />
                 </div>
               </div>
-            </div>
-            <p className="text-sm text-slate-400">
-              {(healthScore ?? 0) >= 70
-                ? "Great start! You're in solid shape for your job search."
-                : "Your score will improve as you add more data — let's find your first matches."}
-            </p>
-            <button onClick={() => setStep(5)}
-              className="btn-primary w-full flex items-center justify-center gap-2 py-3 font-semibold">
-              See My Job Matches <ArrowRight className="w-4 h-4" />
-            </button>
-          </div>
-        )}
-
-        {/* ── STEP 5 — Done ── */}
-        {step === 5 && (
-          <div className="text-center space-y-6">
-            <div className="w-16 h-16 rounded-full mx-auto flex items-center justify-center"
-              style={{ background: "rgba(16,185,129,0.15)", border: "2px solid #10b981" }}>
-              <CheckCircle2 className="w-8 h-8 text-emerald-400" />
-            </div>
-            <div>
-              <h2 className="text-2xl font-bold text-white mb-2">You&apos;re all set!</h2>
-              <p className="text-sm text-slate-400">Your career intelligence platform is ready.</p>
-            </div>
-            <div className="grid grid-cols-3 gap-3">
-              {[
-                { label: "Job Matches", href: "/jobs", icon: "🎯" },
-                { label: "Career Graph", href: "/career-graph", icon: "📊" },
-                { label: "Profile", href: "/profile", icon: "👤" },
-              ].map(({ label, href, icon }) => (
-                <button key={href} onClick={() => router.push(href)}
-                  className="card p-4 text-center hover:opacity-90 transition-opacity cursor-pointer">
-                  <div className="text-2xl mb-1">{icon}</div>
-                  <p className="text-xs text-white font-medium">{label}</p>
+              <div className="flex gap-3">
+                <button onClick={() => setStep(2)} className="btn-secondary flex-1 py-3 font-semibold">← Back</button>
+                <button onClick={saveGoalsAndCompute} disabled={saving || !goals.target_role.trim()}
+                  className="btn-primary flex-1 flex items-center justify-center gap-2 py-3 font-semibold">
+                  {saving ? <><Loader2 className="w-4 h-4 animate-spin" /> Computing…</> : <><ArrowRight className="w-4 h-4" /> Compute My Score</>}
                 </button>
-              ))}
-            </div>
-            <button onClick={() => router.push("/jobs")}
-              className="btn-primary w-full flex items-center justify-center gap-2 py-3 font-semibold">
-              <Briefcase className="w-5 h-5" /> Find My Jobs
-            </button>
-          </div>
-        )}
+              </div>
+            </motion.div>
+          )}
+
+          {/* ── STEP 4 — Health Score Reveal ── */}
+          {step === 4 && (
+            <motion.div key="step-4" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -8 }} transition={motionTransition("base", "outQuint")} className="text-center space-y-6">
+              <div className="w-12 h-12 rounded-2xl mx-auto flex items-center justify-center"
+                style={{ background: "linear-gradient(135deg, var(--accent-deep), var(--accent))" }}>
+                <Activity className="w-6 h-6 text-white" />
+              </div>
+              <div>
+                <h2 className="text-xl font-bold text-white mb-2">Your Career Health Score</h2>
+                <p className="text-sm text-slate-400">Based on your profile, goals, and activity</p>
+              </div>
+              <div className="flex items-center justify-center">
+                <div className="relative w-40 h-40">
+                  <svg viewBox="0 0 160 160" className="-rotate-90 w-full h-full">
+                    <circle cx="80" cy="80" r="68" fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth="12" />
+                    <circle cx="80" cy="80" r="68" fill="none"
+                      stroke={scoreColor} strokeWidth="12"
+                      strokeDasharray={2 * Math.PI * 68}
+                      strokeDashoffset={2 * Math.PI * 68 * (1 - (healthScore ?? 0) / 100)}
+                      strokeLinecap="round"
+                      style={{ transition: "stroke-dashoffset 1s ease" }}
+                    />
+                  </svg>
+                  <div className="absolute inset-0 flex flex-col items-center justify-center">
+                    <span className="text-4xl font-black text-white">{healthScore ?? "—"}</span>
+                    <span className="text-xs text-slate-400">/ 100</span>
+                  </div>
+                </div>
+              </div>
+              <p className="text-sm text-slate-400">
+                {(healthScore ?? 0) >= 70
+                  ? "Great start! You're in solid shape for your job search."
+                  : "Your score will improve as you add more data — let's find your first matches."}
+              </p>
+              <button onClick={() => setStep(5)}
+                className="btn-primary w-full flex items-center justify-center gap-2 py-3 font-semibold">
+                See My Job Matches <ArrowRight className="w-4 h-4" />
+              </button>
+            </motion.div>
+          )}
+
+          {/* ── STEP 5 — Done ── */}
+          {step === 5 && (
+            <motion.div key="step-5" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -8 }} transition={motionTransition("base", "outQuint")} className="text-center space-y-6">
+              <div className="w-16 h-16 rounded-full mx-auto flex items-center justify-center"
+                style={{ background: "rgba(16,185,129,0.15)", border: "2px solid #10b981" }}>
+                <CheckCircle2 className="w-8 h-8 text-emerald-400" />
+              </div>
+              <div>
+                <h2 className="text-2xl font-bold text-white mb-2">You&apos;re all set!</h2>
+                <p className="text-sm text-slate-400">Your career intelligence platform is ready.</p>
+              </div>
+              <div className="grid grid-cols-3 gap-3">
+                {[
+                  { label: "Job Matches", href: "/jobs", icon: "🎯" },
+                  { label: "Career Graph", href: "/career-graph", icon: "📊" },
+                  { label: "Profile", href: "/profile", icon: "👤" },
+                ].map(({ label, href, icon }) => (
+                  <button key={href} onClick={() => router.push(href)}
+                    className="card p-4 text-center hover:opacity-90 transition-opacity cursor-pointer">
+                    <div className="text-2xl mb-1">{icon}</div>
+                    <p className="text-xs text-white font-medium">{label}</p>
+                  </button>
+                ))}
+              </div>
+              <button onClick={() => router.push("/jobs")}
+                className="btn-primary w-full flex items-center justify-center gap-2 py-3 font-semibold">
+                <Briefcase className="w-5 h-5" /> Find My Jobs
+              </button>
+            </motion.div>
+          )}
+
+        </AnimatePresence>
       </div>
     </div>
   );

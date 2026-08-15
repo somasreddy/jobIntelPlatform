@@ -6,7 +6,7 @@ import uuid
 import logging
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, status, Body
+from fastapi import APIRouter, Depends, HTTPException, status, Body, Query, Response
 from pydantic import BaseModel, EmailStr, field_validator
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -19,6 +19,9 @@ from core.auth import (
     create_refresh_token,
     _decode_token,
     get_current_user,
+    generate_csrf_token,
+    SESSION_COOKIE_NAME,
+    ACCESS_TOKEN_TTL_SECONDS,
 )
 
 logger = logging.getLogger(__name__)
@@ -89,9 +92,44 @@ async def _get_user_by_id(db: AsyncSession, user_id: uuid.UUID) -> dict | None:
     return dict(r) if r else None
 
 
+def _set_session_cookie(response: Response, access_token: str) -> None:
+    """
+    Additive, opt-in alternative to the bearer token in the response body:
+    sets the same access JWT as an httpOnly cookie so a future frontend
+    migration can adopt cookie-based sessions incrementally.
+
+    Named `ji_session` — distinct from, and unrelated to, the frontend's
+    current `ji_token` localStorage key — to avoid any collision or
+    confusion between the two mechanisms.
+    """
+    response.set_cookie(
+        key=SESSION_COOKIE_NAME,
+        value=access_token,
+        httponly=True,
+        secure=True,
+        samesite="lax",
+        max_age=ACCESS_TOKEN_TTL_SECONDS,
+        path="/",
+    )
+
+
 # ── Endpoints ─────────────────────────────────────────────────────────────────
 @router.post("/register", status_code=201)
-async def register(payload: RegisterRequest, db: AsyncSession = Depends(get_db)):
+async def register(
+    payload: RegisterRequest,
+    response: Response,
+    db: AsyncSession = Depends(get_db),
+    set_cookie: bool = Query(
+        False,
+        description=(
+            "Optional, additive: also set the access token as an httpOnly "
+            "'ji_session' cookie (plus a csrf_token in the response body), "
+            "alongside the access_token/refresh_token already returned "
+            "today. Unused by the current frontend — default behavior is "
+            "unchanged when omitted."
+        ),
+    ),
+):
     """Create a new user account."""
     await _ensure_users_table(db)
 
@@ -107,10 +145,11 @@ async def register(payload: RegisterRequest, db: AsyncSession = Depends(get_db))
     )
     await db.flush()
 
-    access  = create_access_token(user_id, payload.email)
+    csrf_token = generate_csrf_token() if set_cookie else None
+    access  = create_access_token(user_id, payload.email, csrf_token=csrf_token)
     refresh = create_refresh_token(user_id)
 
-    return {
+    result = {
         "user_id":      str(user_id),
         "name":         payload.name,
         "email":        payload.email,
@@ -120,10 +159,28 @@ async def register(payload: RegisterRequest, db: AsyncSession = Depends(get_db))
         "refresh_token": refresh,
         "token_type":   "bearer",
     }
+    if set_cookie:
+        _set_session_cookie(response, access)
+        result["csrf_token"] = csrf_token
+    return result
 
 
 @router.post("/login")
-async def login(payload: LoginRequest, db: AsyncSession = Depends(get_db)):
+async def login(
+    payload: LoginRequest,
+    response: Response,
+    db: AsyncSession = Depends(get_db),
+    set_cookie: bool = Query(
+        False,
+        description=(
+            "Optional, additive: also set the access token as an httpOnly "
+            "'ji_session' cookie (plus a csrf_token in the response body), "
+            "alongside the access_token/refresh_token already returned "
+            "today. Unused by the current frontend — default behavior is "
+            "unchanged when omitted."
+        ),
+    ),
+):
     """Authenticate and return JWT tokens."""
     await _ensure_users_table(db)
 
@@ -143,10 +200,11 @@ async def login(payload: LoginRequest, db: AsyncSession = Depends(get_db)):
     )
     await db.flush()
 
-    access  = create_access_token(user_id, user["email"])
+    csrf_token = generate_csrf_token() if set_cookie else None
+    access  = create_access_token(user_id, user["email"], csrf_token=csrf_token)
     refresh = create_refresh_token(user_id)
 
-    return {
+    result = {
         "user_id":       str(user_id),
         "name":          user["name"],
         "email":         user["email"],
@@ -156,6 +214,10 @@ async def login(payload: LoginRequest, db: AsyncSession = Depends(get_db)):
         "refresh_token": refresh,
         "token_type":    "bearer",
     }
+    if set_cookie:
+        _set_session_cookie(response, access)
+        result["csrf_token"] = csrf_token
+    return result
 
 
 @router.post("/refresh")

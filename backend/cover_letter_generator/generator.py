@@ -2,7 +2,15 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-_SYSTEM_PROMPT = """You are an expert career coach writing highly personalized cover letters for ANY role and domain.
+# Delimiter the LLM is instructed to emit between the letter body and its own
+# explanation of the choices it made. Kept out-of-band (after the marker)
+# rather than as JSON so a model that ignores formatting can't corrupt the
+# letter body itself — worst case, `_split_rationale` just finds no marker
+# and the whole reply becomes the letter (today's exact behaviour), so this
+# is purely additive.
+_RATIONALE_MARKER = "---RATIONALE---"
+
+_SYSTEM_PROMPT = f"""You are an expert career coach writing highly personalized cover letters for ANY role and domain.
 Write a compelling, concise cover letter (3 paragraphs, ~200 words) that mirrors the job description language.
 Rules:
 - Do NOT use generic phrases like "I am a team player" or "I am a quick learner".
@@ -11,7 +19,35 @@ Rules:
 - Paragraph 2: Proof — 1-2 quantified accomplishments directly relevant to this role's requirements.
 - Paragraph 3: Close — why this company/role specifically, confident ask for a conversation.
 - Use the candidate's full profile: skills, AI tools, certifications, years of experience.
-Return only the cover letter body text. No subject line, no sign-off instructions."""
+
+After the letter, on its own line, write exactly: {_RATIONALE_MARKER}
+Then list 2-4 short bullet points (each starting with "- ") explaining SPECIFIC
+choices you made for THIS letter — which JD requirement/phrase you mirrored,
+which candidate achievement you led with and why it fits this role, and any
+tone/structure choice tied to this specific company. Ground each point in
+something concrete from the JD or profile, not generic cover-letter advice.
+
+Return only the letter body, the marker line, then the rationale bullets.
+No subject line, no sign-off instructions, nothing before the letter."""
+
+
+def _split_rationale(raw: str) -> tuple[str, list[str]]:
+    """Split the LLM's raw reply into (letter_body, rationale_bullets).
+
+    Falls back to treating the entire reply as the letter body with an empty
+    rationale list if the marker is missing — e.g. a weaker model ignored the
+    instruction. That fallback exactly matches this function's pre-rationale
+    behaviour, so nothing regresses when the marker isn't present.
+    """
+    if _RATIONALE_MARKER in raw:
+        letter_part, rationale_part = raw.split(_RATIONALE_MARKER, 1)
+        bullets = [
+            line.strip(" -•\t")
+            for line in rationale_part.strip().splitlines()
+            if line.strip(" -•\t")
+        ]
+        return letter_part.strip(), bullets
+    return raw.strip(), []
 
 
 class CoverLetterGenerator:
@@ -47,7 +83,10 @@ class CoverLetterGenerator:
                 f"Full Job Description:\n{jd[:2000]}\n\n"
                 "Write the cover letter body (3 paragraphs, ~200 words)."
             )
-            content = await smart_chat(_SYSTEM_PROMPT, user_prompt, temperature=0.6, task_type="cover_letter", cache_ttl=0)
+            raw_content = await smart_chat(_SYSTEM_PROMPT, user_prompt, temperature=0.6, task_type="cover_letter", cache_ttl=0)
+            content, rationale = _split_rationale(raw_content)
+            if not content:
+                raise ValueError("Empty cover letter body from LLM")
         except Exception as e:
             logger.warning(f"LLM cover letter generation failed: {e}")
             content = (
@@ -64,5 +103,9 @@ class CoverLetterGenerator:
                 f"I look forward to discussing how I can contribute to your quality mission.\n\n"
                 f"Best regards,\n{name}"
             )
+            rationale = [
+                "The AI personalization call was unavailable, so this is a generic "
+                "template rather than one explained/tailored to this specific job.",
+            ]
 
-        return {"content": content}
+        return {"content": content, "rationale": rationale}

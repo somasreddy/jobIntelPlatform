@@ -1,6 +1,7 @@
 "use client";
 import { useState, useEffect } from "react";
 import { createPortal } from "react-dom";
+import { AnimatePresence, motion } from "motion/react";
 import {
   X, Zap, Loader2, Check, Copy,
   Search, FileText, AlertTriangle, Linkedin, Mail,
@@ -580,15 +581,19 @@ export default function JobPowerToolsModal({ job, onClose }: Props) {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [expanded, setExpanded] = useState(false);
   const [activeTab, setActiveTab] = useState(CORE_TOOLS[0].id);
+  const [isVisible, setIsVisible] = useState(true);
 
   const visibleTools = expanded ? ALL_TOOLS : CORE_TOOLS;
 
+  // Trigger the exit animation; the real onClose fires once it finishes (see AnimatePresence below)
+  const handleClose = () => setIsVisible(false);
+
   // Close on Escape
   useEffect(() => {
-    const handler = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    const handler = (e: KeyboardEvent) => { if (e.key === "Escape") handleClose(); };
     document.addEventListener("keydown", handler);
     return () => document.removeEventListener("keydown", handler);
-  }, [onClose]);
+  }, []);
 
   // Auto-run core 3 on open
   useEffect(() => {
@@ -706,198 +711,206 @@ export default function JobPowerToolsModal({ job, onClose }: Props) {
   const allDone = ALL_TOOLS.every((c) => results[c.id] || errors[c.id]);
 
   const modal = (
-    <div
-      className="fixed inset-0 z-9999 flex items-center justify-center p-4"
-      style={{ background: "rgba(0,0,0,0.75)", backdropFilter: "blur(8px)" }}
-      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
-    >
-      <div
-        className="w-full flex flex-col rounded-2xl overflow-hidden"
-        style={{
-          maxWidth: expanded ? "1040px" : "880px",
-          maxHeight: "90vh",
-          background: "var(--bg-primary)",
-          border: "1px solid var(--border-hover)",
-          boxShadow: "0 32px 80px -12px rgba(0,0,0,0.8), 0 0 0 1px rgba(99,102,241,0.15)",
-          transition: "max-width 0.3s ease",
-        }}
-      >
-        {/* ── Header ─────────────────────────────────────────────── */}
-        <div className="shrink-0 px-6 pt-5 pb-4" style={{ borderBottom: "1px solid var(--border)" }}>
-          <div className="flex items-start gap-3 mb-3">
-            <div
-              className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0"
-              style={{ background: "linear-gradient(135deg, var(--accent-deep), var(--accent))", boxShadow: "0 4px 14px -4px var(--glow-accent)" }}
-            >
-              <Zap className="w-4.5 h-4.5 text-white" />
-            </div>
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2 mb-0.5">
-                <span className="text-[10px] font-bold uppercase tracking-widest" style={{ color: "var(--accent-bright)" }}>AI Job Analysis</span>
-                {anyLoading && (
-                  <span className="flex items-center gap-1 text-[10px] text-slate-400">
-                    <Loader2 className="w-2.5 h-2.5 animate-spin" /> Running…
-                  </span>
-                )}
-                {(expanded ? allDone : allCoreDone) && !anyLoading && (
-                  <span className="flex items-center gap-1 text-[10px] text-green-400">
-                    <Check className="w-2.5 h-2.5" /> Complete
-                  </span>
-                )}
-              </div>
-              <h2 className="font-bold text-white text-xl leading-tight">{job.title}</h2>
-              <div className="flex flex-wrap gap-3 text-xs text-slate-400 mt-1">
-                <span className="flex items-center gap-1"><Building2 className="w-3 h-3" />{job.organization}</span>
-                <span className="flex items-center gap-1"><MapPin className="w-3 h-3" />{job.location}</span>
-                <span className="flex items-center gap-1"><Clock className="w-3 h-3" />{job.experienceRequired}+ yrs</span>
-                {profile && (
-                  <>
-                    <span className="text-slate-600">·</span>
-                    <span className="flex items-center gap-1 text-green-400">
-                      <Check className="w-2.5 h-2.5" />
-                      {profile.name}{profile.resumeText ? " · Resume ready" : ""}
-                    </span>
-                  </>
-                )}
-              </div>
-            </div>
-            <div className="flex items-center gap-2 shrink-0">
-              <button
-                onClick={runAll}
-                disabled={anyLoading}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold text-white transition-all"
-                style={{
-                  background: anyLoading ? "rgba(255,255,255,0.05)" : "linear-gradient(135deg, var(--accent-deep), var(--accent))",
-                  opacity: anyLoading ? 0.6 : 1,
-                  boxShadow: anyLoading ? "none" : "0 2px 10px -2px var(--glow-accent)",
-                }}
-              >
-                {anyLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Zap className="w-3.5 h-3.5" />}
-                {anyLoading ? "Running…" : "Re-run All"}
-              </button>
-              <button
-                onClick={onClose}
-                className="p-2 rounded-xl text-slate-400 hover:text-white transition-colors"
-                style={{ background: "var(--bg-elevated)" }}
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-          </div>
-
-          {/* Tab bar — scrollable */}
-          <div className="flex items-center gap-1 overflow-x-auto pb-1 scrollbar-none">
-            {visibleTools.map((cfg) => {
-              const Icon = cfg.icon;
-              const done = !!results[cfg.id];
-              const loading = !!loadings[cfg.id];
-              const active = activeTab === cfg.id;
-              return (
-                <button
-                  key={cfg.id}
-                  onClick={() => setActiveTab(cfg.id)}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all whitespace-nowrap shrink-0"
-                  style={{
-                    background: active ? "rgba(99,102,241,0.15)" : "transparent",
-                    color: active ? "var(--accent-bright)" : "var(--text-secondary)",
-                    border: active ? "1px solid rgba(99,102,241,0.3)" : "1px solid transparent",
-                  }}
+    <AnimatePresence onExitComplete={onClose}>
+      {isVisible && (
+        <motion.div
+          className="fixed inset-0 z-9999 flex items-center justify-center p-4"
+          style={{ background: "rgba(0,0,0,0.75)", backdropFilter: "blur(8px)" }}
+          onClick={(e) => { if (e.target === e.currentTarget) handleClose(); }}
+          initial={{ opacity: 0, scale: 0.96 }}
+          animate={{ opacity: 1, scale: 1 }}
+          exit={{ opacity: 0, scale: 0.96 }}
+          transition={{ duration: 0.2, ease: "easeOut" }}
+        >
+          <div
+            className="w-full flex flex-col rounded-2xl overflow-hidden"
+            style={{
+              maxWidth: expanded ? "1040px" : "880px",
+              maxHeight: "90vh",
+              background: "var(--bg-primary)",
+              border: "1px solid var(--border-hover)",
+              boxShadow: "0 32px 80px -12px rgba(0,0,0,0.8), 0 0 0 1px rgba(99,102,241,0.15)",
+              transition: "max-width 0.3s ease",
+            }}
+          >
+            {/* ── Header ─────────────────────────────────────────────── */}
+            <div className="shrink-0 px-6 pt-5 pb-4" style={{ borderBottom: "1px solid var(--border)" }}>
+              <div className="flex items-start gap-3 mb-3">
+                <div
+                  className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0"
+                  style={{ background: "linear-gradient(135deg, var(--accent-deep), var(--accent))", boxShadow: "0 4px 14px -4px var(--glow-accent)" }}
                 >
-                  <Icon className="w-3 h-3 shrink-0" />
-                  <span>{cfg.title}</span>
-                  {loading && <Loader2 className="w-2.5 h-2.5 animate-spin ml-0.5" />}
-                  {done && !loading && <Check className="w-2.5 h-2.5 text-green-400 ml-0.5" />}
-                </button>
-              );
-            })}
-
-            {/* Expand button — only shown when not expanded */}
-            {!expanded && (
-              <button
-                onClick={handleExpand}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap shrink-0 ml-1 transition-all"
-                style={{
-                  background: "linear-gradient(135deg, rgba(99,102,241,0.2), rgba(139,92,246,0.2))",
-                  color: "var(--accent-bright)",
-                  border: "1px solid rgba(99,102,241,0.35)",
-                  boxShadow: "0 0 10px -4px rgba(99,102,241,0.4)",
-                }}
-              >
-                <Zap className="w-3 h-3" />
-                + 5 More Tools
-              </button>
-            )}
-          </div>
-        </div>
-
-        {/* ── Active tool content ────────────────────────────────── */}
-        <div className="flex-1 overflow-y-auto px-6 py-5">
-          {ALL_TOOLS.map((cfg) => {
-            if (cfg.id !== activeTab) return null;
-            const result = results[cfg.id] ?? null;
-            const loading = !!loadings[cfg.id];
-            const error = errors[cfg.id] ?? "";
-            return (
-              <div key={cfg.id}>
-                {loading && (
-                  <div className="flex flex-col items-center justify-center py-16 gap-4">
-                    <div
-                      className={`w-12 h-12 rounded-2xl bg-linear-to-br ${cfg.color} flex items-center justify-center`}
-                      style={{ boxShadow: `0 8px 24px -4px ${cfg.glow}` }}
-                    >
-                      <Loader2 className="w-6 h-6 text-white animate-spin" />
-                    </div>
-                    <div className="text-center">
-                      <p className="text-white font-semibold">{cfg.title}</p>
-                      <p className="text-slate-400 text-sm mt-1">Running multi-LLM analysis…</p>
-                    </div>
-                  </div>
-                )}
-                {error && !loading && (
-                  <div className="rounded-xl p-4 space-y-2" style={{ background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.2)" }}>
-                    <p className="text-sm text-red-400 font-medium">{error}</p>
-                    {error.includes("not found on server") && (
-                      <p className="text-xs text-slate-400">
-                        The backend at <span className="text-amber-400 font-mono">{API}</span> doesn&apos;t have this route.
-                        Redeploy the backend to Render with the latest code, or check{" "}
-                        <span className="text-amber-400 font-mono">{API}/docs</span> to verify available endpoints.
-                      </p>
+                  <Zap className="w-4.5 h-4.5 text-white" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-0.5">
+                    <span className="text-[10px] font-bold uppercase tracking-widest" style={{ color: "var(--accent-bright)" }}>AI Job Analysis</span>
+                    {anyLoading && (
+                      <span className="flex items-center gap-1 text-[10px] text-slate-400">
+                        <Loader2 className="w-2.5 h-2.5 animate-spin" /> Running…
+                      </span>
                     )}
+                    {(expanded ? allDone : allCoreDone) && !anyLoading && (
+                      <span className="flex items-center gap-1 text-[10px] text-green-400">
+                        <Check className="w-2.5 h-2.5" /> Complete
+                      </span>
+                    )}
+                  </div>
+                  <h2 className="font-bold text-white text-xl leading-tight">{job.title}</h2>
+                  <div className="flex flex-wrap gap-3 text-xs text-slate-400 mt-1">
+                    <span className="flex items-center gap-1"><Building2 className="w-3 h-3" />{job.organization}</span>
+                    <span className="flex items-center gap-1"><MapPin className="w-3 h-3" />{job.location}</span>
+                    <span className="flex items-center gap-1"><Clock className="w-3 h-3" />{job.experienceRequired}+ yrs</span>
+                    {profile && (
+                      <>
+                        <span className="text-slate-600">·</span>
+                        <span className="flex items-center gap-1 text-green-400">
+                          <Check className="w-2.5 h-2.5" />
+                          {profile.name}{profile.resumeText ? " · Resume ready" : ""}
+                        </span>
+                      </>
+                    )}
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <button
+                    onClick={runAll}
+                    disabled={anyLoading}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold text-white transition-all"
+                    style={{
+                      background: anyLoading ? "rgba(255,255,255,0.05)" : "linear-gradient(135deg, var(--accent-deep), var(--accent))",
+                      opacity: anyLoading ? 0.6 : 1,
+                      boxShadow: anyLoading ? "none" : "0 2px 10px -2px var(--glow-accent)",
+                    }}
+                  >
+                    {anyLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Zap className="w-3.5 h-3.5" />}
+                    {anyLoading ? "Running…" : "Re-run All"}
+                  </button>
+                  <button
+                    onClick={handleClose}
+                    className="p-2 rounded-xl text-slate-400 hover:text-white transition-colors"
+                    style={{ background: "var(--bg-elevated)" }}
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+    
+              {/* Tab bar — scrollable */}
+              <div className="flex items-center gap-1 overflow-x-auto pb-1 scrollbar-none">
+                {visibleTools.map((cfg) => {
+                  const Icon = cfg.icon;
+                  const done = !!results[cfg.id];
+                  const loading = !!loadings[cfg.id];
+                  const active = activeTab === cfg.id;
+                  return (
                     <button
-                      onClick={() => runTool(cfg)}
-                      className="text-xs text-red-400 hover:text-white underline"
+                      key={cfg.id}
+                      onClick={() => setActiveTab(cfg.id)}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all whitespace-nowrap shrink-0"
+                      style={{
+                        background: active ? "rgba(99,102,241,0.15)" : "transparent",
+                        color: active ? "var(--accent-bright)" : "var(--text-secondary)",
+                        border: active ? "1px solid rgba(99,102,241,0.3)" : "1px solid transparent",
+                      }}
                     >
-                      Retry
+                      <Icon className="w-3 h-3 shrink-0" />
+                      <span>{cfg.title}</span>
+                      {loading && <Loader2 className="w-2.5 h-2.5 animate-spin ml-0.5" />}
+                      {done && !loading && <Check className="w-2.5 h-2.5 text-green-400 ml-0.5" />}
                     </button>
-                  </div>
-                )}
-                {!loading && !result && !error && (
-                  <div className="flex flex-col items-center justify-center py-16 gap-4 text-center">
-                    <div className={`w-12 h-12 rounded-2xl bg-linear-to-br ${cfg.color} opacity-30 flex items-center justify-center`}>
-                      <cfg.icon className="w-6 h-6 text-white" />
-                    </div>
-                    <p className="text-slate-500 text-sm">Click ⚡ Re-run All to generate results</p>
-                  </div>
-                )}
-                {result && !loading && (
-                  <div className="space-y-4">
-                    {cfg.id === "hiring-decoder" && <HiringDecoderResult r={result} />}
-                    {cfg.id === "resume-surgeon" && <ResumeSurgeonResult r={result} />}
-                    {cfg.id === "linkedin-infiltrator" && <LinkedInInfiltratorResult r={result} />}
-                    {cfg.id === "interview-trap-detector" && <InterviewResult r={result} />}
-                    {cfg.id === "cold-email-weapon" && <ColdEmailResult r={result} />}
-                    {cfg.id === "offer-negotiator" && <OfferNegotiatorResult r={result} />}
-                    {cfg.id === "gap-killer" && <GapKillerResult r={result} />}
-                    {cfg.id === "attack-plan" && <AttackPlanResult r={result} />}
-                    {cfg.id === "job-evaluator" && <JobEvaluatorResult r={result} />}
-                  </div>
+                  );
+                })}
+    
+                {/* Expand button — only shown when not expanded */}
+                {!expanded && (
+                  <button
+                    onClick={handleExpand}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap shrink-0 ml-1 transition-all"
+                    style={{
+                      background: "linear-gradient(135deg, rgba(99,102,241,0.2), rgba(139,92,246,0.2))",
+                      color: "var(--accent-bright)",
+                      border: "1px solid rgba(99,102,241,0.35)",
+                      boxShadow: "0 0 10px -4px rgba(99,102,241,0.4)",
+                    }}
+                  >
+                    <Zap className="w-3 h-3" />
+                    + 5 More Tools
+                  </button>
                 )}
               </div>
-            );
-          })}
-        </div>
-      </div>
-    </div>
+            </div>
+    
+            {/* ── Active tool content ────────────────────────────────── */}
+            <div className="flex-1 overflow-y-auto px-6 py-5">
+              {ALL_TOOLS.map((cfg) => {
+                if (cfg.id !== activeTab) return null;
+                const result = results[cfg.id] ?? null;
+                const loading = !!loadings[cfg.id];
+                const error = errors[cfg.id] ?? "";
+                return (
+                  <div key={cfg.id}>
+                    {loading && (
+                      <div className="flex flex-col items-center justify-center py-16 gap-4">
+                        <div
+                          className={`w-12 h-12 rounded-2xl bg-linear-to-br ${cfg.color} flex items-center justify-center`}
+                          style={{ boxShadow: `0 8px 24px -4px ${cfg.glow}` }}
+                        >
+                          <Loader2 className="w-6 h-6 text-white animate-spin" />
+                        </div>
+                        <div className="text-center">
+                          <p className="text-white font-semibold">{cfg.title}</p>
+                          <p className="text-slate-400 text-sm mt-1">Running multi-LLM analysis…</p>
+                        </div>
+                      </div>
+                    )}
+                    {error && !loading && (
+                      <div className="rounded-xl p-4 space-y-2" style={{ background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.2)" }}>
+                        <p className="text-sm text-red-400 font-medium">{error}</p>
+                        {error.includes("not found on server") && (
+                          <p className="text-xs text-slate-400">
+                            The backend at <span className="text-amber-400 font-mono">{API}</span> doesn&apos;t have this route.
+                            Redeploy the backend to Render with the latest code, or check{" "}
+                            <span className="text-amber-400 font-mono">{API}/docs</span> to verify available endpoints.
+                          </p>
+                        )}
+                        <button
+                          onClick={() => runTool(cfg)}
+                          className="text-xs text-red-400 hover:text-white underline"
+                        >
+                          Retry
+                        </button>
+                      </div>
+                    )}
+                    {!loading && !result && !error && (
+                      <div className="flex flex-col items-center justify-center py-16 gap-4 text-center">
+                        <div className={`w-12 h-12 rounded-2xl bg-linear-to-br ${cfg.color} opacity-30 flex items-center justify-center`}>
+                          <cfg.icon className="w-6 h-6 text-white" />
+                        </div>
+                        <p className="text-slate-500 text-sm">Click ⚡ Re-run All to generate results</p>
+                      </div>
+                    )}
+                    {result && !loading && (
+                      <div className="space-y-4">
+                        {cfg.id === "hiring-decoder" && <HiringDecoderResult r={result} />}
+                        {cfg.id === "resume-surgeon" && <ResumeSurgeonResult r={result} />}
+                        {cfg.id === "linkedin-infiltrator" && <LinkedInInfiltratorResult r={result} />}
+                        {cfg.id === "interview-trap-detector" && <InterviewResult r={result} />}
+                        {cfg.id === "cold-email-weapon" && <ColdEmailResult r={result} />}
+                        {cfg.id === "offer-negotiator" && <OfferNegotiatorResult r={result} />}
+                        {cfg.id === "gap-killer" && <GapKillerResult r={result} />}
+                        {cfg.id === "attack-plan" && <AttackPlanResult r={result} />}
+                        {cfg.id === "job-evaluator" && <JobEvaluatorResult r={result} />}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </motion.div>
+      )}
+    </AnimatePresence>
   );
 
   if (typeof document === "undefined") return null;
