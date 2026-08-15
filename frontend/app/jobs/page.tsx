@@ -2,6 +2,16 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import JobCard from "@/components/JobCard";
+import DiscoveryFilters, {
+  DEFAULT_DISCOVERY_FILTERS,
+  DiscoveryFilterState,
+} from "@/components/discovery/DiscoveryFilters";
+import {
+  getJobAgeHours,
+  getJobConfidence,
+  getSourceQuality,
+  hasSalary,
+} from "@/components/discovery/trust";
 import { useAuth } from "@/lib/AuthContext";
 import { useProfile } from "@/lib/ProfileContext";
 import { CandidateProfile, Job, VerificationStatus, WorkMode } from "@/lib/types";
@@ -121,6 +131,10 @@ function normalizeJob(raw: Partial<Job>, index: number, profile: CandidateProfil
     matchReasons: Array.isArray(raw.matchReasons) ? raw.matchReasons.filter(Boolean) : [],
     fitScore: raw.fitScore,
     fitBadge: raw.fitBadge,
+    rankingScore: raw.rankingScore,
+    rankingVersion: raw.rankingVersion,
+    rankingComponents: raw.rankingComponents,
+    rankingReasons: Array.isArray(raw.rankingReasons) ? raw.rankingReasons : [],
     levelUp: Boolean(raw.levelUp),
     source: raw.source || "Dork/Web",
     recruiterName: raw.recruiterName,
@@ -131,6 +145,9 @@ function normalizeJob(raw: Partial<Job>, index: number, profile: CandidateProfil
     jobFreshnessHours: raw.jobFreshnessHours,
     salaryDisclosed: raw.salaryDisclosed ?? Boolean(salaryMin || salaryMax),
     repostDetected: raw.repostDetected,
+    lastVerifiedAt: raw.lastVerifiedAt,
+    freshnessScore: raw.freshnessScore,
+    extractionConfidence: raw.extractionConfidence,
   };
   const profileScore = scoreAgainstProfile(normalized, profile, searchSkills);
   normalized.matchScore = Math.max(Number(normalized.matchScore ?? 0), profileScore);
@@ -160,6 +177,7 @@ export default function JobsPage() {
   const [dorkSearch, setDorkSearch] = useState<DorkSearch>(defaultDorkSearch);
   const [dorkUrls, setDorkUrls] = useState<string[]>([]);
   const [sourcePlan, setSourcePlan] = useState<DorkSourcePlan | null>(null);
+  const [qualityFilters, setQualityFilters] = useState<DiscoveryFilterState>(DEFAULT_DISCOVERY_FILTERS);
   const [storageHydrated, setStorageHydrated] = useState(false);
   const profileRef = useRef<CandidateProfile | null>(null);
   const profileDefaultsApplied = useRef(false);
@@ -303,8 +321,19 @@ export default function JobsPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [profileLoading, profile, storageHydrated]);
 
-  const filtered = jobs;
-  const upliftCount = jobs.filter((j) => j.levelUp).length;
+  const filtered = useMemo(() => jobs.filter((job) => {
+    const sourceQuality = getSourceQuality(job);
+    if (qualityFilters.sourceQuality === "high" && sourceQuality !== "high") return false;
+    if (qualityFilters.sourceQuality === "known" && sourceQuality === "low") return false;
+    if (qualityFilters.freshnessHours !== null) {
+      const ageHours = getJobAgeHours(job);
+      if (ageHours === null || ageHours > qualityFilters.freshnessHours) return false;
+    }
+    if (qualityFilters.verification !== "all" && job.verificationStatus !== qualityFilters.verification) return false;
+    if (qualityFilters.minConfidence > 0 && getJobConfidence(job).value < qualityFilters.minConfidence) return false;
+    if (qualityFilters.salaryOnly && !hasSalary(job)) return false;
+    return true;
+  }), [jobs, qualityFilters]);
   const verifiedCount = jobs.filter((j) => j.verificationStatus === "VERIFIED").length;
   const strongFitCount = jobs.filter((j) => (j.fitScore ?? j.matchScore ?? 0) >= 80).length;
   const sourceCount = new Set(jobs.map((j) => j.source || "Other")).size;
@@ -315,12 +344,12 @@ export default function JobsPage() {
       <main className="md:ml-64 xl:mr-72 flex-1 px-4 md:px-8 pt-20 md:pt-8 pb-8">
         <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4 mb-6">
           <div>
-            <p className="text-xs text-slate-500 mb-1">Dork-powered job discovery</p>
+            <p className="text-xs text-slate-500 mb-1">Source-first talent discovery</p>
             <h1 className="text-2xl font-bold text-white">
               {dorkSearch.title || "Any Title"} <span className="gradient-text">Find Jobs</span>
             </h1>
             <p className="text-slate-400 text-sm mt-1">
-              {dorkSearch.experience || "0"}+ yrs - {searchLocation} - profile score is calculated from each JD before apply
+              {dorkSearch.experience || "0"}+ yrs - {searchLocation} - provenance, freshness, and fit are visible before you apply
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -339,11 +368,11 @@ export default function JobsPage() {
           <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
             <div>
               <p className="text-sm font-semibold text-white">Job search and filters</p>
-              <p className="text-xs text-slate-500 mt-0.5">These values are used directly for dork discovery and AI relevance matching.</p>
+              <p className="text-xs text-slate-500 mt-0.5">These values drive live source discovery and profile relevance matching.</p>
             </div>
             <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
               <Filter className="w-3.5 h-3.5" />
-              <span>{jobs.length} matched openings</span>
+              <span>{filtered.length} of {jobs.length} openings shown</span>
             </div>
           </div>
 
@@ -411,7 +440,7 @@ export default function JobsPage() {
                 <span className="hidden sm:inline text-slate-700">|</span>
                 {dorkUrls.map((url, index) => (
                   <a key={url} href={url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-indigo-300 hover:text-indigo-200">
-                    Query {index + 1}<ExternalLink className="w-3 h-3" />
+                    Seed query {index + 1}<ExternalLink className="w-3 h-3" />
                   </a>
                 ))}
               </>
@@ -427,6 +456,13 @@ export default function JobsPage() {
             {discoverError}
           </div>
         )}
+
+        <DiscoveryFilters
+          value={qualityFilters}
+          onChange={setQualityFilters}
+          resultCount={filtered.length}
+          totalCount={jobs.length}
+        />
 
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4 mb-6">
           {[
@@ -447,18 +483,31 @@ export default function JobsPage() {
 
 
         {loading || discovering ? (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-            {Array.from({ length: 6 }).map((_, i) => <div key={i} className="card h-64 skeleton" />)}
+          <div aria-live="polite" aria-busy="true">
+            <div className="mb-4 flex items-center justify-center gap-2 text-sm text-slate-400">
+              <Search className="h-4 w-4 animate-pulse text-indigo-300" />
+              {discovering ? "Checking live sources and verifying openings..." : "Loading your discovery workspace..."}
+            </div>
+            <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
+              {Array.from({ length: 6 }).map((_, i) => <div key={i} className="card h-64 skeleton" />)}
+            </div>
           </div>
         ) : filtered.length === 0 ? (
           <div className="card text-center py-16 text-slate-400">
             <Search className="w-10 h-10 mx-auto mb-3 text-slate-600" />
             <p className="font-medium">
-              {"No jobs loaded yet"}
+              {jobs.length > 0 ? "No openings match these quality filters" : "No jobs loaded yet"}
             </p>
             <p className="text-sm mt-1">
-              Enter a title, experience, location, and country, then run Find Latest Jobs.
+              {jobs.length > 0
+                ? "Clear or relax a filter to see more of the openings already discovered."
+                : "Enter a title, experience, location, and country, then run Find Latest Jobs."}
             </p>
+            {jobs.length > 0 && (
+              <button type="button" onClick={() => setQualityFilters(DEFAULT_DISCOVERY_FILTERS)} className="btn-secondary mt-4 text-sm">
+                Clear quality filters
+              </button>
+            )}
           </div>
         ) : (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">

@@ -7,6 +7,7 @@ import { useProfile } from "@/lib/ProfileContext";
 import { useAppData } from "@/lib/AppDataContext";
 import { Job, CandidateProfile } from "@/lib/types";
 import DemoDataBanner from "@/components/DemoDataBanner";
+import MatchIntelligencePanel from "@/components/MatchIntelligencePanel";
 import {
   ArrowLeft, Building2, MapPin, Clock, DollarSign,
   FileText, Mail, MessageSquare, Download, CheckCircle,
@@ -399,6 +400,8 @@ export default function JobDetailPage() {
         <div className="flex flex-col xl:flex-row gap-6">
           {/* Left Column: Job Details */}
           <div className="w-full xl:w-[400px] shrink-0 space-y-6">
+            <MatchIntelligencePanel job={job} profile={profile} />
+
             <div className="card">
               <div className="flex flex-wrap gap-1.5 mb-3">
                 {job.verificationStatus === "VERIFIED" && (
@@ -479,7 +482,9 @@ export default function JobDetailPage() {
                 );
               })()}
               <p className="text-xs text-slate-500 text-center">
-                We verified this job is actively hiring on the official site.
+                {job.verificationStatus === "VERIFIED"
+                  ? `Verified from ${job.source || "the listed source"}; confirm availability before applying.`
+                  : "Source could not be fully verified. Review the company portal before sharing personal data."}
               </p>
             </div>
 

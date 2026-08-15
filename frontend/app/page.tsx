@@ -9,6 +9,8 @@ import {
   BarChart3,
   BookOpen,
   Briefcase,
+  CheckCircle2,
+  Circle,
   FileText,
   RefreshCw,
   Search,
@@ -66,6 +68,14 @@ interface ActionPlanItem {
   href: string;
 }
 
+interface CampaignTodo {
+  id: string;
+  text: string;
+  priority: string;
+  category: string;
+  done?: boolean;
+}
+
 function profileSkills(profile: CandidateProfile | null): string[] {
   if (!profile) return [];
   return Array.from(new Set([
@@ -103,6 +113,17 @@ function buildLocalHealth(profile: CandidateProfile | null): HealthData | null {
     },
     insights: [{ dimension: weakest.dimension, suggestion: weakest.suggestion, potential_gain: weakest.potential_gain }],
   };
+}
+
+function buildProfileTodos(profile: CandidateProfile | null): CampaignTodo[] {
+  if (!profile) return [];
+  const role = profile.currentRole || "target role";
+  const location = profile.preferredLocations?.[0] || profile.currentLocation || "your target market";
+  return [
+    { id: "profile-search-jobs", text: `Find fresh ${role} openings in ${location}`, priority: "high", category: "jobs" },
+    { id: "profile-tailor-resume", text: "Tailor your resume against one high-fit JD", priority: "high", category: "resume" },
+    { id: "profile-interview-drill", text: `Practice 3 interview questions for ${role}`, priority: "medium", category: "interview" },
+  ];
 }
 
 /**
@@ -325,6 +346,8 @@ export default function DashboardPage() {
   const [funnel, setFunnel] = useState<FunnelData | null>(null);
   const [jobs, setJobs] = useState<JobMatch[]>([]);
   const [paths, setPaths] = useState<LearningPath[]>([]);
+  const [todos, setTodos] = useState<CampaignTodo[]>([]);
+  const [doneTodos, setDoneTodos] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
 
   const profileKey = useMemo(() => {
@@ -342,25 +365,28 @@ export default function DashboardPage() {
     });
   }, [profile]);
 
-  const localHealth = useMemo(() => buildLocalHealth(profile), [profileKey, profile]);
-  const fallbackPaths = useMemo(() => buildProfilePaths(profile), [profileKey, profile]);
+  const localHealth = useMemo(() => buildLocalHealth(profile), [profile]);
+  const fallbackTodos = useMemo(() => buildProfileTodos(profile), [profile]);
+  const fallbackPaths = useMemo(() => buildProfilePaths(profile), [profile]);
   const actionPlan = useMemo(() => (careerState ? buildActionPlan(careerState) : []), [careerState]);
 
   const load = useCallback(async () => {
     setLoading(true);
     const h = authHeader();
     try {
-      const [healthRes, funnelRes, jobsRes, pathsRes] = await Promise.allSettled([
+      const [healthRes, funnelRes, jobsRes, pathsRes, todosRes] = await Promise.allSettled([
         fetch(`${API}/api/career-graph/`, { headers: h }).then((r) => r.ok ? r.json() : null),
         fetch(`${API}/api/insights/funnel`, { headers: h }).then((r) => r.ok ? r.json() : null),
         fetch(`${API}/api/jobs/?limit=5`, { headers: h }).then((r) => r.ok ? r.json() : null),
         fetch(`${API}/api/learning/paths`, { headers: h }).then((r) => r.ok ? r.json() : null),
+        fetch(`${API}/api/campaign/daily-todos`, { method: "POST", headers: { ...h, "Content-Type": "application/json" }, body: "{}" }).then((r) => r.ok ? r.json() : null),
       ]);
 
       if (healthRes.status === "fulfilled" && healthRes.value) setHealth(healthRes.value);
       if (funnelRes.status === "fulfilled" && funnelRes.value) setFunnel(funnelRes.value);
       if (jobsRes.status === "fulfilled" && jobsRes.value) setJobs((jobsRes.value.jobs || jobsRes.value || []).slice(0, 5));
       if (pathsRes.status === "fulfilled" && pathsRes.value) setPaths((pathsRes.value || []).filter((p: LearningPath) => p.status === "active").slice(0, 3));
+      if (todosRes.status === "fulfilled" && todosRes.value?.todos) setTodos(todosRes.value.todos.slice(0, 3));
     } catch {
       // graceful degradation
     }
@@ -402,7 +428,15 @@ export default function DashboardPage() {
   }, [demoMode]);
 
   const displayHealth = localHealth ?? health;
-  const showFallbackPlan = !careerState || careerState.profile.has_profile === false || actionPlan.length === 0;
+  // Today's plan, in priority order: real AI-generated campaign todos (if the
+  // backend returned any) > career-state-derived action items (grounded in
+  // real skill-gap/fit-score/pipeline/learning data) > a profile-only
+  // heuristic fallback > the generic "start with profile setup" empty state.
+  const hasRealTodos = todos.length > 0;
+  const hasActionPlan = !hasRealTodos && actionPlan.length > 0;
+  const displayTodos = hasRealTodos ? todos : !hasActionPlan ? fallbackTodos : [];
+  const hasTodos = displayTodos.length > 0;
+  const showEmptyPlanState = !hasTodos && !hasActionPlan;
   const displayPaths = [
     ...fallbackPaths,
     ...paths.filter((path) => !fallbackPaths.some((fallback) => fallback.skill_name.toLowerCase() === path.skill_name.toLowerCase())),
@@ -513,13 +547,34 @@ export default function DashboardPage() {
         <div className="grid grid-cols-1 xl:grid-cols-[1.1fr_0.9fr] gap-5">
           <section className="rounded-lg p-5" style={{ background: "var(--bg-card)", border: "1px solid var(--border)" }}>
             <SectionHeader title="Today" actionHref="/campaign" actionLabel="Open plan" />
-            {showFallbackPlan ? (
+            {showEmptyPlanState ? (
               <div className="rounded-lg p-4" style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)" }}>
                 <p className="text-sm font-medium text-white">Start with profile setup</p>
                 <p className="text-xs text-slate-400 mt-1">Once role and skills are saved, this area becomes your daily action list.</p>
                 <Link href="/profile" className="btn-primary inline-flex items-center gap-2 text-sm mt-4">
                   Complete profile <ArrowRight className="w-4 h-4" />
                 </Link>
+              </div>
+            ) : hasTodos ? (
+              <div className="space-y-2">
+                {displayTodos.map((todo) => {
+                  const done = doneTodos.has(todo.id);
+                  return (
+                    <button
+                      key={todo.id}
+                      onClick={() => setDoneTodos((prev) => {
+                        const next = new Set(prev);
+                        if (done) next.delete(todo.id); else next.add(todo.id);
+                        return next;
+                      })}
+                      className="w-full rounded-lg p-3 flex items-start gap-3 text-left transition-colors"
+                      style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)" }}
+                    >
+                      {done ? <CheckCircle2 className="w-4 h-4 mt-0.5 shrink-0" style={{ color: "var(--accent-bright)" }} /> : <Circle className="w-4 h-4 mt-0.5 shrink-0 text-slate-500" />}
+                      <span className={`text-sm leading-relaxed ${done ? "line-through text-slate-500" : "text-slate-200"}`}>{todo.text}</span>
+                    </button>
+                  );
+                })}
               </div>
             ) : (
               <div className="space-y-2">

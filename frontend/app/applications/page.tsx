@@ -20,12 +20,20 @@ const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 // ─── Application Tracker types ────────────────────────────────────────────────
 const COLUMNS: { id: ApplicationStatus; title: string; color: string }[] = [
-  { id: "Saved",      title: "Saved",      color: "text-slate-400"  },
-  { id: "Applied",    title: "Applied",    color: "text-indigo-400" },
-  { id: "Assessment", title: "Assessment", color: "text-amber-400"  },
-  { id: "Interview",  title: "Interview",  color: "text-cyan-400"   },
-  { id: "Offer",      title: "Offer",      color: "text-emerald-400"},
-  { id: "Rejected",   title: "Rejected",   color: "text-rose-400"   },
+  { id: "Discovered",         title: "Discovered",         color: "text-slate-400" },
+  { id: "Saved",              title: "Saved",              color: "text-slate-300" },
+  { id: "Shortlisted",        title: "Shortlisted",        color: "text-blue-400" },
+  { id: "Tailoring",          title: "Tailoring",          color: "text-violet-400" },
+  { id: "Ready to Apply",     title: "Ready",              color: "text-indigo-300" },
+  { id: "Applied",            title: "Applied",            color: "text-indigo-400" },
+  { id: "Recruiter Contacted",title: "Recruiter Contacted",color: "text-cyan-400" },
+  { id: "Screening",          title: "Screening",          color: "text-sky-400" },
+  { id: "Assessment",         title: "Assessment",         color: "text-amber-400" },
+  { id: "Interview",          title: "Interview",          color: "text-orange-400" },
+  { id: "Final Interview",    title: "Final Interview",    color: "text-yellow-300" },
+  { id: "Offer",              title: "Offer",              color: "text-emerald-400" },
+  { id: "Rejected",           title: "Rejected",           color: "text-rose-400" },
+  { id: "Archived",           title: "Archived",           color: "text-slate-500" },
 ];
 
 // Forward progression through the pipeline, used for the stage-conversion
@@ -920,7 +928,6 @@ export default function PipelinePage() {
                           <div className="flex items-center justify-center h-20 text-slate-600 text-xs text-center border border-dashed border-slate-700/50 rounded-xl">Drop here</div>
                         )}
                       </div>
-                    </div>
                   );
                 })}
               </div>

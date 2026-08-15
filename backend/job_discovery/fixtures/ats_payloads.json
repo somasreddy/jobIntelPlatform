@@ -1,0 +1,51 @@
+{
+  "greenhouse": {
+    "jobs": [{
+      "id": 101,
+      "title": "Staff Platform Engineer",
+      "location": {"name": "Berlin or Remote"},
+      "content": "<p>Build Python and Kubernetes platforms.</p>",
+      "absolute_url": "https://boards.greenhouse.io/acme/jobs/101",
+      "updated_at": "2026-07-20T10:00:00Z"
+    }]
+  },
+  "lever": [{
+    "id": "lev-7",
+    "text": "Senior AI Engineer",
+    "categories": {"location": "Remote - Europe"},
+    "description": "<p>Production AI systems</p>",
+    "lists": [{"content": "<li>Python</li>"}],
+    "applyUrl": "https://jobs.lever.co/acme/lev-7",
+    "salaryRange": {"min": 100000, "max": 140000, "currency": "EUR"}
+  }],
+  "workday": {
+    "jobPostings": [{
+      "title": "Principal Architect",
+      "externalPath": "job/Berlin/Principal-Architect_R-42",
+      "locationsText": "Berlin, Germany",
+      "bulletFields": ["R-42"],
+      "postedOn": "2026-07-19"
+    }]
+  },
+  "ashby": {
+    "jobs": [{
+      "id": "ash-9",
+      "title": "Forward Deployed Engineer",
+      "location": "London / Remote",
+      "descriptionHtml": "<p>Deploy agentic systems.</p>",
+      "jobUrl": "https://jobs.ashbyhq.com/acme/ash-9",
+      "publishedDate": "2026-07-18"
+    }]
+  },
+  "generic": {
+    "@context": "https://schema.org",
+    "@type": "JobPosting",
+    "title": "Automation Architect",
+    "description": "<p>Lead enterprise automation.</p>",
+    "datePosted": "2026-07-17",
+    "url": "https://careers.acme.test/automation-architect",
+    "hiringOrganization": {"name": "Acme"},
+    "jobLocation": {"address": {"addressLocality": "Dublin", "addressCountry": "IE"}}
+  },
+  "greenhouse_drift": {"openings": []}
+}

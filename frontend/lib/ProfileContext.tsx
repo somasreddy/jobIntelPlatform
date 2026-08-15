@@ -63,6 +63,7 @@ async function fetchFromDB(): Promise<CandidateProfile | null> {
       cache: "no-store",
       headers: getAuthHeaders(),
     });
+    if (res.status === 204) return null;
     if (!res.ok) return null;
     return dbToProfile(await res.json());
   } catch {

@@ -23,12 +23,20 @@ export type WorkMode = "Remote" | "Hybrid" | "On-site" | "Any";
 export type VerificationStatus = "VERIFIED" | "UNVERIFIED" | "PENDING";
 
 export type ApplicationStatus =
+  | "Discovered"
   | "Saved"
+  | "Shortlisted"
+  | "Tailoring"
+  | "Ready to Apply"
   | "Applied"
+  | "Recruiter Contacted"
+  | "Screening"
   | "Assessment"
   | "Interview"
+  | "Final Interview"
   | "Offer"
-  | "Rejected";
+  | "Rejected"
+  | "Archived";
 
 export type JobPortal =
   | "LinkedIn" | "Indeed" | "Glassdoor" | "Naukri" | "Adzuna"
@@ -56,8 +64,32 @@ export interface Job {
   matchReasons?: string[];
   fitScore?: number;
   fitBadge?: string;
+  rankingScore?: number;
+  rankingVersion?: string;
+  rankingComponents?: {
+    match: number;
+    trust: number;
+    freshness: number;
+    preferences: number;
+    salary_quality: number;
+    verification: number;
+  };
+  rankingReasons?: Array<{
+    code: string;
+    label: string;
+    impact: "positive" | "neutral" | "negative";
+    score: number;
+  }>;
   levelUp: boolean;
   source?: string;
+  requirements?: Array<string | { label: string; kind?: "hard" | "preferred" }>;
+  lastVerifiedAt?: string;
+  freshnessScore?: number;
+  extractionConfidence?: number;
+  sourceQuality?: "high" | "medium" | "low";
+  freshnessStatus?: "fresh" | "aging" | "stale";
+  canonicalUrl?: string;
+  fieldProvenance?: Record<string, { source_id?: string; parser_version?: string; observed_at?: string; confidence?: number }>;
   recruiterName?: string;
   recruiterLinkedIn?: string;
   // Intelligence flags
@@ -74,7 +106,7 @@ export interface Application {
   jobId: string;
   job: Job;
   status: ApplicationStatus;
-  dateApplied: string;
+  dateApplied?: string;
   followUpDate?: string;
   notes?: string;
 }

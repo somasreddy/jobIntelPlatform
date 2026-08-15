@@ -19,7 +19,7 @@ from urllib.parse import parse_qs, quote, quote_plus, unquote, urljoin, urlparse
 
 import httpx
 
-from job_discovery.source_registry import ATS_SITES, GLOBAL_JOB_BOARD_SITES, resolve_source_plan
+from job_discovery.source_registry import COUNTRY_SOURCE_GROUPS, GLOBAL_JOB_BOARD_SITES, SourcePlan, resolve_source_plan
 
 logger = logging.getLogger(__name__)
 
@@ -180,7 +180,13 @@ def _experience_terms(exp_years: int) -> list[str]:
     return list(dict.fromkeys(terms))[:8]
 
 
-def build_dork_queries(role: str, skills: list[str], location: str, exp_years: int) -> list[str]:
+def build_dork_queries(
+    role: str,
+    skills: list[str],
+    location: str,
+    exp_years: int,
+    source_plan: SourcePlan | None = None,
+) -> list[str]:
     """Build progressive Google-style dork queries from user-entered values.
 
     The first query is strict. Later queries relax experience and skill clauses,
@@ -200,14 +206,14 @@ def build_dork_queries(role: str, skills: list[str], location: str, exp_years: i
     no_skill_base = f"{title_group} AND {loc_group} AND {exp_group} AND {inurl_group}"
     broad_base = f"{title_phrase}{f' { _quote_group(skill_terms, limit=4)}' if skill_terms else ''} {loc_group} jobs careers"
 
-    source_plan = resolve_source_plan(location)
+    source_plan = source_plan or resolve_source_plan(location)
     board_sites = list(source_plan.job_boards) or JOB_BOARD_SITES
     site_chunks = _chunks(board_sites, 24) if source_plan.scope in {"global", "global_remote"} else [board_sites]
     queries: list[str] = []
 
     if source_plan.include_ats:
-        queries.append(f"{_or_group(ATS_SITES, limit=24)} AND {strict_base}")
-        queries.append(f"{_or_group(ATS_SITES, limit=24)} AND {no_exp_base}")
+        queries.append(f"{_or_group(source_plan.ats_sites, limit=24)} AND {strict_base}")
+        queries.append(f"{_or_group(source_plan.ats_sites, limit=24)} AND {no_exp_base}")
 
     for base in (strict_base, no_exp_base, no_skill_base, broad_base):
         for chunk in site_chunks:
@@ -220,10 +226,16 @@ def build_dork_queries(role: str, skills: list[str], location: str, exp_years: i
     return list(dict.fromkeys(queries))[:_MAX_QUERIES]
 
 
-def build_dork_search_plan(role: str, skills: list[str], location: str, exp_years: int) -> dict:
+def build_dork_search_plan(
+    role: str,
+    skills: list[str],
+    location: str,
+    exp_years: int,
+    source_plan: SourcePlan | None = None,
+) -> dict:
     """Return auditable search intent, selected sources, and generated dork queries."""
-    source_plan = resolve_source_plan(location)
-    queries = build_dork_queries(role, skills, location, exp_years)
+    source_plan = source_plan or resolve_source_plan(location)
+    queries = build_dork_queries(role, skills, location, exp_years, source_plan=source_plan)
     return {
         "intent": {
             "titles": _role_titles(role),
@@ -268,8 +280,48 @@ def _board_domain(site: str) -> str:
     return site.replace("site:", "").lower().strip()
 
 
-def _direct_board_search_urls(role: str, skills: list[str], location: str) -> list[str]:
-    plan = resolve_source_plan(location)
+def _balanced_direct_urls(
+    entries: list[tuple[str, str]],
+    plan: SourcePlan,
+    limit: int = 24,
+) -> list[str]:
+    """Select direct searches fairly across global and regional source groups."""
+    unique_entries: list[tuple[str, str]] = []
+    unique_urls: set[str] = set()
+    for domain, url in entries:
+        if url not in unique_urls:
+            unique_urls.add(url)
+            unique_entries.append((domain, url))
+    if plan.scope == "country" or len(unique_entries) <= limit:
+        return [url for _, url in unique_entries[:limit]]
+
+    global_domains = {_board_domain(site) for site in GLOBAL_JOB_BOARD_SITES}
+    domain_groups = [global_domains]
+    domain_groups.extend(
+        {_board_domain(site) for site in group.job_boards} - global_domains
+        for group in COUNTRY_SOURCE_GROUPS
+    )
+    queues = [
+        [(domain, url) for domain, url in unique_entries if domain in domains]
+        for domains in domain_groups
+        if domains
+    ]
+    selected: list[str] = []
+    seen: set[str] = set()
+    while len(selected) < limit and any(queues):
+        for queue in queues:
+            while queue and queue[0][1] in seen:
+                queue.pop(0)
+            if queue and len(selected) < limit:
+                _, url = queue.pop(0)
+                seen.add(url)
+                selected.append(url)
+        queues = [queue for queue in queues if queue]
+    selected.extend(url for _, url in unique_entries if url not in seen)
+    return selected[:limit]
+
+def _direct_board_search_urls(role: str, skills: list[str], location: str, source_plan: SourcePlan | None = None) -> list[str]:
+    plan = source_plan or resolve_source_plan(location)
     boards = [_board_domain(site) for site in plan.job_boards]
     terms = " ".join([role, *skills[:3]]).strip() or role or "jobs"
     loc_terms = _location_terms(location)
@@ -282,10 +334,10 @@ def _direct_board_search_urls(role: str, skills: list[str], location: str) -> li
     slug = quote(re.sub(r"[^a-z0-9]+", "-", terms.lower()).strip("-")) or "jobs"
     city_slug = quote(re.sub(r"[^a-z0-9]+", "-", (city or loc_query or "remote").lower()).strip("-")) or "remote"
 
-    urls: list[str] = []
+    urls: list[tuple[str, str]] = []
     def add(domain: str, url: str) -> None:
-        if domain in boards and url not in urls:
-            urls.append(url)
+        if domain in boards and (domain, url) not in urls:
+            urls.append((domain, url))
 
     add("naukri.com", f"https://www.naukri.com/jobs-in-{city_slug}?k={q}")
     add("timesjobs.com", f"https://www.timesjobs.com/candidate/job-search.html?searchType=personalizedSearch&txtKeywords={q}&txtLocation={l}")
@@ -305,6 +357,7 @@ def _direct_board_search_urls(role: str, skills: list[str], location: str) -> li
     add("recruitireland.com", f"https://www.recruitireland.com/jobs?keywords={q}&location={l}")
     add("publicjobs.ie", f"https://www.publicjobs.ie/en/index.php?search={q}")
     add("ie.indeed.com", f"https://ie.indeed.com/jobs?q={q}&l={l}")
+    add("ie.linkedin.com/jobs", f"https://www.linkedin.com/jobs/search?keywords={q}&location={l}")
     add("indeed.ca", f"https://ca.indeed.com/jobs?q={q}&l={l}")
     add("jobbank.gc.ca", f"https://www.jobbank.gc.ca/jobsearch/jobsearch?searchstring={q}&locationstring={l}")
     add("workopolis.com", f"https://www.workopolis.com/jobsearch/find-jobs?ak={q}&l={l}")
@@ -316,6 +369,21 @@ def _direct_board_search_urls(role: str, skills: list[str], location: str) -> li
     add("stepstone.de", f"https://www.stepstone.de/jobs/{slug}/in-{city_slug}")
     add("jobs.de", f"https://www.jobs.de/jobs?q={q}&l={l}")
     add("xing.com", f"https://www.xing.com/jobs/search?keywords={q}&location={l}")
+    add("usajobs.gov", f"https://www.usajobs.gov/Search/Results?k={q}&l={l}")
+    add("dice.com", f"https://www.dice.com/jobs?q={q}&location={l}")
+    add("indeed.fr", f"https://fr.indeed.com/jobs?q={q}&l={l}")
+    add("monster.fr", f"https://www.monster.fr/emploi/recherche?q={q}&where={l}")
+    add("indeed.es", f"https://es.indeed.com/jobs?q={q}&l={l}")
+    add("infojobs.net", f"https://www.infojobs.net/jobsearch/search-results/list.xhtml?keyword={q}&provinceIds=&city={l}")
+    add("indeed.com.au", f"https://au.indeed.com/jobs?q={q}&l={l}")
+    add("seek.com.au", f"https://www.seek.com.au/{slug}-jobs/in-{city_slug}")
+    add("seek.co.nz", f"https://www.seek.co.nz/{slug}-jobs/in-{city_slug}")
+    add("jobstreet.com", f"https://www.jobstreet.com/jobs?keywords={q}&location={l}")
+    add("kalibrr.com", f"https://www.kalibrr.com/job-board/te/{slug}")
+    add("rozee.pk", f"https://www.rozee.pk/job/jsearch/q/{slug}")
+    add("indeed.com.mx", f"https://mx.indeed.com/jobs?q={q}&l={l}")
+    add("indeed.com.br", f"https://br.indeed.com/jobs?q={q}&l={l}")
+    add("computrabajo.com", f"https://www.computrabajo.com/trabajo-de-{slug}")
     add("indeed.com", f"https://www.indeed.com/jobs?q={q}&l={l}")
     add("monster.com", f"https://www.monster.com/jobs/search?q={q}&where={l}")
     add("glassdoor.com", f"https://www.glassdoor.com/Job/jobs.htm?sc.keyword={q}&locKeyword={l}")
@@ -324,7 +392,7 @@ def _direct_board_search_urls(role: str, skills: list[str], location: str) -> li
     add("simplyhired.com", f"https://www.simplyhired.com/search?q={q}&l={l}")
     add("weworkremotely.com", f"https://weworkremotely.com/remote-jobs/search?term={q}")
     add("wellfound.com", f"https://wellfound.com/jobs?keywords={q}&location={l}")
-    return urls[:18]
+    return _balanced_direct_urls(urls, plan)
 
 
 def _is_probable_job_url(url: str, board_domains: list[str]) -> bool:
@@ -561,6 +629,8 @@ def _site_domain_aliases(site: str) -> list[str]:
         aliases.append("indeed.ie")
     if domain == "monsterindia.com":
         aliases.append("foundit.in")
+    if domain == "ie.linkedin.com":
+        aliases.append("linkedin.com")
     return list(dict.fromkeys(aliases))
 
 
@@ -767,10 +837,12 @@ async def discover_jobs_from_direct_boards(
     profile_skills: list[str] | None = None,
     exp_years: int = 0,
     min_match_score: int = 0,
+    source_plan: SourcePlan | None = None,
 ) -> tuple[list[dict], list[str]]:
     """Fetch country/job-board search pages directly when search engines return no hits."""
     skills = profile_skills or []
-    search_urls = _direct_board_search_urls(role, _skill_terms(skills), location)
+    plan = source_plan or resolve_source_plan(location)
+    search_urls = _direct_board_search_urls(role, _skill_terms(skills), location, source_plan=plan)
     if not search_urls:
         return [], []
 
@@ -779,7 +851,6 @@ async def discover_jobs_from_direct_boards(
         "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
         "Accept-Language": "en-US,en;q=0.9",
     }
-    plan = resolve_source_plan(location)
     board_domains = [alias for site in plan.job_boards for alias in _site_domain_aliases(site)]
     hits: list[SearchHit] = []
 
@@ -839,9 +910,11 @@ async def discover_jobs_from_dorks(
     profile_skills: list[str] | None = None,
     exp_years: int = 0,
     min_match_score: int = 0,
+    source_plan: SourcePlan | None = None,
 ) -> tuple[list[dict], list[str]]:
     skills = profile_skills or []
-    queries = build_dork_queries(role, skills, location, exp_years)
+    plan = source_plan or resolve_source_plan(location)
+    queries = build_dork_queries(role, skills, location, exp_years, source_plan=plan)
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36",
         "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",

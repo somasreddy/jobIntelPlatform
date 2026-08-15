@@ -33,6 +33,7 @@ import {
   Globe,
   UserRound,
   ChevronDown,
+  Database,
   type LucideIcon,
 } from "lucide-react";
 
@@ -91,6 +92,7 @@ const navGroups: NavGroup[] = [
       { href: "/insights", icon: PieChart, label: "Insights" },
       { href: "/intelligence", icon: Crosshair, label: "Intelligence" },
       { href: "/power-tools", icon: Radar, label: "Power Tools" },
+      { href: "/admin/sources", icon: Database, label: "Source Health" },
     ],
   },
 ];

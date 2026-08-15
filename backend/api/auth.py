@@ -64,17 +64,19 @@ async def _ensure_users_table(db: AsyncSession) -> None:
             email       TEXT NOT NULL UNIQUE,
             hashed_pw   TEXT NOT NULL,
             plan        TEXT NOT NULL DEFAULT 'free',
+            role        TEXT NOT NULL DEFAULT 'user',
             created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
             last_login  TIMESTAMPTZ
         )
     """))
     await db.execute(text("CREATE INDEX IF NOT EXISTS idx_users_email ON users(email)"))
+    await db.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS role TEXT NOT NULL DEFAULT 'user'"))
     await db.flush()
 
 
 async def _get_user_by_email(db: AsyncSession, email: str) -> dict | None:
     row = await db.execute(
-        text("SELECT id, name, email, hashed_pw, plan FROM users WHERE email = :email"),
+        text("SELECT id, name, email, hashed_pw, plan, role FROM users WHERE email = :email"),
         {"email": email},
     )
     r = row.mappings().first()
@@ -83,7 +85,7 @@ async def _get_user_by_email(db: AsyncSession, email: str) -> dict | None:
 
 async def _get_user_by_id(db: AsyncSession, user_id: uuid.UUID) -> dict | None:
     row = await db.execute(
-        text("SELECT id, name, email, plan, created_at FROM users WHERE id = :id"),
+        text("SELECT id, name, email, plan, role, created_at FROM users WHERE id = :id"),
         {"id": str(user_id)},
     )
     r = row.mappings().first()
@@ -152,6 +154,7 @@ async def register(
         "name":         payload.name,
         "email":        payload.email,
         "plan":         "free",
+        "role":         "user",
         "access_token":  access,
         "refresh_token": refresh,
         "token_type":   "bearer",
@@ -206,6 +209,7 @@ async def login(
         "name":          user["name"],
         "email":         user["email"],
         "plan":          user["plan"],
+        "role":          user["role"],
         "access_token":  access,
         "refresh_token": refresh,
         "token_type":    "bearer",
@@ -249,6 +253,7 @@ async def get_me(
             "email":   current_user["email"],
             "name":    "Demo User",
             "plan":    "free",
+            "role":    "admin",
             "is_demo": True,
         }
     return {
@@ -256,6 +261,7 @@ async def get_me(
         "email":      user["email"],
         "name":       user["name"],
         "plan":       user["plan"],
+        "role":       user["role"],
         "created_at": str(user["created_at"])[:10] if user.get("created_at") else None,
         "is_demo":    False,
     }
